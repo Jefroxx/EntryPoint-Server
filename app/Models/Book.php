@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Book extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $primaryKey = 'bookID';
 
@@ -16,11 +17,8 @@ class Book extends Model
         'categoryID',
         'title',
         'callNumber',
-        'accessionNumber',
         'coverImageURL',
         'shelfLocation',
-        'totalCopies',
-        'availableCopies',
     ];
 
     public function category()
@@ -34,23 +32,23 @@ class Book extends Model
             ->withPivot('role');
     }
 
-    public function wishlists()
+    public function copies()
     {
-        return $this->hasMany(Wishlist::class, 'bookID', 'bookID');
+        return $this->hasMany(BookCopy::class, 'bookID', 'bookID');
     }
 
-    public function reservations()
+    public function totalCopiesCount(): int
     {
-        return $this->hasMany(Reservation::class, 'bookID', 'bookID');
+        return $this->copies()->where('status', '!=', 'retired')->count();
     }
 
-    public function loans()
+    public function availableCopiesCount(): int
     {
-        return $this->hasMany(Loan::class, 'bookID', 'bookID');
+        return $this->copies()->where('status', 'available')->count();
     }
 
     public function isAvailable(): bool
     {
-        return $this->availableCopies > 0;
+        return $this->availableCopiesCount() > 0;
     }
 }
