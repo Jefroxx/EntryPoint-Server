@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Student extends Model
 {
@@ -26,6 +27,15 @@ class Student extends Model
         'reviewedByLibrarianID',
         'reviewedAt',
     ];
+
+    public static function generateUniqueBarcode(): string
+    {
+        do {
+            $code = 'STI-' . strtoupper(Str::random(10));
+        } while (self::where('barcodeValue', $code)->exists());
+
+        return $code;
+    }
 
     protected $casts = [
         'reviewedAt' => 'datetime',

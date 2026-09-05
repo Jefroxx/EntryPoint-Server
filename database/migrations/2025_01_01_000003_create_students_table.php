@@ -12,7 +12,7 @@ return new class extends Migration
             $table->foreignId('studentID')->primary()->constrained('users', 'userID')->cascadeOnDelete(); // Updated
             $table->uuid('uuid')->unique();
             $table->string('studentIDNumber')->unique();
-            $table->string('barcodeValue')->unique();
+            $table->string('barcodeValue')->nullable()->unique();
             $table->string('academicProgram', 50)->nullable();
             $table->unsignedInteger('knowledgeScore')->default(0);
             $table->unsignedInteger('visitStreak')->default(0);
