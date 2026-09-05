@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id('bookID');
             $table->uuid('uuid')->unique();
             $table->foreignId('categoryID')->constrained('book_categories', 'categoryID')->cascadeOnUpdate()->restrictOnDelete();
+            $table->enum('circulationType', ['circulation', 'reserved', 'filipiniana'])->default('circulation');
             $table->string('title');
             $table->string('callNumber');
             $table->string('coverImageURL')->nullable();
