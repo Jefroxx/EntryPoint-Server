@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StudentRegistrationRequest;
+use App\Models\Librarian;
 use App\Models\Student;
+use App\Models\SystemNotification;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +41,14 @@ class AuthController extends Controller
                 'academicProgram'    => $validated['academicProgram'] ?? null,
                 'registrationStatus' => 'pending',
             ]);
+        });
+
+        Librarian::all()->each(function ($librarian) use ($validated) {
+            SystemNotification::notify(
+                $librarian->librarianID,
+                "New student registration pending approval: {$validated['firstName']} {$validated['lastName']}",
+                'new_registration'
+            );
         });
 
         return response()->json([

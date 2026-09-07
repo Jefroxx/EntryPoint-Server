@@ -11,10 +11,18 @@ class Wishlist extends Model
 
     protected $primaryKey = 'wishlistID';
 
-    protected $fillable = ['uuid', 'studentID', 'bookID', 'addedAt'];
+    protected $fillable = [
+        'uuid',
+        'studentID',
+        'bookID',
+        'inCart',
+        'addedAt',
+    ];
 
-    protected $casts = ['addedAt' => 'datetime'];
-
+    protected $casts = [
+        'addedAt' => 'datetime',
+        'inCart'  => 'boolean',
+    ];
     public function student()
     {
         return $this->belongsTo(Student::class, 'studentID', 'studentID');

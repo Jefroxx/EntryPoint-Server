@@ -9,10 +9,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('wishlists', function (Blueprint $table) {
-            $table->id('wishlistID'); // Updated
+            $table->id('wishlistID');
             $table->uuid('uuid')->unique();
-            $table->foreignId('studentID')->constrained('students', 'studentID')->cascadeOnDelete(); // Updated
-            $table->foreignId('bookID')->constrained('books', 'bookID')->cascadeOnDelete(); // Updated
+            $table->foreignId('studentID')->constrained('students', 'studentID')->cascadeOnDelete();
+            $table->foreignId('bookID')->constrained('books', 'bookID')->cascadeOnDelete();
+            $table->boolean('inCart')->default(false);
             $table->timestamp('addedAt')->useCurrent();
             $table->timestamps();
 

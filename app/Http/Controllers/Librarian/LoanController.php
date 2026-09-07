@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BookCopy;
 use App\Models\Loan;
 use App\Models\Reservation;
+use App\Models\SystemNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -69,15 +70,23 @@ class LoanController extends Controller
             $copy->update(['status' => 'borrowed']);
 
             if (! empty($validated['reservationID'])) {
-                $reservation->update(['status' => 'Accepted']); // already accepted; could add a 'Fulfilled' status later if you want that distinction
+                $reservation->update(['status' => 'Fulfilled']);
             }
 
             return $loan;
         });
 
+        $loan->load(['student.user', 'copy.book']);
+
+        SystemNotification::notify(
+            $loan->studentID,
+            "You've checked out \"{$loan->copy->book->title}\". Due back by {$loan->dueDate->format('M d, Y')}.",
+            'loan_checkout'
+        );
+
         return response()->json([
             'message' => 'Book checked out successfully.',
-            'loan'    => $loan->load(['student.user', 'copy.book']),
+            'loan'    => $loan,
         ], 201);
     }
 }
