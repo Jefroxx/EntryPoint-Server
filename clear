@@ -1,0 +1,14 @@
+[1mdiff --git a/database/migrations/2025_01_01_000001_create_users_table.php b/database/migrations/2025_01_01_000001_create_users_table.php[m
+[1mindex 25ac432..722da03 100644[m
+[1m--- a/database/migrations/2025_01_01_000001_create_users_table.php[m
+[1m+++ b/database/migrations/2025_01_01_000001_create_users_table.php[m
+[36m@@ -9,7 +9,8 @@[m
+     public function up(): void[m
+     {[m
+         Schema::create('users', function (Blueprint $table) {[m
+[31m-            $table->uuid('id')->primary();[m
+[32m+[m[32m            $table->id('userID'); // Updated[m
+[32m+[m[32m            $table->uuid('uuid')->unique();[m
+             $table->string('firstName');[m
+             $table->string('middleInitial', 5)->nullable();[m
+             $table->string('lastName');[m

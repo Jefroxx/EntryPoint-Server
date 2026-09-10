@@ -15,7 +15,7 @@ return new class extends Migration
             $table->foreignId('copyID')->constrained('book_copies', 'copyID')->cascadeOnDelete();
             $table->string('loanType')->default('standard');
             $table->timestamp('checkoutDate')->useCurrent();
-            $table->timestamp('dueDate');
+            $table->timestamp('dueDate')->useCurrent();
             $table->timestamp('returnDate')->nullable();
             $table->string('status')->default('Active');
             $table->timestamps();
