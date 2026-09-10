@@ -12,7 +12,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'librarian' => \App\Http\Middleware\EnsureUserIsLibrarian::class,
+        ]);
+    })
+    ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->alias([
+            'librarian' => \App\Http\Middleware\EnsureUserIsLibrarian::class,
+            'student'   => \App\Http\Middleware\EnsureUserIsStudent::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

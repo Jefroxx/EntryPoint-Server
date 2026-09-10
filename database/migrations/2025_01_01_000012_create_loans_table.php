@@ -9,10 +9,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('loans', function (Blueprint $table) {
-            $table->id('loanID'); // Updated
+            $table->id('loanID');
             $table->uuid('uuid')->unique();
-            $table->foreignId('studentID')->constrained('students', 'studentID')->cascadeOnDelete(); // Updated
-            $table->foreignId('bookID')->constrained('books', 'bookID')->cascadeOnDelete(); // Updated
+            $table->foreignId('studentID')->constrained('students', 'studentID')->cascadeOnDelete();
+            $table->foreignId('copyID')->constrained('book_copies', 'copyID')->cascadeOnDelete();
             $table->string('loanType')->default('standard');
             $table->timestamp('checkoutDate')->useCurrent();
             $table->timestamp('dueDate');

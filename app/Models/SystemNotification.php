@@ -25,4 +25,16 @@ class SystemNotification extends Model
     {
         return $this->belongsTo(User::class, 'userID', 'userID');
     }
+
+    public static function notify(int $userID, string $message, ?string $type = null): self
+    {
+        return self::create([
+            'uuid'    => \Illuminate\Support\Str::uuid(),
+            'userID'  => $userID,
+            'message' => $message,
+            'type'    => $type,
+            'sentAt'  => now(),
+            'isRead'  => false,
+        ]);
+    }
 }

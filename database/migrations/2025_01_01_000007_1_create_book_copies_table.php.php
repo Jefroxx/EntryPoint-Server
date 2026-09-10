@@ -8,21 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('wishlists', function (Blueprint $table) {
-            $table->id('wishlistID');
+        Schema::create('book_copies', function (Blueprint $table) {
+            $table->id('copyID');
             $table->uuid('uuid')->unique();
-            $table->foreignId('studentID')->constrained('students', 'studentID')->cascadeOnDelete();
             $table->foreignId('bookID')->constrained('books', 'bookID')->cascadeOnDelete();
-            $table->boolean('inCart')->default(false);
-            $table->timestamp('addedAt')->useCurrent();
+            $table->string('accessionNumber')->unique();
+            $table->string('barcodeValue')->nullable()->unique();
+            $table->enum('status', ['available', 'borrowed', 'lost', 'damaged', 'retired'])->default('available');
             $table->timestamps();
-
-            $table->unique(['studentID', 'bookID']);
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('wishlists');
+        Schema::dropIfExists('book_copies');
     }
 };

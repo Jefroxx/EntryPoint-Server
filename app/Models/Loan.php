@@ -12,14 +12,14 @@ class Loan extends Model
     protected $primaryKey = 'loanID';
 
     protected $fillable = [
-        'uuid', 'studentID', 'bookID', 'loanType',
+        'uuid', 'studentID', 'copyID', 'loanType',
         'checkoutDate', 'dueDate', 'returnDate', 'status',
     ];
 
     protected $casts = [
         'checkoutDate' => 'datetime',
-        'dueDate' => 'datetime',
-        'returnDate' => 'datetime',
+        'dueDate'      => 'datetime',
+        'returnDate'   => 'datetime',
     ];
 
     public function student()
@@ -27,9 +27,9 @@ class Loan extends Model
         return $this->belongsTo(Student::class, 'studentID', 'studentID');
     }
 
-    public function book()
+    public function copy()
     {
-        return $this->belongsTo(Book::class, 'bookID', 'bookID');
+        return $this->belongsTo(BookCopy::class, 'copyID', 'copyID');
     }
 
     public function selfReturnReport()
