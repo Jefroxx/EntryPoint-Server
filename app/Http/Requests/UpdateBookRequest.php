@@ -16,6 +16,8 @@ class UpdateBookRequest extends FormRequest
         return [
             'title'          => ['sometimes', 'string', 'max:255'],
             'callNumber'     => ['sometimes', 'string', 'max:100'],
+            'isbn'           => ['sometimes', 'nullable', 'string', 'max:20'],
+            'publicationYear' => ['sometimes', 'nullable', 'integer', 'min:1000', 'max:' . (date('Y') + 1)],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
 

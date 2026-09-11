@@ -15,7 +15,13 @@ class StoreBookRequest extends FormRequest
     {
         return [
             'title'          => ['required', 'string', 'max:255'],
-            'callNumber'     => ['required', 'string', 'max:100'],
+            // Auto-generated from category + primary author + year when omitted;
+            // send it explicitly only to override the generated value.
+            'callNumber'     => ['nullable', 'string', 'max:100'],
+            // Optional, but strongly recommended: lets the server pull the real
+            // Dewey class + LC Cutter number for this edition from Open Library.
+            'isbn'           => ['nullable', 'string', 'max:20'],
+            'publicationYear' => ['nullable', 'integer', 'min:1000', 'max:' . (date('Y') + 1)],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
             'quantity'       => ['required', 'integer', 'min:1', 'max:100'],

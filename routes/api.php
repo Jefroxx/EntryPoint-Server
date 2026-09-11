@@ -28,6 +28,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
+    // Catalog browsing — any authenticated user (student or librarian)
+    Route::get('/books', [BookController::class, 'index']);
+    Route::get('/books/{book}', [BookController::class, 'show']);
+
     // Student-only actions
     Route::middleware('student')->prefix('student')->group(function () {
         Route::get('/wishlist', [WishlistController::class, 'index']);

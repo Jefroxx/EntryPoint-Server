@@ -17,8 +17,14 @@ class Book extends Model
         'categoryID',
         'title',
         'callNumber',
+        'isbn',
+        'publicationYear',
         'coverImageURL',
         'shelfLocation',
+    ];
+
+    protected $casts = [
+        'publicationYear' => 'integer',
     ];
 
     public function category()
