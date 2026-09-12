@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Librarian\BookController;
+use App\Http\Controllers\Librarian\DashboardController;
 use App\Http\Controllers\Librarian\LoanController;
 use App\Http\Controllers\Librarian\ReservationController as LibrarianReservationController;
 use App\Http\Controllers\Librarian\StudentApprovalController;
@@ -49,6 +50,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Librarian-only actions
     Route::middleware('librarian')->prefix('librarian')->group(function () {
+        Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+        Route::get('/dashboard/borrowing-overview', [DashboardController::class, 'borrowingOverview']);
+
         Route::post('/students/{student}/approve', [StudentApprovalController::class, 'approve']);
         Route::post('/students/{student}/reject', [StudentApprovalController::class, 'reject']);
 
