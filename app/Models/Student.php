@@ -41,6 +41,20 @@ class Student extends Model
         'reviewedAt' => 'datetime',
     ];
 
+    /**
+     * Whenever a student's gamification metrics move, re-check achievement
+     * criteria automatically — keeps the achievement engine decoupled from
+     * whichever module (attendance, loans, etc.) actually earns the points.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (self $student) {
+            if ($student->wasChanged(['knowledgeScore', 'visitStreak'])) {
+                Achievement::evaluateForStudent($student);
+            }
+        });
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class, 'studentID', 'userID');
@@ -76,16 +90,21 @@ class Student extends Model
         return $this->hasMany(BookSuggestion::class, 'studentID', 'studentID');
     }
 
-    public function badges()
+    public function achievements()
     {
         // Don't forget to update your pivot columns to camelCase here!
-        return $this->belongsToMany(Badge::class, 'student_badge', 'studentID', 'badgeID')
-            ->withPivot(['triggerEvent', 'earnedAt']);
+        return $this->belongsToMany(Achievement::class, 'student_achievement', 'studentID', 'achievementID')
+            ->withPivot(['triggerEvent', 'earnedAt', 'redeemedAt']);
     }
 
     public function pointRedemptions()
     {
         return $this->hasMany(PointRedemption::class, 'studentID', 'studentID');
+    }
+
+    public function marketCartItems()
+    {
+        return $this->hasMany(MarketCartItem::class, 'studentID', 'studentID');
     }
 
     public function resourceUsageLogs()

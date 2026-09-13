@@ -7,6 +7,7 @@ use App\Models\Librarian;
 use App\Models\Reservation;
 use App\Models\SystemNotification;
 use App\Models\Wishlist;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,7 +22,7 @@ class ReservationController extends Controller
         $student = $request->user()->student;
 
         $reservations = $student->reservations()
-            ->with('book.category', 'book.authors')
+            ->with('book.subject', 'book.authors')
             ->orderByDesc('reservedAt')
             ->get();
 
@@ -106,9 +107,22 @@ class ReservationController extends Controller
             );
         });
 
+        foreach ($created as $reservation) {
+            $queuePosition = Reservation::where('bookID', $reservation->bookID)
+                ->where('status', 'Waiting')
+                ->where('reservedAt', '<', $reservation->reservedAt)
+                ->count() + 1;
+
+            SystemNotification::notify(
+                $student->studentID,
+                "Reservation for \"{$reservation->book->title}\" submitted - you're #{$queuePosition} in line.",
+                'reservation_submitted'
+            );
+        }
+
         return response()->json([
             'message'      => 'Reservation(s) submitted.',
-            'reservations' => collect($created)->load('book'),
+            'reservations' => Collection::make($created)->load('book'),
         ], 201);
     }
 

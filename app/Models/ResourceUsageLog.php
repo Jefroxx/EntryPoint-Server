@@ -34,4 +34,14 @@ class ResourceUsageLog extends Model
     {
         return $this->belongsTo(Librarian::class, 'staffLibrarianID', 'librarianID');
     }
+
+    /**
+     * Close out this session and free up the resource for the next student.
+     */
+    public function endSession(): void
+    {
+        $this->update(['endTime' => now()]);
+
+        $this->resource->update(['status' => 'Available']);
+    }
 }

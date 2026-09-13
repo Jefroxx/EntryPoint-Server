@@ -46,6 +46,12 @@ class Book extends Model
         return $this->hasMany(BookCopy::class, 'bookID', 'bookID');
     }
 
+    public function authors()
+    {
+        return $this->belongsToMany(Author::class, 'book_author', 'bookID', 'authorID')
+            ->withPivot('role');
+    }
+
     // ---------------------------------------------------------------
     // Loan rule helpers (config/loans.php, keyed by areasOfLibrary)
     // ---------------------------------------------------------------

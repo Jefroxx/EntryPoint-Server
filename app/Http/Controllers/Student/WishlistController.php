@@ -17,7 +17,7 @@ class WishlistController extends Controller
         $student = $request->user()->student;
 
         $wishlist = $student->wishlists()
-            ->with(['book.category', 'book.authors', 'book.copies'])
+            ->with(['book.subject', 'book.authors', 'book.copies'])
             ->orderByDesc('addedAt')
             ->get();
 
