@@ -5,16 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class BookCategory extends Model
+class BookSubject extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'categoryID';
+    protected $primaryKey = 'subjectID';
 
     protected $fillable = ['uuid', 'name'];
 
     public function books()
     {
-        return $this->hasMany(Book::class, 'categoryID', 'categoryID');
+        return $this->hasMany(Book::class, 'subjectID', 'subjectID');
     }
 }

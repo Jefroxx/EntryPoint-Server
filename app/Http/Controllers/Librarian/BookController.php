@@ -7,7 +7,7 @@ use App\Http\Requests\StoreBookRequest;
 use App\Http\Requests\UpdateBookRequest;
 use App\Models\Author;
 use App\Models\Book;
-use App\Models\BookCategory;
+use App\Models\BookSubject;
 use App\Models\BookCopy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -20,35 +20,45 @@ class BookController extends Controller
         $validated = $request->validated();
 
         $book = DB::transaction(function () use ($validated) {
-            // Resolve category: existing ID or find-or-create by name
-            if (! empty($validated['categoryID'])) {
-                $categoryID = $validated['categoryID'];
+            if (! empty($validated['subjectID'])) {
+                $subjectID = $validated['subjectID'];
             } else {
-                $category = BookCategory::firstOrCreate(
-                    ['name' => $validated['categoryName']],
+                $subject = BookSubject::firstOrCreate(
+                    ['name' => $validated['subjectName']],
                     ['uuid' => Str::uuid()]
                 );
-                $categoryID = $category->categoryID;
+                $subjectID = $subject->subjectID;
             }
 
-            // Create the book (title-level record)
             $book = Book::create([
-                'uuid'          => Str::uuid(),
-                'categoryID'    => $categoryID,
-                'title'         => $validated['title'],
-                'callNumber'    => $validated['callNumber'],
-                'coverImageURL' => $validated['coverImageURL'] ?? null,
-                'shelfLocation' => $validated['shelfLocation'] ?? null,
+                'uuid'           => Str::uuid(),
+                'subjectID'      => $subjectID,
+                'areasOfLibrary' => $validated['areasOfLibrary'] ?? 'circulation',
+                'title'          => $validated['title'],
+                'classNumber'    => $validated['classNumber'],
+                'isbn'           => $validated['isbn'] ?? null,
+                'volume'         => $validated['volume'] ?? null,
+                'edition'        => $validated['edition'] ?? null,
+                'pages'          => $validated['pages'] ?? null,
+                'publisher'      => $validated['publisher'] ?? null,
+                'sourceOfFund'   => $validated['sourceOfFund'] ?? null,
+                'cost'           => $validated['cost'] ?? null,
+                'copyNumber'     => $validated['copyNumber'] ?? null,
+                'remarks'        => $validated['remarks'] ?? null,
+                'coverImageURL'  => $validated['coverImageURL'] ?? null,
+                'shelfLocation'  => $validated['shelfLocation'] ?? null,
             ]);
 
-            // Resolve authors: existing IDs or find-or-create by name, attach with role
             foreach ($validated['authors'] as $authorInput) {
                 if (! empty($authorInput['authorID'])) {
                     $authorID = $authorInput['authorID'];
                 } else {
                     $author = Author::firstOrCreate(
                         ['name' => $authorInput['name']],
-                        ['uuid' => Str::uuid()]
+                        [
+                            'uuid'         => Str::uuid(),
+                            'cutterNumber' => Author::generateCutter($authorInput['name']),
+                        ]
                     );
                     $authorID = $author->authorID;
                 }
@@ -59,7 +69,6 @@ class BookController extends Controller
                 ]);
             }
 
-            // Generate N physical copies based on quantity
             for ($i = 0; $i < $validated['quantity']; $i++) {
                 BookCopy::create([
                     'uuid'            => Str::uuid(),
@@ -74,7 +83,7 @@ class BookController extends Controller
         });
         return response()->json([
             'message' => 'Book added successfully.',
-            'book'    => $book->load(['category', 'authors', 'copies']),
+            'book'    => $book->load(['subject', 'authors', 'copies']),
         ], 201);
     }
 
@@ -83,17 +92,21 @@ class BookController extends Controller
         $validated = $request->validated();
 
         $book = DB::transaction(function () use ($validated, $book) {
-            if (! empty($validated['categoryID'])) {
-                $book->categoryID = $validated['categoryID'];
-            } elseif (! empty($validated['categoryName'])) {
-                $category = BookCategory::firstOrCreate(
-                    ['name' => $validated['categoryName']],
+            if (! empty($validated['subjectID'])) {
+                $book->subjectID = $validated['subjectID'];
+            } elseif (! empty($validated['subjectName'])) {
+                $subject = BookSubject::firstOrCreate(
+                    ['name' => $validated['subjectName']],
                     ['uuid' => Str::uuid()]
                 );
-                $book->categoryID = $category->categoryID;
+                $book->subjectID = $subject->subjectID;
             }
 
-            $book->fill(collect($validated)->only(['title', 'callNumber', 'coverImageURL', 'shelfLocation'])->toArray());
+            $book->fill(collect($validated)->only([
+                'title', 'classNumber', 'areasOfLibrary', 'isbn', 'volume', 'edition',
+                'pages', 'publisher', 'sourceOfFund', 'cost', 'copyNumber', 'remarks',
+                'coverImageURL', 'shelfLocation',
+            ])->toArray());
             $book->save();
 
             if (array_key_exists('authors', $validated)) {
@@ -104,7 +117,10 @@ class BookController extends Controller
                     } else {
                         $author = Author::firstOrCreate(
                             ['name' => $authorInput['name']],
-                            ['uuid' => Str::uuid()]
+                            [
+                                'uuid'         => Str::uuid(),
+                                'cutterNumber' => Author::generateCutter($authorInput['name']),
+                            ]
                         );
                         $authorID = $author->authorID;
                     }
@@ -122,7 +138,7 @@ class BookController extends Controller
 
         return response()->json([
             'message' => 'Book updated successfully.',
-            'book'    => $book->fresh()->load(['category', 'authors', 'copies']),
+            'book'    => $book->fresh()->load(['subject', 'authors', 'copies']),
         ]);
     }
 
@@ -136,7 +152,7 @@ class BookController extends Controller
             ], 422);
         }
 
-        $book->delete(); // soft delete
+        $book->delete();
 
         return response()->json(['message' => 'Book removed from catalog.']);
     }

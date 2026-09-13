@@ -46,4 +46,20 @@ class Loan extends Model
     {
         return $this->status === 'Active' && $this->dueDate->isPast();
     }
+
+    /**
+     * Mark this loan as returned: frees the copy, closes the loan,
+     * and does one final penalty accrual to lock in the total fine
+     * (if any) as of the exact return moment.
+     */
+    public function markReturned(): void
+    {
+        $this->returnDate = now();
+        $this->status = 'Returned';
+        $this->save();
+
+        $this->copy->update(['status' => 'available']);
+
+        Penalty::accrueForLoan($this);
+    }
 }
