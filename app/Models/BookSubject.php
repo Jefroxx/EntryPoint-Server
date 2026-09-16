@@ -5,30 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class BookCategory extends Model
+class BookSubject extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'categoryID';
+    protected $primaryKey = 'subjectID';
 
-    protected $fillable = ['uuid', 'name'];
-
-    protected static function booted(): void
-    {
-        static::creating(function (BookCategory $category) {
-            if (empty($category->classificationCode)) {
-                $category->classificationCode = self::classifyByName($category->name);
-            }
-        });
-    }
+    protected $fillable = ['uuid', 'name', 'classificationCode'];
 
     public function books()
     {
-        return $this->hasMany(Book::class, 'categoryID', 'categoryID');
+        return $this->hasMany(Book::class, 'subjectID', 'subjectID');
     }
 
     /**
-     * Maps a category name to a Dewey Decimal classification code using the
+     * Maps a subject name to a Dewey Decimal classification code using the
      * table in config/classification.php (the standard, widely published
      * top-level/second-level Dewey breakdown — not the detailed, licensed
      * WebDewey schedules). First keyword match wins; falls back to the
@@ -55,9 +46,9 @@ class BookCategory extends Model
     }
 
     /**
-     * Appends a/b/c... if another category already landed on the exact same
-     * code (e.g. two category names matching the same keyword), so every
-     * category still gets a distinct classificationCode.
+     * Appends a/b/c... if another subject already landed on the exact same
+     * code (e.g. two subject names matching the same keyword), so every
+     * subject still gets a distinct classificationCode.
      */
     private static function uniqueCode(string $code): string
     {

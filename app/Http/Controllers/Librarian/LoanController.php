@@ -54,16 +54,15 @@ class LoanController extends Controller
                 }
             }
 
-            $circulationType = $copy->book->circulationType;
-            $dueDays = config("loans.due_days.{$circulationType}", 7);
+            $copy->book->assertLoanable();
 
             $loan = Loan::create([
                 'uuid'         => Str::uuid(),
                 'studentID'    => $validated['studentID'],
                 'copyID'       => $copy->copyID,
-                'loanType'     => $circulationType,
+                'loanType'     => $copy->book->circulationType,
                 'checkoutDate' => now(),
-                'dueDate'      => now()->addDays($dueDays),
+                'dueDate'      => $copy->book->computeDueDate(),
                 'status'       => 'Active',
             ]);
 
@@ -88,5 +87,34 @@ class LoanController extends Controller
             'message' => 'Book checked out successfully.',
             'loan'    => $loan,
         ], 201);
+    }
+
+    /**
+     * Librarian-assisted return — the student hands the physical book
+     * back at the counter and staff processes it directly (as opposed
+     * to Student\LoanController::selfReturn(), which stages a report
+     * for later librarian verification).
+     */
+    public function returnBook(Loan $loan)
+    {
+        if ($loan->status !== 'Active') {
+            return response()->json([
+                'message' => "Only an 'Active' loan can be returned.",
+            ], 422);
+        }
+
+        $loan->markReturned();
+        $loan->load(['student.user', 'copy.book']);
+
+        SystemNotification::notify(
+            $loan->studentID,
+            "Your return of \"{$loan->copy->book->title}\" has been processed. Thank you!",
+            'loan_returned'
+        );
+
+        return response()->json([
+            'message' => 'Book returned successfully.',
+            'loan'    => $loan,
+        ]);
     }
 }

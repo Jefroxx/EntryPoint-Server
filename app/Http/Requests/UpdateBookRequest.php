@@ -21,8 +21,8 @@ class UpdateBookRequest extends FormRequest
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
 
-            'categoryID'     => ['sometimes', 'integer', 'exists:book_categories,categoryID'],
-            'categoryName'   => ['sometimes', 'string', 'max:255'],
+            'subjectID'      => ['sometimes', 'integer', 'exists:book_subjects,subjectID'],
+            'subjectName'    => ['sometimes', 'string', 'max:255'],
 
             'authors'                 => ['sometimes', 'array', 'min:1'],
             'authors.*.authorID'      => ['nullable', 'integer', 'exists:authors,authorID', 'required_without:authors.*.name'],

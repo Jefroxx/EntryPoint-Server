@@ -37,6 +37,20 @@ class Student extends Model
         return $code;
     }
 
+    /**
+     * Whenever a student's gamification metrics change (knowledgeScore from
+     * redeeming an achievement, visitStreak from attendance scanning),
+     * re-check every achievement's criteria in case this unlocks a new one.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (self $student) {
+            if ($student->wasChanged(['knowledgeScore', 'visitStreak'])) {
+                Achievement::evaluateForStudent($student);
+            }
+        });
+    }
+
     protected $casts = [
         'reviewedAt' => 'datetime',
     ];
@@ -76,16 +90,21 @@ class Student extends Model
         return $this->hasMany(BookSuggestion::class, 'studentID', 'studentID');
     }
 
-    public function badges()
+    public function achievements()
     {
         // Don't forget to update your pivot columns to camelCase here!
-        return $this->belongsToMany(Badge::class, 'student_badge', 'studentID', 'badgeID')
-            ->withPivot(['triggerEvent', 'earnedAt']);
+        return $this->belongsToMany(Achievement::class, 'student_achievement', 'studentID', 'achievementID')
+            ->withPivot(['triggerEvent', 'earnedAt', 'redeemedAt']);
     }
 
     public function pointRedemptions()
     {
         return $this->hasMany(PointRedemption::class, 'studentID', 'studentID');
+    }
+
+    public function marketCartItems()
+    {
+        return $this->hasMany(MarketCartItem::class, 'studentID', 'studentID');
     }
 
     public function resourceUsageLogs()

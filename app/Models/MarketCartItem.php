@@ -5,17 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class PointRedemption extends Model
+class MarketCartItem extends Model
 {
     use HasFactory;
 
-    protected $primaryKey = 'redemptionID';
+    protected $primaryKey = 'cartItemID';
 
-    protected $fillable = [
-        'uuid', 'studentID', 'itemID', 'quantity', 'pointsSpent', 'fulfillmentStatus', 'redeemedAt',
-    ];
-
-    protected $casts = ['redeemedAt' => 'datetime'];
+    protected $fillable = ['uuid', 'studentID', 'itemID', 'quantity'];
 
     public function student()
     {

@@ -7,7 +7,7 @@ use App\Http\Requests\StoreBookRequest;
 use App\Http\Requests\UpdateBookRequest;
 use App\Models\Author;
 use App\Models\Book;
-use App\Models\BookCategory;
+use App\Models\BookSubject;
 use App\Models\BookCopy;
 use App\Services\LibraryClassificationService;
 use Illuminate\Http\Request;
@@ -24,14 +24,14 @@ class BookController extends Controller
     public function index(Request $request)
     {
         $validated = $request->validate([
-            'search'     => ['nullable', 'string', 'max:255'],
-            'categoryID' => ['nullable', 'integer', 'exists:book_categories,categoryID'],
-            'perPage'    => ['nullable', 'integer', 'min:1', 'max:100'],
+            'search'    => ['nullable', 'string', 'max:255'],
+            'subjectID' => ['nullable', 'integer', 'exists:book_subjects,subjectID'],
+            'perPage'   => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $books = Book::with(['category', 'authors', 'copies'])
+        $books = Book::with(['subject', 'authors', 'copies'])
             ->when($validated['search'] ?? null, fn ($query, $search) => $query->where('title', 'like', "%{$search}%"))
-            ->when($validated['categoryID'] ?? null, fn ($query, $categoryID) => $query->where('categoryID', $categoryID))
+            ->when($validated['subjectID'] ?? null, fn ($query, $subjectID) => $query->where('subjectID', $subjectID))
             ->orderByDesc('bookID')
             ->paginate($validated['perPage'] ?? 15);
 
@@ -41,7 +41,7 @@ class BookController extends Controller
     public function show(Book $book)
     {
         return response()->json([
-            'book' => $book->load(['category', 'authors', 'copies']),
+            'book' => $book->load(['subject', 'authors', 'copies']),
         ]);
     }
 
@@ -57,15 +57,15 @@ class BookController extends Controller
             : null;
 
         $book = DB::transaction(function () use ($validated, $lookup) {
-            // Resolve category: existing ID or find-or-create by name.
-            // A new category is auto-assigned a Dewey classificationCode from
-            // the keyword table (see BookCategory::booted()); a legacy row
+            // Resolve subject: existing ID or find-or-create by name.
+            // A new subject is auto-assigned a Dewey classificationCode from
+            // the keyword table (see BookSubject::booted()); a legacy row
             // that predates that feature is backfilled lazily below.
-            if (! empty($validated['categoryID'])) {
-                $category = BookCategory::findOrFail($validated['categoryID']);
+            if (! empty($validated['subjectID'])) {
+                $subject = BookSubject::findOrFail($validated['subjectID']);
             } else {
-                $category = BookCategory::firstOrCreate(
-                    ['name' => $validated['categoryName']],
+                $subject = BookSubject::firstOrCreate(
+                    ['name' => $validated['subjectName']],
                     ['uuid' => Str::uuid()]
                 );
             }
@@ -104,8 +104,8 @@ class BookController extends Controller
             $year = $validated['publicationYear'] ?? $lookup['publishYear'] ?? now()->year;
 
             // Prefer the live Dewey class for this specific edition; fall back
-            // to the category's keyword-derived classification code.
-            $deweyClass = $lookup['deweyClass'] ?? $this->classificationCode($category);
+            // to the subject's keyword-derived classification code.
+            $deweyClass = $lookup['deweyClass'] ?? $this->classificationCode($subject);
 
             // Auto-generate the call number from Dewey class + primary author's
             // cutter number + year, unless the librarian supplied one explicitly.
@@ -115,7 +115,7 @@ class BookController extends Controller
             // Create the book (title-level record)
             $book = Book::create([
                 'uuid'            => Str::uuid(),
-                'categoryID'      => $category->categoryID,
+                'subjectID'       => $subject->subjectID,
                 'title'           => $validated['title'],
                 'callNumber'      => $callNumber,
                 'isbn'            => $validated['isbn'] ?? null,
@@ -146,7 +146,7 @@ class BookController extends Controller
         });
         return response()->json([
             'message' => 'Book added successfully.',
-            'book'    => $book->load(['category', 'authors', 'copies']),
+            'book'    => $book->load(['subject', 'authors', 'copies']),
         ], 201);
     }
 
@@ -155,14 +155,14 @@ class BookController extends Controller
         $validated = $request->validated();
 
         $book = DB::transaction(function () use ($validated, $book) {
-            if (! empty($validated['categoryID'])) {
-                $book->categoryID = $validated['categoryID'];
-            } elseif (! empty($validated['categoryName'])) {
-                $category = BookCategory::firstOrCreate(
-                    ['name' => $validated['categoryName']],
+            if (! empty($validated['subjectID'])) {
+                $book->subjectID = $validated['subjectID'];
+            } elseif (! empty($validated['subjectName'])) {
+                $subject = BookSubject::firstOrCreate(
+                    ['name' => $validated['subjectName']],
                     ['uuid' => Str::uuid()]
                 );
-                $book->categoryID = $category->categoryID;
+                $book->subjectID = $subject->subjectID;
             }
 
             $book->fill(collect($validated)->only(['title', 'callNumber', 'publicationYear', 'coverImageURL', 'shelfLocation'])->toArray());
@@ -194,7 +194,7 @@ class BookController extends Controller
 
         return response()->json([
             'message' => 'Book updated successfully.',
-            'book'    => $book->fresh()->load(['category', 'authors', 'copies']),
+            'book'    => $book->fresh()->load(['subject', 'authors', 'copies']),
         ]);
     }
 
@@ -271,18 +271,18 @@ class BookController extends Controller
     }
 
     /**
-     * Returns the category's Dewey classification code, generating and
+     * Returns the subject's Dewey classification code, generating and
      * persisting one first if this is a legacy row created before that
      * feature existed.
      */
-    private function classificationCode(BookCategory $category): string
+    private function classificationCode(BookSubject $subject): string
     {
-        if (empty($category->classificationCode)) {
-            $category->classificationCode = BookCategory::classifyByName($category->name);
-            $category->save();
+        if (empty($subject->classificationCode)) {
+            $subject->classificationCode = BookSubject::classifyByName($subject->name);
+            $subject->save();
         }
 
-        return $category->classificationCode;
+        return $subject->classificationCode;
     }
 
     /**

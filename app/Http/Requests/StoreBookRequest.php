@@ -26,9 +26,9 @@ class StoreBookRequest extends FormRequest
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
             'quantity'       => ['required', 'integer', 'min:1', 'max:100'],
 
-            // Category: pick existing OR create new — exactly one must be provided
-            'categoryID'     => ['nullable', 'integer', 'exists:book_categories,categoryID', 'required_without:categoryName'],
-            'categoryName'   => ['nullable', 'string', 'max:255', 'required_without:categoryID'],
+            // Subject: pick existing OR create new — exactly one must be provided
+            'subjectID'      => ['nullable', 'integer', 'exists:book_subjects,subjectID', 'required_without:subjectName'],
+            'subjectName'    => ['nullable', 'string', 'max:255', 'required_without:subjectID'],
 
             // Authors: array of items, each either an existing authorID or a new name
             'authors'                 => ['required', 'array', 'min:1'],
