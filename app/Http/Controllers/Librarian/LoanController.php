@@ -14,6 +14,49 @@ use Illuminate\Validation\ValidationException;
 
 class LoanController extends Controller
 {
+    public function index(Request $request)
+    {
+        $validated = $request->validate([
+            'search'  => ['nullable', 'string', 'max:255'],
+            'status'  => ['nullable', 'string', 'in:active,overdue,returned'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $status = $validated['status'] ?? 'active';
+
+        $loans = Loan::with(['student.user', 'copy.book'])
+            ->when($status === 'active', fn ($q) => $q->where('status', 'Active'))
+            ->when($status === 'overdue', fn ($q) => $q->where('status', 'Active')->where('dueDate', '<', now()))
+            ->when($status === 'returned', fn ($q) => $q->where('status', 'Returned'))
+            ->when($validated['search'] ?? null, function ($q, $term) {
+                $q->where(function ($w) use ($term) {
+                    $w->whereHas('student.user', fn ($u) => $u
+                            ->where('firstName', 'like', "%{$term}%")
+                            ->orWhere('lastName', 'like', "%{$term}%"))
+                        ->orWhereHas('copy.book', fn ($b) => $b->where('title', 'like', "%{$term}%"));
+                });
+            })
+            ->when(
+                $status === 'returned',
+                fn ($q) => $q->orderByDesc('returnDate'),
+                fn ($q) => $q->orderBy('dueDate'),
+            )
+            ->paginate($validated['perPage'] ?? 15);
+
+        return response()->json($loans);
+    }
+
+    public function stats()
+    {
+        $active = fn () => Loan::where('status', 'Active');
+
+        return response()->json([
+            'active'  => $active()->count(),
+            'dueSoon' => $active()->where('dueDate', '>=', now())->where('dueDate', '<=', now()->addDay())->count(),
+            'overdue' => $active()->where('dueDate', '<', now())->count(),
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

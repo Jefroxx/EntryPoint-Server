@@ -57,7 +57,19 @@ class AuthController extends Controller
         ], 201);
     }
 
+    /** Student portal sign-in. Librarian accounts are rejected here. */
     public function login(Request $request)
+    {
+        return $this->attemptLogin($request, 'student');
+    }
+
+    /** Librarian portal sign-in. Student accounts are rejected here. */
+    public function librarianLogin(Request $request)
+    {
+        return $this->attemptLogin($request, 'librarian');
+    }
+
+    private function attemptLogin(Request $request, string $portal)
     {
         $request->validate([
             'email'    => ['required', 'email'],
@@ -66,13 +78,15 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        // Signing in on the wrong portal fails exactly like a bad password, so
+        // neither endpoint reveals which emails exist or what type they are.
+        if (! $user || ! Hash::check($request->password, $user->password) || $user->userType !== $portal) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
 
-        if ($user->userType === 'student') {
+        if ($portal === 'student') {
             $student = $user->student;
 
             if (! $student || $student->registrationStatus !== 'approved') {

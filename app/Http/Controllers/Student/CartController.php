@@ -19,7 +19,7 @@ class CartController extends Controller
 
         $cart = Wishlist::where('studentID', $student->studentID)
             ->where('inCart', true)
-            ->with('book.category', 'book.authors')
+            ->with('book.subject', 'book.authors')
             ->get();
 
         return response()->json(['cart' => $cart]);

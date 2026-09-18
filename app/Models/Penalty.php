@@ -51,7 +51,9 @@ class Penalty extends Model
         }
 
         $endTime = $loan->returnDate ?? now();
-        $elapsedUnits = self::elapsedUnits($loan->dueDate, $endTime, $rule->rateUnit);
+        // Nothing accrues during the rule's free grace window after the due date.
+        $chargeableFrom = Carbon::parse($loan->dueDate)->addDays((int) $rule->gracePeriodDays);
+        $elapsedUnits = self::elapsedUnits($chargeableFrom, $endTime, $rule->rateUnit);
 
         if ($elapsedUnits <= 0) {
             return null; // not actually overdue

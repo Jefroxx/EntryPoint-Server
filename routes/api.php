@@ -9,11 +9,15 @@ use App\Http\Controllers\Librarian\BookSuggestionController as LibrarianBookSugg
 use App\Http\Controllers\Librarian\DashboardController;
 use App\Http\Controllers\Librarian\LoanController;
 use App\Http\Controllers\Librarian\MarketItemController as LibrarianMarketItemController;
+use App\Http\Controllers\Librarian\PenaltyController;
 use App\Http\Controllers\Librarian\PointRedemptionController;
 use App\Http\Controllers\Librarian\ReservationController as LibrarianReservationController;
 use App\Http\Controllers\Librarian\ResourceController as LibrarianResourceController;
 use App\Http\Controllers\Librarian\ResourceUsageLogController;
+use App\Http\Controllers\Librarian\ReportController;
 use App\Http\Controllers\Librarian\SelfReturnReportController;
+use App\Http\Controllers\Librarian\SettingsController;
+use App\Http\Controllers\Librarian\SubjectController;
 use App\Http\Controllers\Librarian\StudentApprovalController;
 use App\Http\Controllers\Student\AchievementController as StudentAchievementController;
 use App\Http\Controllers\Student\BookSuggestionController as StudentBookSuggestionController;
@@ -30,6 +34,7 @@ use Illuminate\Support\Facades\Route;
 // Public
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/librarian/login', [AuthController::class, 'librarianLogin']);
 
 // Protected
 Route::middleware('auth:sanctum')->group(function () {
@@ -100,12 +105,32 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/library/stats', [BookController::class, 'stats']);
 
+        Route::get('/subjects', [SubjectController::class, 'index']);
+        Route::post('/subjects', [SubjectController::class, 'store']);
+        Route::patch('/subjects/{subject}', [SubjectController::class, 'update']);
+        Route::delete('/subjects/{subject}', [SubjectController::class, 'destroy']);
+
+        Route::get('/reports/overview', [ReportController::class, 'overview']);
+
+        Route::get('/settings', [SettingsController::class, 'show']);
+        Route::put('/settings/loan-periods', [SettingsController::class, 'updateLoanPeriods']);
+        Route::put('/settings/fine-rules/{area}', [SettingsController::class, 'saveFineRule']);
+        Route::delete('/settings/fine-rules/{area}', [SettingsController::class, 'deleteFineRule']);
+        Route::patch('/settings/account', [SettingsController::class, 'updateAccount']);
+        Route::put('/settings/password', [SettingsController::class, 'updatePassword']);
+
         Route::post('/books', [BookController::class, 'store']);
         Route::patch('/books/{book}', [BookController::class, 'update']);
         Route::delete('/books/{book}', [BookController::class, 'destroy']);
 
+        Route::get('/loans', [LoanController::class, 'index']);
+        Route::get('/loans/stats', [LoanController::class, 'stats']);
         Route::post('/loans', [LoanController::class, 'store']);
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnBook']);
+
+        Route::get('/penalties', [PenaltyController::class, 'index']);
+        Route::get('/penalties/stats', [PenaltyController::class, 'stats']);
+        Route::post('/penalties/{penalty}/settle', [PenaltyController::class, 'settle']);
 
         Route::get('/self-return-reports', [SelfReturnReportController::class, 'index']);
         Route::post('/self-return-reports/{report}/verify', [SelfReturnReportController::class, 'verify']);

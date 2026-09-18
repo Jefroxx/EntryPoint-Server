@@ -87,7 +87,7 @@ class Book extends Model
     public function computeDueDate(?\DateTimeInterface $from = null): Carbon
     {
         $from = $from ? Carbon::instance($from) : now();
-        $dueDays = config("loans.due_days.{$this->circulationType}", 7);
+        $dueDays = Setting::dueDays($this->circulationType);
 
         return $from->copy()->addDays($dueDays);
     }

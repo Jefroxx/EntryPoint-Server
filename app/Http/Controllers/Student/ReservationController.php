@@ -7,6 +7,7 @@ use App\Models\Librarian;
 use App\Models\Reservation;
 use App\Models\SystemNotification;
 use App\Models\Wishlist;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,7 +22,7 @@ class ReservationController extends Controller
         $student = $request->user()->student;
 
         $reservations = $student->reservations()
-            ->with('book.category', 'book.authors')
+            ->with('book.subject', 'book.authors')
             ->orderByDesc('reservedAt')
             ->get();
 
@@ -108,7 +109,7 @@ class ReservationController extends Controller
 
         return response()->json([
             'message'      => 'Reservation(s) submitted.',
-            'reservations' => collect($created)->load('book'),
+            'reservations' => (new EloquentCollection($created))->load('book'),
         ], 201);
     }
 
