@@ -14,17 +14,42 @@ class AttendanceLogController extends Controller
 {
     public function index(Request $request)
     {
-        $query = AttendanceLog::with('student.user')->orderByDesc('entryTime');
+        $validated = $request->validate([
+            'studentID' => ['nullable', 'integer'],
+            'search'    => ['nullable', 'string', 'max:255'],
+            'date'      => ['nullable', 'date'],
+            'active'    => ['nullable', 'boolean'],
+            'perPage'   => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
 
-        if ($request->filled('studentID')) {
-            $query->where('studentID', $request->query('studentID'));
-        }
+        $query = AttendanceLog::with('student.user')
+            ->when($validated['studentID'] ?? null, fn ($q, $studentID) => $q->where('studentID', $studentID))
+            ->when($validated['search'] ?? null, function ($q, $term) {
+                $q->whereHas('student.user', fn ($userQuery) => $userQuery
+                    ->where('firstName', 'like', "%{$term}%")
+                    ->orWhere('lastName', 'like', "%{$term}%"));
+            })
+            ->when($validated['date'] ?? null, fn ($q, $date) => $q->whereDate('entryTime', $date))
+            ->when($request->boolean('active'), fn ($q) => $q->whereNull('exitTime'))
+            ->orderByDesc('entryTime');
 
-        if ($request->boolean('active')) {
-            $query->whereNull('exitTime');
-        }
+        return response()->json($query->paginate($validated['perPage'] ?? 15));
+    }
 
-        return response()->json(['attendanceLogs' => $query->get()]);
+    public function stats()
+    {
+        $todayLogs = AttendanceLog::whereDate('entryTime', today())->get();
+        $completedToday = $todayLogs->whereNotNull('exitTime');
+
+        $averageMinutes = $completedToday->isNotEmpty()
+            ? $completedToday->avg(fn (AttendanceLog $log) => $log->entryTime->diffInMinutes($log->exitTime))
+            : 0;
+
+        return response()->json([
+            'currentlyInLibrary'  => AttendanceLog::whereNull('exitTime')->count(),
+            'totalVisitsToday'    => $todayLogs->count(),
+            'averageMinutesToday' => (int) round($averageMinutes),
+        ]);
     }
 
     /**

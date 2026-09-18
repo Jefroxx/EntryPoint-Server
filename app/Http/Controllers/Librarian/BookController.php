@@ -9,6 +9,7 @@ use App\Models\Author;
 use App\Models\Book;
 use App\Models\BookSubject;
 use App\Models\BookCopy;
+use App\Models\Loan;
 use App\Services\LibraryClassificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +37,20 @@ class BookController extends Controller
             ->paginate($validated['perPage'] ?? 15);
 
         return response()->json($books);
+    }
+
+    public function stats()
+    {
+        $copyCounts = BookCopy::selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return response()->json([
+            'totalBooks'     => $copyCounts->sum(),
+            'availableBooks' => $copyCounts->get('available', 0),
+            'borrowedBooks'  => $copyCounts->get('borrowed', 0),
+            'overdueBooks'   => Loan::where('status', 'Active')->where('dueDate', '<', now())->count(),
+        ]);
     }
 
     public function show(Book $book)

@@ -90,10 +90,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard/overdue-loans', [DashboardController::class, 'overdueLoans']);
 
         Route::get('/attendance-logs', [AttendanceLogController::class, 'index']);
+        Route::get('/attendance-logs/stats', [AttendanceLogController::class, 'stats']);
         Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store']);
 
+        Route::get('/students', [StudentApprovalController::class, 'index']);
+        Route::get('/students/stats', [StudentApprovalController::class, 'stats']);
         Route::post('/students/{student}/approve', [StudentApprovalController::class, 'approve']);
         Route::post('/students/{student}/reject', [StudentApprovalController::class, 'reject']);
+
+        Route::get('/library/stats', [BookController::class, 'stats']);
 
         Route::post('/books', [BookController::class, 'store']);
         Route::patch('/books/{book}', [BookController::class, 'update']);
