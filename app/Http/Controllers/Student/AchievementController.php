@@ -23,6 +23,8 @@ class AchievementController extends Controller
                 'achievementID' => $achievement->achievementID,
                 'name'          => $achievement->name,
                 'pointsReward'  => $achievement->pointsReward,
+                // {metric, threshold}: lets the app show progress toward a locked achievement
+                'criteria'      => $achievement->criteriaJSON,
                 'status'        => match (true) {
                     $pivot && $pivot->redeemedAt => 'Redeemed',
                     (bool) $pivot                => 'Unlocked',

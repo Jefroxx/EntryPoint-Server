@@ -169,3 +169,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/book-suggestions/{suggestion}/reject', [LibrarianBookSuggestionController::class, 'reject']);
     });
 });
+
+// Student app read endpoints (profile, loans, fines, catalog, ...)
+require __DIR__ . '/student-portal.php';
