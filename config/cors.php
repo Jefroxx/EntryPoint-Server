@@ -19,7 +19,13 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    // The Nuxt client authenticates with a Bearer token (not cookies), so
+    // this only needs to list the dev-server origins that call the API —
+    // no need for supports_credentials below.
+    'allowed_origins' => [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ],
 
     'allowed_origins_patterns' => [],
 
@@ -27,9 +33,7 @@ return [
 
     'exposed_headers' => [],
 
-    // Let browsers remember a successful preflight (Chrome caps this at 2 hours)
-    // so each API call isn't preceded by a second OPTIONS request.
-    'max_age' => 7200,
+    'max_age' => 0,
 
     'supports_credentials' => false,
 

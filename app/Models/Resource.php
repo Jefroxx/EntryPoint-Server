@@ -32,9 +32,4 @@ class Resource extends Model
             ->whereNull('endTime')
             ->latestOfMany('startTime');
     }
-
-    public function isAvailable(): bool
-    {
-        return $this->status === 'Available';
-    }
 }

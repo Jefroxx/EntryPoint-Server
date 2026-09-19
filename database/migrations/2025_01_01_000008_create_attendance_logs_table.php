@@ -12,7 +12,9 @@ return new class extends Migration
             $table->id('logID'); // Updated
             $table->uuid('uuid')->unique();
             $table->foreignId('studentID')->constrained('students', 'studentID')->cascadeOnDelete(); // Updated
-            $table->timestamp('entryTime');
+            // dateTime, not timestamp: on MariaDB a bare NOT NULL timestamp silently gets
+            // ON UPDATE CURRENT_TIMESTAMP, which would overwrite entryTime at check-out.
+            $table->dateTime('entryTime');
             $table->timestamp('exitTime')->nullable();
             $table->timestamps();
         });

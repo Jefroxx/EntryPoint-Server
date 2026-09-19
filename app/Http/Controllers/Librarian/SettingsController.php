@@ -3,149 +3,61 @@
 namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
-use App\Models\Penalty;
-use App\Models\PenaltyType;
-use App\Models\Setting;
+use App\Http\Requests\ChangePasswordRequest;
+use App\Http\Requests\SaveFineRuleRequest;
+use App\Http\Requests\SaveLoanPeriodsRequest;
+use App\Http\Requests\UpdateAccountRequest;
+use App\Services\SettingsService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 class SettingsController extends Controller
 {
-    /** Collections (books.circulationType) that loan periods and fine rules are set for. */
-    private const AREAS = ['circulation', 'reserved', 'filipiniana'];
-
-    public function show(Request $request)
+    public function __construct(private SettingsService $settings)
     {
-        return response()->json([
-            'loanPeriods' => $this->loanPeriods(),
-            'fineRules'   => collect(self::AREAS)->map(fn ($area) => $this->ruleFor($area))->values(),
-            'account'     => $this->account($request),
-        ]);
     }
 
-    public function updateLoanPeriods(Request $request)
+    public function index(Request $request)
     {
-        $validated = $request->validate([
-            'circulation' => ['required', 'integer', 'min:1', 'max:60'],
-            'reserved'    => ['required', 'integer', 'min:1', 'max:60'],
-            'filipiniana' => ['required', 'integer', 'min:1', 'max:60'],
-        ]);
-
-        foreach ($validated as $area => $days) {
-            Setting::put("due_days.{$area}", $days);
-        }
-
-        return response()->json([
-            'message'     => 'Loan periods saved. They apply to new checkouts.',
-            'loanPeriods' => $this->loanPeriods(),
-        ]);
+        return response()->json($this->settings->overview($request->user()));
     }
 
-    public function saveFineRule(Request $request, string $area)
+    public function saveLoanPeriods(SaveLoanPeriodsRequest $request)
     {
-        abort_unless(in_array($area, self::AREAS, true), 404);
+        $this->settings->saveLoanPeriods($request->validated());
 
-        $validated = $request->validate([
-            'rate'            => ['required', 'numeric', 'min:0', 'max:99999'],
-            'rateUnit'        => ['required', Rule::in(['day', 'hour'])],
-            'gracePeriodDays' => ['required', 'integer', 'min:0', 'max:60'],
-        ]);
+        return response()->json(['message' => 'Loan periods updated.']);
+    }
 
-        $type = PenaltyType::firstOrCreate(['category' => $area], ['uuid' => (string) Str::uuid()]);
-        $rule = $type->rules()->first();
+    public function saveFineRule(SaveFineRuleRequest $request, string $area)
+    {
+        $this->settings->saveFineRule($area, $request->validated());
 
-        if ($rule) {
-            $rule->update($validated);
-        } else {
-            $type->rules()->create(['uuid' => (string) Str::uuid()] + $validated);
-        }
-
-        return response()->json([
-            'message' => 'Fine rule saved.',
-            'rule'    => $this->ruleFor($area),
-        ]);
+        return response()->json(['message' => 'Fine rule updated.']);
     }
 
     public function deleteFineRule(string $area)
     {
-        abort_unless(in_array($area, self::AREAS, true), 404);
+        $this->settings->deleteFineRule($area);
 
-        // Existing fines keep their type; only the rate is removed, so new late returns stop accruing.
-        PenaltyType::where('category', $area)->first()?->rules()->delete();
-
-        return response()->json([
-            'message' => 'Fine rule removed. Late returns in this collection are no longer charged.',
-            'rule'    => $this->ruleFor($area),
-        ]);
+        return response()->json(['message' => 'Fine rule removed.']);
     }
 
-    public function updateAccount(Request $request)
+    public function updateAccount(UpdateAccountRequest $request)
     {
-        $user = $request->user();
-
-        $validated = $request->validate([
-            'firstName' => ['required', 'string', 'max:100'],
-            'lastName'  => ['required', 'string', 'max:100'],
-            'email'     => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->userID, 'userID')],
-        ]);
-
-        $user->update($validated);
+        $account = $this->settings->updateAccount($request->user(), $request->validated());
 
         return response()->json([
             'message' => 'Account updated.',
-            'account' => $this->account($request),
+            'account' => $account,
         ]);
     }
 
-    public function updatePassword(Request $request)
+    public function changePassword(ChangePasswordRequest $request)
     {
-        $validated = $request->validate([
-            'currentPassword' => ['required', 'string'],
-            'newPassword'     => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
+        $validated = $request->validated();
 
-        $user = $request->user();
-
-        if (! Hash::check($validated['currentPassword'], $user->password)) {
-            throw ValidationException::withMessages([
-                'currentPassword' => ['Your current password is incorrect.'],
-            ]);
-        }
-
-        $user->update(['password' => Hash::make($validated['newPassword'])]);
+        $this->settings->changePassword($request->user(), $validated['currentPassword'], $validated['newPassword']);
 
         return response()->json(['message' => 'Password changed.']);
-    }
-
-    private function loanPeriods(): array
-    {
-        return collect(self::AREAS)->mapWithKeys(fn ($area) => [$area => Setting::dueDays($area)])->all();
-    }
-
-    private function ruleFor(string $area): array
-    {
-        $rule = Penalty::ruleForArea($area);
-
-        return [
-            'area'            => $area,
-            'configured'      => (bool) $rule,
-            'rate'            => $rule ? (float) $rule->rate : null,
-            'rateUnit'        => $rule->rateUnit ?? 'day',
-            'gracePeriodDays' => $rule->gracePeriodDays ?? 0,
-        ];
-    }
-
-    private function account(Request $request): array
-    {
-        $user = $request->user();
-
-        return [
-            'firstName' => $user->firstName,
-            'lastName'  => $user->lastName,
-            'email'     => $user->email,
-        ];
     }
 }

@@ -3,65 +3,46 @@
 namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreSubjectRequest;
+use App\Http\Requests\UpdateSubjectRequest;
 use App\Models\BookSubject;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
+use App\Services\SubjectService;
 
 class SubjectController extends Controller
 {
-    public function index()
+    public function __construct(private SubjectService $subjectService)
     {
-        $subjects = BookSubject::withCount('books')->orderBy('name')->get();
-
-        return response()->json(['subjects' => $subjects]);
     }
 
-    public function store(Request $request)
+    public function index()
     {
-        $validated = $request->validate([
-            'name'               => ['required', 'string', 'max:255', Rule::unique('book_subjects', 'name')],
-            'classificationCode' => ['nullable', 'string', 'max:20', Rule::unique('book_subjects', 'classificationCode')],
-        ]);
+        return response()->json(['subjects' => $this->subjectService->list()]);
+    }
 
-        $subject = BookSubject::create([
-            'uuid'               => Str::uuid(),
-            'name'               => $validated['name'],
-            'classificationCode' => $validated['classificationCode'] ?? BookSubject::classifyByName($validated['name']),
-        ]);
+    public function store(StoreSubjectRequest $request)
+    {
+        $subject = $this->subjectService->create($request->validated());
 
         return response()->json([
-            'message' => 'Category added.',
-            'subject' => $subject->loadCount('books'),
+            'message' => 'Subject added.',
+            'subject' => $subject,
         ], 201);
     }
 
-    public function update(Request $request, BookSubject $subject)
+    public function update(UpdateSubjectRequest $request, BookSubject $subject)
     {
-        $validated = $request->validate([
-            'name'               => ['sometimes', 'string', 'max:255', Rule::unique('book_subjects', 'name')->ignore($subject->subjectID, 'subjectID')],
-            'classificationCode' => ['sometimes', 'nullable', 'string', 'max:20', Rule::unique('book_subjects', 'classificationCode')->ignore($subject->subjectID, 'subjectID')],
-        ]);
-
-        $subject->update($validated);
+        $subject = $this->subjectService->update($subject, $request->validated());
 
         return response()->json([
-            'message' => 'Category updated.',
-            'subject' => $subject->fresh()->loadCount('books'),
+            'message' => 'Subject updated.',
+            'subject' => $subject,
         ]);
     }
 
     public function destroy(BookSubject $subject)
     {
-        // Includes soft-deleted books: the foreign key still points at this subject.
-        if ($subject->books()->withTrashed()->exists()) {
-            return response()->json([
-                'message' => 'Cannot delete: books still use this category. Move or remove them first.',
-            ], 422);
-        }
+        $this->subjectService->delete($subject);
 
-        $subject->delete();
-
-        return response()->json(['message' => 'Category removed.']);
+        return response()->json(['message' => 'Subject removed.']);
     }
 }
