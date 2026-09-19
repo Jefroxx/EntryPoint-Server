@@ -3,58 +3,48 @@
 namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
-use App\Models\SystemNotification;
 use App\Models\Student;
+use App\Services\StudentApprovalService;
 use Illuminate\Http\Request;
 
 class StudentApprovalController extends Controller
 {
+    public function __construct(private StudentApprovalService $studentApproval)
+    {
+    }
+
+    public function index(Request $request)
+    {
+        return response()->json($this->studentApproval->index(
+            $request->query('search'),
+            $request->query('program'),
+            $request->query('status'),
+            (int) ($request->query('perPage') ?? 15)
+        ));
+    }
+
+    public function stats()
+    {
+        return response()->json($this->studentApproval->stats());
+    }
+
     public function approve(Request $request, Student $student)
     {
-        if ($student->registrationStatus === 'approved') {
-            return response()->json(['message' => 'Student is already approved.'], 422);
-        }
-
-        $student->update([
-            'registrationStatus'    => 'approved',
-            'barcodeValue'          => Student::generateUniqueBarcode(),
-            'reviewedByLibrarianID' => $request->user()->librarian->librarianID,
-            'reviewedAt'            => now(),
-        ]);
-
-        SystemNotification::notify(
-            $student->studentID,
-            'Your registration has been approved! You can now log in.',
-            'registration_approved'
-        );
+        $student = $this->studentApproval->approve($student, $request->user()->librarian->librarianID);
 
         return response()->json([
             'message' => 'Student approved.',
-            'student' => $student->fresh(),
+            'student' => $student,
         ]);
     }
 
     public function reject(Request $request, Student $student)
     {
-        if ($student->registrationStatus === 'approved') {
-            return response()->json(['message' => 'Cannot reject an already-approved student.'], 422);
-        }
-
-        $student->update([
-            'registrationStatus'    => 'rejected',
-            'reviewedByLibrarianID' => $request->user()->librarian->librarianID,
-            'reviewedAt'            => now(),
-        ]);
-
-        SystemNotification::notify(
-            $student->studentID,
-            'Your registration was not approved. Please contact the library for details.',
-            'registration_rejected'
-        );
+        $student = $this->studentApproval->reject($student, $request->user()->librarian->librarianID);
 
         return response()->json([
             'message' => 'Student rejected.',
-            'student' => $student->fresh(),
+            'student' => $student,
         ]);
     }
 }

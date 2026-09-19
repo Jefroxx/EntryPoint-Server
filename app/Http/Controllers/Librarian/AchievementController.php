@@ -3,40 +3,25 @@
 namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreAchievementRequest;
+use App\Http\Requests\UpdateAchievementRequest;
 use App\Models\Achievement;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
+use App\Services\AchievementService;
 
 class AchievementController extends Controller
 {
-    public function index()
+    public function __construct(private AchievementService $achievementService)
     {
-        $achievements = Achievement::withCount([
-            'students as unlockedCount',
-            'students as redeemedCount' => fn ($q) => $q->wherePivotNotNull('redeemedAt'),
-        ])->orderBy('name')->get();
-
-        return response()->json(['achievements' => $achievements]);
     }
 
-    public function store(Request $request)
+    public function index()
     {
-        $validated = $this->validated($request);
+        return response()->json(['achievements' => $this->achievementService->listWithCounts()]);
+    }
 
-        $achievement = DB::transaction(function () use ($validated) {
-            $achievement = Achievement::create([
-                'uuid'         => Str::uuid(),
-                'name'         => $validated['name'],
-                'criteriaJSON' => $validated['criteriaJSON'],
-                'pointsReward' => $validated['pointsReward'],
-            ]);
-
-            $achievement->evaluateForAllStudents();
-
-            return $achievement;
-        });
+    public function store(StoreAchievementRequest $request)
+    {
+        $achievement = $this->achievementService->create($request->validated());
 
         return response()->json([
             'message'     => 'Achievement created.',
@@ -44,41 +29,20 @@ class AchievementController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, Achievement $achievement)
+    public function update(UpdateAchievementRequest $request, Achievement $achievement)
     {
-        $validated = $this->validated($request, sometimes: true);
-
-        DB::transaction(function () use ($validated, $achievement) {
-            $achievement->update($validated);
-
-            if (array_key_exists('criteriaJSON', $validated)) {
-                $achievement->evaluateForAllStudents();
-            }
-        });
+        $achievement = $this->achievementService->update($achievement, $request->validated());
 
         return response()->json([
             'message'     => 'Achievement updated.',
-            'achievement' => $achievement->fresh(),
+            'achievement' => $achievement,
         ]);
     }
 
     public function destroy(Achievement $achievement)
     {
-        $achievement->delete();
+        $this->achievementService->delete($achievement);
 
         return response()->json(['message' => 'Achievement removed.']);
-    }
-
-    private function validated(Request $request, bool $sometimes = false): array
-    {
-        $rule = fn (string $default) => $sometimes ? 'sometimes' : $default;
-
-        return $request->validate([
-            'name'                     => [$rule('required'), 'string', 'max:150'],
-            'criteriaJSON'             => [$rule('required'), 'array'],
-            'criteriaJSON.metric'      => [$rule('required'), Rule::in(Achievement::CRITERIA_METRICS)],
-            'criteriaJSON.threshold'   => [$rule('required'), 'integer', 'min:1'],
-            'pointsReward'             => [$rule('required'), 'integer', 'min:0'],
-        ]);
     }
 }

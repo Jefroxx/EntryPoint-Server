@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Repositories\Contracts;
+
+use App\Models\Student;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
+
+interface StudentRepositoryInterface extends RepositoryInterface
+{
+    public function paginate(?string $search, ?string $program, ?string $status, int $perPage): LengthAwarePaginator;
+
+    /**
+     * @return array{total: int, pending: int, approved: int, rejected: int}
+     */
+    public function countsByRegistrationStatus(): array;
+
+    /**
+     * Adjusts a student's knowledgeScore by $delta (positive to credit,
+     * negative to deduct) and returns the same instance with the new value
+     * already reflected, so callers chaining further reads see it live.
+     */
+    public function creditPoints(Student $student, int $delta): Student;
+
+    public function findByBarcode(string $barcode): ?Student;
+
+    public function notHavingAchievement(int $achievementID): Collection;
+
+    public function approvedCount(): int;
+
+    public function generateUniqueBarcode(): string;
+}

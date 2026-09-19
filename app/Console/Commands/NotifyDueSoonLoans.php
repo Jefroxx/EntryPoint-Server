@@ -2,8 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Loan;
-use App\Models\SystemNotification;
+use App\Services\CirculationService;
 use Illuminate\Console\Command;
 
 class NotifyDueSoonLoans extends Command
@@ -14,26 +13,11 @@ class NotifyDueSoonLoans extends Command
 
     private const WINDOW_HOURS = 24;
 
-    public function handle(): int
+    public function handle(CirculationService $circulation): int
     {
-        $dueSoonLoans = Loan::where('status', 'Active')
-            ->whereNull('dueSoonNotifiedAt')
-            ->where('dueDate', '>', now())
-            ->where('dueDate', '<=', now()->addHours(self::WINDOW_HOURS))
-            ->with('copy.book')
-            ->get();
+        $count = $circulation->notifyDueSoonLoans(self::WINDOW_HOURS);
 
-        foreach ($dueSoonLoans as $loan) {
-            SystemNotification::notify(
-                $loan->studentID,
-                "\"{$loan->copy->book->title}\" is due on {$loan->dueDate->format('M d, Y g:i A')} - return it soon to avoid a penalty.",
-                'loan_due_soon'
-            );
-
-            $loan->update(['dueSoonNotifiedAt' => now()]);
-        }
-
-        $this->info("Sent due-soon reminders for {$dueSoonLoans->count()} loan(s).");
+        $this->info("Sent due-soon reminders for {$count} loan(s).");
 
         return self::SUCCESS;
     }

@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 class Student extends Model
 {
@@ -28,32 +27,9 @@ class Student extends Model
         'reviewedAt',
     ];
 
-    public static function generateUniqueBarcode(): string
-    {
-        do {
-            $code = 'STI-' . strtoupper(Str::random(10));
-        } while (self::where('barcodeValue', $code)->exists());
-
-        return $code;
-    }
-
     protected $casts = [
         'reviewedAt' => 'datetime',
     ];
-
-    /**
-     * Whenever a student's gamification metrics move, re-check achievement
-     * criteria automatically — keeps the achievement engine decoupled from
-     * whichever module (attendance, loans, etc.) actually earns the points.
-     */
-    protected static function booted(): void
-    {
-        static::updated(function (self $student) {
-            if ($student->wasChanged(['knowledgeScore', 'visitStreak'])) {
-                Achievement::evaluateForStudent($student);
-            }
-        });
-    }
 
     public function user()
     {

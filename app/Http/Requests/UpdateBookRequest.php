@@ -16,11 +16,13 @@ class UpdateBookRequest extends FormRequest
         return [
             'title'          => ['sometimes', 'string', 'max:255'],
             'classNumber'    => ['sometimes', 'string', 'max:100'],
+            'callNumber'     => ['sometimes', 'string', 'max:100'],
             'areasOfLibrary' => ['sometimes', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
 
-            'isbn'           => ['nullable', 'string', 'max:20'],
+            'isbn'             => ['nullable', 'string', 'max:20'],
+            'publicationYear'  => ['nullable', 'integer', 'min:1000', 'max:9999'],
             'volume'         => ['nullable', 'string', 'max:50'],
             'edition'        => ['nullable', 'string', 'max:50'],
             'pages'          => ['nullable', 'integer', 'min:1'],

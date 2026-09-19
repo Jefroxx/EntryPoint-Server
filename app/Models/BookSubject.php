@@ -11,7 +11,7 @@ class BookSubject extends Model
 
     protected $primaryKey = 'subjectID';
 
-    protected $fillable = ['uuid', 'name'];
+    protected $fillable = ['uuid', 'name', 'classificationCode'];
 
     public function books()
     {

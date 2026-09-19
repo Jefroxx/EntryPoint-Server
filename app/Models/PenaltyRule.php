@@ -11,7 +11,7 @@ class PenaltyRule extends Model
 
     protected $primaryKey = 'ruleID';
 
-    protected $fillable = ['uuid', 'penaltyTypeID', 'rate', 'rateUnit'];
+    protected $fillable = ['uuid', 'penaltyTypeID', 'rate', 'rateUnit', 'gracePeriodDays'];
 
     protected $casts = ['rate' => 'decimal:2'];
 

@@ -15,13 +15,19 @@ class StoreBookRequest extends FormRequest
     {
         return [
             'title'          => ['required', 'string', 'max:255'],
-            'classNumber'    => ['required', 'string', 'max:100'],
+            // Nullable: if omitted, BookController auto-generates it from the
+            // subject's Dewey classification + the primary author's cutter
+            // number (optionally refined by a live ISBN lookup).
+            'classNumber'    => ['nullable', 'string', 'max:100'],
+            // Alias for classNumber (the Nuxt client's naming).
+            'callNumber'     => ['nullable', 'string', 'max:100'],
             'areasOfLibrary' => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
             'quantity'       => ['required', 'integer', 'min:1', 'max:100'],
 
-            'isbn'           => ['nullable', 'string', 'max:20'],
+            'isbn'             => ['nullable', 'string', 'max:20'],
+            'publicationYear'  => ['nullable', 'integer', 'min:1000', 'max:9999'],
             'volume'         => ['nullable', 'string', 'max:50'],
             'edition'        => ['nullable', 'string', 'max:50'],
             'pages'          => ['nullable', 'integer', 'min:1'],

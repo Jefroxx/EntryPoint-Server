@@ -26,30 +26,4 @@ class SelfReturnReport extends Model
     {
         return $this->belongsTo(Librarian::class, 'verifiedByLibrarianID', 'librarianID');
     }
-
-    public function verify(Librarian $librarian): void
-    {
-        if ($this->verificationStatus !== 'Pending') {
-            throw new \RuntimeException("Only a 'Pending' self-return report can be verified.");
-        }
-
-        $this->update([
-            'verifiedByLibrarianID' => $librarian->librarianID,
-            'verificationStatus'    => 'Verified',
-        ]);
-
-        $this->loan->markReturned();
-    }
-
-    public function reject(Librarian $librarian): void
-    {
-        if ($this->verificationStatus !== 'Pending') {
-            throw new \RuntimeException("Only a 'Pending' self-return report can be rejected.");
-        }
-
-        $this->update([
-            'verifiedByLibrarianID' => $librarian->librarianID,
-            'verificationStatus'    => 'Rejected',
-        ]);
-    }
 }

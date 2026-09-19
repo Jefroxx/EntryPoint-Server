@@ -3,95 +3,37 @@
 namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
-use App\Models\BookCopy;
-use App\Models\Librarian;
+use App\Http\Requests\StoreLoanRequest;
 use App\Models\Loan;
-use App\Models\Reservation;
-use App\Models\SystemNotification;
+use App\Services\CirculationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class LoanController extends Controller
 {
-    public function store(Request $request)
+    public function __construct(private CirculationService $circulation)
     {
-        $validated = $request->validate([
-            'studentID'     => ['required', 'integer', 'exists:students,studentID'],
-            'copyID'        => ['required', 'integer', 'exists:book_copies,copyID'],
-            'reservationID' => ['nullable', 'integer', 'exists:reservations,reservationID'],
-        ]);
+    }
 
-        $loan = DB::transaction(function () use ($validated) {
-            $copy = BookCopy::with('book')->lockForUpdate()->findOrFail($validated['copyID']);
+    public function index(Request $request)
+    {
+        return response()->json($this->circulation->index(
+            $request->query('search'),
+            $request->query('status'),
+            (int) ($request->query('perPage') ?? 15)
+        ));
+    }
 
-            if ($copy->status !== 'available') {
-                throw ValidationException::withMessages([
-                    'copyID' => ["This copy is currently '{$copy->status}' and cannot be checked out."],
-                ]);
-            }
+    public function stats()
+    {
+        return response()->json($this->circulation->stats());
+    }
 
-            if (! empty($validated['reservationID'])) {
-                $reservation = Reservation::findOrFail($validated['reservationID']);
-
-                if ($reservation->studentID != $validated['studentID']) {
-                    throw ValidationException::withMessages([
-                        'reservationID' => ['This reservation does not belong to the specified student.'],
-                    ]);
-                }
-
-                if ($reservation->bookID !== $copy->bookID) {
-                    throw ValidationException::withMessages([
-                        'reservationID' => ['This reservation is for a different book title.'],
-                    ]);
-                }
-
-                if ($reservation->status !== 'Accepted') {
-                    throw ValidationException::withMessages([
-                        'reservationID' => ["Reservation must be 'Accepted' before converting to a loan."],
-                    ]);
-                }
-            }
-
-            $copy->book->assertLoanable();
-
-            $loan = Loan::create([
-                'uuid'         => Str::uuid(),
-                'studentID'    => $validated['studentID'],
-                'copyID'       => $copy->copyID,
-                'loanType'     => $copy->book->areasOfLibrary,
-                'checkoutDate' => now(),
-                'dueDate'      => $copy->book->computeDueDate(),
-                'status'       => 'Active',
-            ]);
-
-            $copy->update(['status' => 'borrowed']);
-
-            if (! empty($validated['reservationID'])) {
-                $reservation->update(['status' => 'Fulfilled']);
-            }
-
-            return $loan;
-        });
-
-        $loan->load(['student.user', 'copy.book']);
-
-        SystemNotification::notify(
-            $loan->studentID,
-            "You've checked out \"{$loan->copy->book->title}\". Due back by {$loan->dueDate->format('M d, Y')}.",
-            'loan_checkout'
+    public function store(StoreLoanRequest $request)
+    {
+        $loan = $this->circulation->checkout(
+            $request->validated(),
+            $request->user()->librarian->librarianID
         );
-
-        Librarian::where('librarianID', '!=', $request->user()->librarian->librarianID)
-            ->get()
-            ->each(function ($librarian) use ($loan) {
-                SystemNotification::notify(
-                    $librarian->librarianID,
-                    "{$loan->student->user->fullName} checked out \"{$loan->copy->book->title}\".",
-                    'loan_checked_out'
-                );
-            });
 
         return response()->json([
             'message' => 'Book checked out successfully.',
@@ -107,20 +49,7 @@ class LoanController extends Controller
      */
     public function returnBook(Loan $loan)
     {
-        if ($loan->status !== 'Active') {
-            return response()->json([
-                'message' => "Only an 'Active' loan can be returned.",
-            ], 422);
-        }
-
-        $loan->markReturned();
-        $loan->load(['student.user', 'copy.book']);
-
-        SystemNotification::notify(
-            $loan->studentID,
-            "Your return of \"{$loan->copy->book->title}\" has been processed. Thank you!",
-            'loan_returned'
-        );
+        $loan = $this->circulation->returnBook($loan);
 
         return response()->json([
             'message' => 'Book returned successfully.',

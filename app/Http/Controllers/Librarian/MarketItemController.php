@@ -3,35 +3,25 @@
 namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreMarketItemRequest;
+use App\Http\Requests\UpdateMarketItemRequest;
 use App\Models\MarketItem;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use App\Services\MarketplaceService;
 
 class MarketItemController extends Controller
 {
-    public function index()
+    public function __construct(private MarketplaceService $marketplace)
     {
-        $items = MarketItem::withCount('redemptions')->orderBy('name')->get();
-
-        return response()->json(['items' => $items]);
     }
 
-    public function store(Request $request)
+    public function index()
     {
-        $validated = $request->validate([
-            'name'      => ['required', 'string', 'max:150'],
-            'type'      => ['nullable', 'string', 'max:100'],
-            'pointCost' => ['required', 'integer', 'min:0'],
-            'stock'     => ['required', 'integer', 'min:0'],
-        ]);
+        return response()->json(['items' => $this->marketplace->listItems()]);
+    }
 
-        $item = MarketItem::create([
-            'uuid'      => Str::uuid(),
-            'name'      => $validated['name'],
-            'type'      => $validated['type'] ?? null,
-            'pointCost' => $validated['pointCost'],
-            'stock'     => $validated['stock'],
-        ]);
+    public function store(StoreMarketItemRequest $request)
+    {
+        $item = $this->marketplace->createItem($request->validated());
 
         return response()->json([
             'message' => 'Item added to the point shop.',
@@ -39,32 +29,19 @@ class MarketItemController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, MarketItem $item)
+    public function update(UpdateMarketItemRequest $request, MarketItem $item)
     {
-        $validated = $request->validate([
-            'name'      => ['sometimes', 'string', 'max:150'],
-            'type'      => ['sometimes', 'nullable', 'string', 'max:100'],
-            'pointCost' => ['sometimes', 'integer', 'min:0'],
-            'stock'     => ['sometimes', 'integer', 'min:0'],
-        ]);
-
-        $item->update($validated);
+        $item = $this->marketplace->updateItem($item, $request->validated());
 
         return response()->json([
             'message' => 'Item updated.',
-            'item'    => $item->fresh(),
+            'item'    => $item,
         ]);
     }
 
     public function destroy(MarketItem $item)
     {
-        if ($item->redemptions()->exists()) {
-            return response()->json([
-                'message' => 'Cannot delete: this item has redemption history. Set stock to 0 to retire it instead.',
-            ], 422);
-        }
-
-        $item->delete();
+        $this->marketplace->deleteItem($item);
 
         return response()->json(['message' => 'Item removed from the point shop.']);
     }
