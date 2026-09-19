@@ -3,55 +3,33 @@
 namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
-use App\Models\Book;
+use App\Http\Requests\StoreWishlistRequest;
 use App\Models\Wishlist;
+use App\Services\WishlistService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class WishlistController extends Controller
 {
+    public function __construct(private WishlistService $wishlistService)
+    {
+    }
+
     public function index(Request $request)
     {
         $student = $request->user()->student;
 
-        $wishlist = $student->wishlists()
-            ->with(['book.category', 'book.authors', 'book.copies'])
-            ->orderByDesc('addedAt')
-            ->get();
-
-        return response()->json(['wishlist' => $wishlist]);
+        return response()->json(['wishlist' => $this->wishlistService->wishlistIndex($student->studentID)]);
     }
 
-    public function store(Request $request)
+    public function store(StoreWishlistRequest $request)
     {
-        $validated = $request->validate([
-            'bookID' => ['required', 'integer', 'exists:books,bookID'],
-        ]);
-
         $student = $request->user()->student;
 
-        $alreadyExists = Wishlist::where('studentID', $student->studentID)
-            ->where('bookID', $validated['bookID'])
-            ->exists();
-
-        if ($alreadyExists) {
-            throw ValidationException::withMessages([
-                'bookID' => ['This book is already in your wishlist.'],
-            ]);
-        }
-
-        $wishlistItem = Wishlist::create([
-            'uuid'      => Str::uuid(),
-            'studentID' => $student->studentID,
-            'bookID'    => $validated['bookID'],
-            'addedAt'   => now(),
-        ]);
+        $wishlistItem = $this->wishlistService->addToWishlist($student->studentID, $request->validated()['bookID']);
 
         return response()->json([
             'message'  => 'Book added to wishlist.',
-            'wishlist' => $wishlistItem->load('book'),
+            'wishlist' => $wishlistItem,
         ], 201);
     }
 
@@ -59,13 +37,7 @@ class WishlistController extends Controller
     {
         $student = $request->user()->student;
 
-        if ($wishlist->studentID !== $student->studentID) {
-            return response()->json([
-                'message' => 'This wishlist item does not belong to you.',
-            ], 403);
-        }
-
-        $wishlist->delete();
+        $this->wishlistService->removeFromWishlist($wishlist, $student->studentID);
 
         return response()->json(['message' => 'Removed from wishlist.']);
     }

@@ -9,11 +9,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('penalty_rules', function (Blueprint $table) {
-            $table->id('ruleID'); // Updated
+            $table->id('ruleID');
             $table->uuid('uuid')->unique();
-            $table->foreignId('penaltyTypeID')->constrained('penalty_types', 'penaltyTypeID')->cascadeOnDelete(); // Updated
+            $table->foreignId('penaltyTypeID')->constrained('penalty_types', 'penaltyTypeID')->cascadeOnDelete();
             $table->decimal('rate', 10, 2);
-            $table->unsignedInteger('gracePeriodDays')->default(0);
+            $table->enum('rateUnit', ['day', 'hour'])->default('day');
             $table->timestamps();
         });
     }

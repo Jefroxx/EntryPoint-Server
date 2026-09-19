@@ -1,0 +1,501 @@
+================================================================================
+ENTRYPOINT API - ENDPOINT TESTING GUIDE
+================================================================================
+Base URL: http://127.0.0.1:8000/api
+Tool: Hoppscotch (or any HTTP client)
+Seeded account: librarian@stidavao.edu.ph / password123
+
+Before testing, make sure:
+  1. MySQL is running and the "entrypoint" database exists
+  2. Migrations are applied + seeded:  php artisan migrate:fresh --seed
+  3. The API is running:               php artisan serve
+  4. Every request/response is JSON, so always send this header:
+       Accept: application/json
+  5. Endpoints under /student/* and /librarian/* require:
+       Authorization: Bearer <token>
+     (token comes from the Login response, access_token field)
+
+Legend:
+  [Public]     no token needed
+  [Any]        any logged-in user (student or librarian)
+  [Student]    requires an APPROVED student's token
+  [Librarian]  requires a librarian's token
+
+Tests are listed in the order you should run them, since most endpoints
+depend on data created by an earlier one (a book must exist before it can
+be reserved, a reservation before it can become a loan, etc). Variables
+in <angle brackets> are IDs/values you capture from an earlier response
+and paste into a later request.
+
+================================================================================
+1. AUTH & REGISTRATION
+================================================================================
+
+[1.1] POST /login                                                  [Public]
+Input:
+  { "email": "librarian@stidavao.edu.ph", "password": "password123" }
+Expect: 200, returns { user, access_token, token_type }
+-> Save access_token as <libToken>
+
+[1.2] POST /register                                                [Public]
+Input:
+  {
+    "firstName": "Test",
+    "lastName": "Student",
+    "email": "test_student_1@davao.sti.edu.ph",
+    "password": "password123",
+    "password_confirmation": "password123",
+    "studentIDNumber": "S-0001"
+  }
+  Optional fields: middleInitial, phoneNumber, birthDate, address, academicProgram
+Expect: 201, registrationStatus "pending", barcodeValue is null
+-> Save student.studentID as <studentID>, student.user.email as <studentEmail>
+
+[1.3] POST /librarian/students/<studentID>/approve                [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200, registrationStatus becomes "approved", barcodeValue is generated
+        (format STI-XXXXXXXXXX)
+-> Save student.barcodeValue as <barcode>
+
+[1.4] POST /librarian/students/<studentID>/reject                 [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200, registrationStatus becomes "rejected"
+Note: run this against a DIFFERENT pending student than the one you approved -
+      a student can't be both approved and rejected.
+
+[1.5] POST /login                                                   [Public]
+Input:
+  { "email": "<studentEmail>", "password": "password123" }
+Expect: 200 once approved (401/422 with a "pending approval" message before
+        step 1.3 runs)
+-> Save access_token as <stuToken>
+
+[1.6] GET /user                                                       [Any]
+Auth: Bearer <stuToken> (or <libToken>)
+Input: none
+Expect: 200, returns the logged-in user's own profile
+
+[1.7] POST /logout                                                    [Any]
+Auth: Bearer <token>
+Input: none
+Expect: 200, "Logged out successfully." - the token used is now invalid
+
+================================================================================
+2. NOTIFICATIONS (generic, used by every role)
+================================================================================
+
+[2.1] GET /notifications                                              [Any]
+Auth: Bearer <token>
+Input: none
+Expect: 200, { notifications: [...], unreadCount: N }
+
+[2.2] PATCH /notifications/<notificationID>/read                      [Any]
+Auth: Bearer <token>
+Input: none
+Expect: 200, that notification's isRead becomes true
+        403 if the notification belongs to a different user
+
+[2.3] PATCH /notifications/read-all                                   [Any]
+Auth: Bearer <token>
+Input: none
+Expect: 200, all of the caller's notifications marked read
+
+================================================================================
+3. BOOK CATALOG (Librarian manages, Student browses via wishlist/cart)
+================================================================================
+
+[3.1] POST /librarian/books                                        [Librarian]
+Auth: Bearer <libToken>
+Input:
+  {
+    "title": "Test Driven Laravel",
+    "classNumber": "QA76.T3",
+    "quantity": 1,
+    "areasOfLibrary": "circulation",
+    "subjectName": "Software Engineering",
+    "authors": [{ "name": "Ada Lovelace" }]
+  }
+  areasOfLibrary options: circulation, reserved, filipiniana, fiction,
+                          thesis, journal, dissertation
+  Use "subjectID": <id> instead of subjectName to reuse an existing subject.
+  Use "authors": [{ "authorID": <id> }] to reuse an existing author.
+Expect: 201, returns book with copies[] (one BookCopy per quantity), each
+        copy has a generated barcodeValue and accessionNumber
+-> Save book.bookID as <bookID>, book.copies[0].copyID as <copyID>
+
+[3.2] PATCH /librarian/books/<bookID>                              [Librarian]
+Auth: Bearer <libToken>
+Input (any subset, all optional):
+  { "title": "New Title", "quantity": 3 }
+Expect: 200, updated book. Raising "quantity" adds new copies; lowering it
+        retires available copies (422 if not enough are available to retire)
+
+[3.3] DELETE /librarian/books/<bookID>                             [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 if no copies are currently borrowed, else 422
+        ("N copy(ies) currently borrowed")
+
+================================================================================
+4. WISHLIST (Student) - a save-for-later list, separate from the cart
+================================================================================
+
+[4.1] GET /student/wishlist                                          [Student]
+Auth: Bearer <stuToken>
+
+[4.2] POST /student/wishlist                                         [Student]
+Auth: Bearer <stuToken>
+Input: { "bookID": <bookID> }
+Expect: 201. 422 if that book is already on the wishlist.
+
+[4.3] DELETE /student/wishlist/<wishlistID>                          [Student]
+Auth: Bearer <stuToken>
+Expect: 200. 403 if it belongs to another student.
+
+================================================================================
+5. CART -> RESERVATIONS (Student), ACCEPT/REJECT (Librarian)
+================================================================================
+
+[5.1] POST /student/cart                                             [Student]
+Auth: Bearer <stuToken>
+Input: { "bookID": <bookID> }
+Expect: 201. 422 if cart is full (max 3) or already in cart.
+
+[5.2] GET /student/cart                                              [Student]
+Auth: Bearer <stuToken>
+
+[5.3] DELETE /student/cart/<wishlistID>                              [Student]
+Auth: Bearer <stuToken>
+Expect: 200 (removes from cart only, stays on wishlist if it was there)
+
+[5.4] POST /student/reservations                                     [Student]
+Auth: Bearer <stuToken>
+Input: none (checks out everything currently in the cart)
+Expect: 201, creates one Reservation per cart item, status "Waiting",
+        clears the cart. 422 if cart is empty, over the 3-active-reservation
+        cap, or a book is already actively reserved.
+-> Save reservations[0].reservationID as <reservationID>
+
+[5.5] GET /student/reservations                                      [Student]
+Auth: Bearer <stuToken>
+Expect: 200, each Waiting reservation includes queuePosition (1 = next)
+
+[5.6] DELETE /student/reservations/<reservationID>                   [Student]
+Auth: Bearer <stuToken>
+Expect: 200 only if status is "Waiting" (422 otherwise). 403 if not yours.
+
+[5.7] GET /librarian/reservations                                  [Librarian]
+Auth: Bearer <libToken>
+Optional query: ?status=Waiting (or Accepted/Rejected/Fulfilled)
+
+[5.8] GET /librarian/reservations/queue/<bookID>                   [Librarian]
+Auth: Bearer <libToken>
+Expect: 200, ordered list of Waiting reservations for that book (FIFO)
+
+[5.9] POST /librarian/reservations/<reservationID>/accept          [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 only if this is the earliest Waiting reservation for the book
+        AND a copy is currently available. 422 with an explanatory message
+        otherwise (out of order, or no available copy).
+        Notifies the student "ready for pickup".
+
+[5.10] POST /librarian/reservations/<reservationID>/reject         [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 (only from "Waiting"). Notifies the student it was declined.
+
+================================================================================
+6. LOANS (Librarian checkout/return), SELF-RETURN (Student + Librarian)
+================================================================================
+
+[6.1] POST /librarian/loans                                        [Librarian]
+Auth: Bearer <libToken>
+Input:
+  { "studentID": <studentID>, "copyID": <copyID> }
+  Optional: "reservationID": <reservationID>  (converts an Accepted
+            reservation into a loan; that reservation's status becomes
+            "Fulfilled")
+Expect: 201, dueDate computed from config/loans.php by areasOfLibrary
+        (circulation=2 days, reserved=overnight, filipiniana=3 days,
+        fiction=5 days; thesis/journal/dissertation are not loanable - 422)
+        422 if the copy isn't "available", or the reservation doesn't match
+        the student/book/isn't Accepted.
+-> Save loan.loanID as <loanID>
+
+[6.2] POST /librarian/loans/<loanID>/return                        [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 only if status is "Active". Frees the copy, accrues any final
+        penalty, and notifies the next student in that book's queue (if any).
+
+[6.3] POST /student/loans/<loanID>/self-return                      [Student]
+Auth: Bearer <stuToken>
+Input: none
+Expect: 201, creates a Pending SelfReturnReport. 422 if the loan isn't
+        Active, or a report is already Pending. If a prior report was
+        Rejected, blocked for 6 hours from rejection, then allowed again.
+
+[6.4] GET /librarian/self-return-reports                           [Librarian]
+Auth: Bearer <libToken>
+Expect: 200, lists Pending reports only
+
+[6.5] POST /librarian/self-return-reports/<reportID>/verify        [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 (only from Pending). Marks Verified and finalizes the return
+        exactly like 6.2 (frees copy, penalty, next-in-queue notify).
+
+[6.6] POST /librarian/self-return-reports/<reportID>/reject        [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 (only from Pending). Marks Rejected; student can resubmit via
+        6.3 after a 6-hour cooldown.
+
+================================================================================
+7. RESOURCES (computer units, study areas) + USAGE SESSIONS
+================================================================================
+
+[7.1] POST /librarian/resources                                    [Librarian]
+Auth: Bearer <libToken>
+Input: { "resourceType": "computer", "name": "Computer 1" }
+Expect: 201, status defaults to "Available"
+-> Save resource.resID as <resID>
+
+[7.2] GET /librarian/resources                                     [Librarian]
+Auth: Bearer <libToken>
+Optional query: ?resourceType=computer&status=Available
+Expect: 200, each resource includes activeUsage (who's using it now, if
+        anyone)
+
+[7.3] PATCH /librarian/resources/<resID>                           [Librarian]
+Auth: Bearer <libToken>
+Input (any subset): { "name": "Computer 1B", "status": "Unavailable" }
+Expect: 200. status may only be set to Available/Unavailable manually
+        (never "In Use"), and is blocked entirely while currently In Use.
+
+[7.4] DELETE /librarian/resources/<resID>                          [Librarian]
+Auth: Bearer <libToken>
+Expect: 200, 422 if currently In Use
+
+[7.5] GET /student/resources                                         [Student]
+Auth: Bearer <stuToken>
+Expect: 200, read-only availability list (no session control from here)
+
+[7.6] POST /librarian/resource-usage-logs                          [Librarian]
+Auth: Bearer <libToken>
+Input: { "resID": <resID>, "studentID": <studentID> }
+Expect: 201, resource flips to "In Use", student notified. 422 if the
+        resource isn't Available, or the student already has an open
+        session elsewhere.
+-> Save usageLog.usageID as <usageID>
+
+[7.7] GET /librarian/resource-usage-logs                           [Librarian]
+Auth: Bearer <libToken>
+Optional query: ?resID=<resID>&active=1
+
+[7.8] POST /librarian/resource-usage-logs/<usageID>/end            [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200, resource flips back to "Available". 422 if already ended.
+
+================================================================================
+8. ATTENDANCE (barcode scan, toggles check-in/check-out)
+================================================================================
+
+[8.1] POST /librarian/attendance-logs/scan                         [Librarian]
+Auth: Bearer <libToken>
+Input: { "barcodeValue": "<barcode>" }
+Expect (1st scan of the day): 201 "Checked in." - creates an AttendanceLog,
+        and on the FIRST check-in of a new calendar day updates the
+        student's visitStreak (+1 if last visit was exactly yesterday,
+        reset to 1 otherwise). This can automatically unlock achievements
+        (see section 9).
+Expect (2nd scan while checked in): 200 "Checked out." - closes that log
+404 if the barcode doesn't match an approved student.
+
+[8.2] GET /librarian/attendance-logs                               [Librarian]
+Auth: Bearer <libToken>
+Optional query: ?studentID=<studentID>&active=1
+
+================================================================================
+9. ACHIEVEMENTS (auto-unlock via criteria, manual redeem for points)
+================================================================================
+
+[9.1] POST /librarian/achievements                                 [Librarian]
+Auth: Bearer <libToken>
+Input:
+  {
+    "name": "First Visit",
+    "criteriaJSON": { "metric": "visitStreak", "threshold": 1 },
+    "pointsReward": 20
+  }
+  criteriaJSON.metric must be "knowledgeScore" or "visitStreak".
+Expect: 201. Immediately re-checks every student against this new
+        achievement and auto-unlocks it for anyone who already qualifies.
+-> Save achievement.achievementID as <achievementID>
+
+[9.2] GET /librarian/achievements                                  [Librarian]
+Auth: Bearer <libToken>
+Expect: 200, each row includes unlockedCount and redeemedCount
+
+[9.3] PATCH /librarian/achievements/<achievementID>                [Librarian]
+Auth: Bearer <libToken>
+Input (any subset): { "pointsReward": 30 }
+Expect: 200. Changing criteriaJSON re-runs the retroactive unlock check.
+
+[9.4] DELETE /librarian/achievements/<achievementID>                [Librarian]
+Auth: Bearer <libToken>
+Expect: 200
+
+[9.5] GET /student/achievements                                      [Student]
+Auth: Bearer <stuToken>
+Expect: 200, every achievement with this student's status: Locked,
+        Unlocked, or Redeemed
+NOTE: to actually see "Unlocked" here, first trigger the underlying metric
+      - e.g. do an attendance scan (8.1) to bump visitStreak to 1, which
+      auto-unlocks a "visitStreak >= 1" achievement.
+
+[9.6] POST /student/achievements/<achievementID>/redeem               [Student]
+Auth: Bearer <stuToken>
+Input: none
+Expect: 200 only if unlocked and not yet redeemed. Adds pointsReward to
+        the student's knowledgeScore (points balance).
+        422 "haven't unlocked" or "already redeemed" otherwise.
+
+================================================================================
+10. POINT SHOP - MARKET ITEMS, CART, REDEMPTIONS
+================================================================================
+
+[10.1] POST /librarian/market-items                                [Librarian]
+Auth: Bearer <libToken>
+Input: { "name": "Pencil", "type": "supply", "pointCost": 5, "stock": 10 }
+Expect: 201
+-> Save item.itemID as <itemID>
+
+[10.2] GET /librarian/market-items                                 [Librarian]
+Auth: Bearer <libToken>
+
+[10.3] PATCH /librarian/market-items/<itemID>                      [Librarian]
+Auth: Bearer <libToken>
+Input (any subset): { "stock": 0 }   (a clean way to "retire" an item)
+
+[10.4] DELETE /librarian/market-items/<itemID>                     [Librarian]
+Auth: Bearer <libToken>
+Expect: 200, or 422 if it has any redemption history (retire via stock=0
+        instead)
+
+[10.5] GET /student/market-items                                     [Student]
+Auth: Bearer <stuToken>
+Expect: 200, { points: <balance>, items: [...] } - each item flagged
+        inStock and affordable against the student's current balance
+
+[10.6] POST /student/market-items/<itemID>/redeem                     [Student]
+Auth: Bearer <stuToken>
+Input: none
+Expect: 201, immediate single-item redemption (no cart). 422 if out of
+        stock or not enough points.
+
+--- Cart-based checkout (for redeeming multiple items at once) ---
+
+[10.7] POST /student/market-cart                                     [Student]
+Auth: Bearer <stuToken>
+Input: { "itemID": <itemID>, "quantity": 2 }   (quantity optional, default 1;
+         adding the same item again just increases its quantity)
+Expect: 201
+
+[10.8] GET /student/market-cart                                      [Student]
+Auth: Bearer <stuToken>
+Expect: 200, { points, cart: [...], total }
+
+[10.9] PATCH /student/market-cart/<cartItemID>                       [Student]
+Auth: Bearer <stuToken>
+Input: { "quantity": 5 }
+
+[10.10] DELETE /student/market-cart/<cartItemID>                     [Student]
+Auth: Bearer <stuToken>
+
+[10.11] POST /student/market-cart/checkout                           [Student]
+Auth: Bearer <stuToken>
+Input: none
+Expect: 201, redeems every cart line in one transaction (all-or-nothing -
+        if any line can't be afforded/is out of stock, nothing is charged),
+        clears the cart, one redemption row per line (with its quantity
+        and total pointsSpent).
+-> Save redemptions[0].redemptionID as <redemptionID>
+
+--- Librarian fulfillment ---
+
+[10.12] GET /librarian/point-redemptions                           [Librarian]
+Auth: Bearer <libToken>
+Optional query: ?fulfillmentStatus=Pending
+
+[10.13] POST /librarian/point-redemptions/<redemptionID>/fulfill   [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 (only from Pending)
+
+[10.14] POST /librarian/point-redemptions/<redemptionID>/cancel    [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 (only from Pending). Refunds the points AND restocks the
+        item's quantity - use a different Pending redemption than the one
+        you fulfilled in 10.13, since one redemption can't be both.
+
+================================================================================
+11. BOOK SUGGESTIONS
+================================================================================
+
+[11.1] POST /student/book-suggestions                                [Student]
+Auth: Bearer <stuToken>
+Input:
+  {
+    "title": "Clean Architecture",
+    "author": "Robert C. Martin",
+    "reason": "Would help with our capstone design"
+  }
+  (author and reason are optional)
+Expect: 201, status "Pending", progressStep "Submitted"
+-> Save suggestion.suggestionID as <suggestionID>
+
+[11.2] GET /student/book-suggestions                                 [Student]
+Auth: Bearer <stuToken>
+Expect: 200, only this student's own suggestions
+
+[11.3] GET /librarian/book-suggestions                             [Librarian]
+Auth: Bearer <libToken>
+Optional query: ?status=Pending
+
+[11.4] POST /librarian/book-suggestions/<suggestionID>/approve     [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 (only from Pending). Does NOT auto-add the book to the catalog -
+        cataloging is still a separate manual step (section 3).
+
+[11.5] POST /librarian/book-suggestions/<suggestionID>/reject      [Librarian]
+Auth: Bearer <libToken>
+Input: none
+Expect: 200 (only from Pending)
+
+================================================================================
+NOTES ON RE-RUNNING THIS GUIDE
+================================================================================
+- Most POST actions are one-shot per record (a Waiting reservation can only
+  be accepted once, a Pending report only verified once, etc). To repeat a
+  full pass, reset the database first:
+      php artisan migrate:fresh --seed
+  This restores just the seeded librarian (librarian@stidavao.edu.ph /
+  password123) with a clean slate.
+- IDs (<studentID>, <bookID>, <loanID>, etc.) are different every time you
+  reset the database - always re-capture them from each response rather
+  than hardcoding numbers from a previous run.
+- A ready-to-run version of this exact flow, with automated pass/fail
+  assertions, is in this same folder:
+      hoppscotch/entrypoint-collection.json
+      hoppscotch/entrypoint-local-environment.json
+  Import both into Hoppscotch, or run headlessly with:
+      npx @hoppscotch/cli test hoppscotch/entrypoint-collection.json \
+        -e hoppscotch/entrypoint-local-environment.json
+================================================================================

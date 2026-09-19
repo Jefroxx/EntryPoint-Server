@@ -11,7 +11,7 @@ class Author extends Model
 
     protected $primaryKey = 'authorID';
 
-    protected $fillable = ['uuid', 'name'];
+    protected $fillable = ['uuid', 'name', 'cutterNumber'];
 
     public function books()
     {

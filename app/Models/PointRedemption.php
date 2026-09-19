@@ -12,7 +12,7 @@ class PointRedemption extends Model
     protected $primaryKey = 'redemptionID';
 
     protected $fillable = [
-        'uuid', 'studentID', 'itemID', 'pointsSpent', 'fulfillmentStatus', 'redeemedAt',
+        'uuid', 'studentID', 'itemID', 'quantity', 'pointsSpent', 'fulfillmentStatus', 'redeemedAt',
     ];
 
     protected $casts = ['redeemedAt' => 'datetime'];
