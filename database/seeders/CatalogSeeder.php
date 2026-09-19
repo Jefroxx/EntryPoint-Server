@@ -25,7 +25,7 @@ class CatalogSeeder extends Seeder
                 $authorCount = random_int(1, 2);
                 $picked = $authors->random($authorCount);
 
-                foreach (($authorCount === 1 ? [$picked] : $picked->all()) as $index => $author) {
+                foreach ($picked as $index => $author) {
                     $book->authors()->attach($author->authorID, [
                         'uuid' => Str::uuid(),
                         'role' => $index === 0 ? null : 'Co-Author',
