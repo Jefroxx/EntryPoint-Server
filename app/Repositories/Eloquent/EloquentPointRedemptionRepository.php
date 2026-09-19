@@ -20,4 +20,12 @@ class EloquentPointRedemptionRepository extends BaseRepository implements PointR
             ->orderByDesc('redeemedAt')
             ->get();
     }
+
+    public function forStudentWithItem(int $studentID): Collection
+    {
+        return PointRedemption::where('studentID', $studentID)
+            ->with('item')
+            ->orderByDesc('redeemedAt')
+            ->get();
+    }
 }

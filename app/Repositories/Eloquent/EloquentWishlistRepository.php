@@ -55,6 +55,11 @@ class EloquentWishlistRepository extends BaseRepository implements WishlistRepos
         return $query->count();
     }
 
+    public function wishlistCountForStudent(int $studentID): int
+    {
+        return Wishlist::where('studentID', $studentID)->count();
+    }
+
     public function deleteCartForStudent(int $studentID): void
     {
         Wishlist::where('studentID', $studentID)->where('inCart', true)->delete();

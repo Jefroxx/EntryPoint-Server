@@ -73,4 +73,23 @@ class EloquentReservationRepository extends BaseRepository implements Reservatio
             ->where('reservedAt', '<', $reservedAt)
             ->count() + 1;
     }
+
+    public function readyCountForStudent(int $studentID): int
+    {
+        return Reservation::where('studentID', $studentID)->where('status', 'Accepted')->count();
+    }
+
+    public function waitingCountsByBook(array $bookIDs): array
+    {
+        if (! $bookIDs) {
+            return [];
+        }
+
+        return Reservation::whereIn('bookID', $bookIDs)
+            ->where('status', 'Waiting')
+            ->selectRaw('bookID, COUNT(*) as total')
+            ->groupBy('bookID')
+            ->pluck('total', 'bookID')
+            ->all();
+    }
 }

@@ -383,7 +383,7 @@ class CirculationService
         return $penalty;
     }
 
-    private function elapsedUnits(\DateTimeInterface $due, \DateTimeInterface $end, string $unit): int
+    public function elapsedUnits(\DateTimeInterface $due, \DateTimeInterface $end, string $unit): int
     {
         $due = Carbon::parse($due);
         $end = Carbon::parse($end);

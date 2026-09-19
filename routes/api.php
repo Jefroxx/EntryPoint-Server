@@ -25,6 +25,7 @@ use App\Http\Controllers\Student\CartController;
 use App\Http\Controllers\Student\LoanController as StudentLoanController;
 use App\Http\Controllers\Student\MarketCartController;
 use App\Http\Controllers\Student\MarketItemController as StudentMarketItemController;
+use App\Http\Controllers\Student\PortalController;
 use App\Http\Controllers\Student\ReservationController as StudentReservationController;
 use App\Http\Controllers\Student\ResourceController as StudentResourceController;
 use App\Http\Controllers\Student\WishlistController;
@@ -52,6 +53,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Student-only actions
     Route::middleware('student')->prefix('student')->group(function () {
+        Route::get('/profile', [PortalController::class, 'profile']);
+        Route::get('/loans', [PortalController::class, 'loans']);
+        Route::get('/penalties', [PortalController::class, 'penalties']);
+        Route::get('/attendance', [PortalController::class, 'attendance']);
+        Route::get('/redemptions', [PortalController::class, 'redemptions']);
+
+        // `subjects` must stay above `{book}` or it would be read as a book id.
+        Route::get('/catalog', [PortalController::class, 'catalog']);
+        Route::get('/catalog/subjects', [PortalController::class, 'subjects']);
+        Route::get('/catalog/{book}', [PortalController::class, 'catalogShow']);
+
         Route::get('/wishlist', [WishlistController::class, 'index']);
         Route::post('/wishlist', [WishlistController::class, 'store']);
         Route::delete('/wishlist/{wishlist}', [WishlistController::class, 'destroy']);
