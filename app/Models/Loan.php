@@ -14,12 +14,15 @@ class Loan extends Model
     protected $fillable = [
         'uuid', 'studentID', 'copyID', 'loanType',
         'checkoutDate', 'dueDate', 'returnDate', 'status',
+        'dueSoonNotifiedAt', 'overdueNotifiedAt',
     ];
 
     protected $casts = [
-        'checkoutDate' => 'datetime',
-        'dueDate'      => 'datetime',
-        'returnDate'   => 'datetime',
+        'checkoutDate'      => 'datetime',
+        'dueDate'           => 'datetime',
+        'returnDate'        => 'datetime',
+        'dueSoonNotifiedAt' => 'datetime',
+        'overdueNotifiedAt' => 'datetime',
     ];
 
     public function student()
@@ -40,10 +43,5 @@ class Loan extends Model
     public function penalties()
     {
         return $this->hasMany(Penalty::class, 'loanID', 'loanID');
-    }
-
-    public function isOverdue(): bool
-    {
-        return $this->status === 'Active' && $this->dueDate->isPast();
     }
 }

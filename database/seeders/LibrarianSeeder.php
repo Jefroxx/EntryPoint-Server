@@ -12,23 +12,30 @@ class LibrarianSeeder extends Seeder
 {
     public function run(): void
     {
-        $user = User::create([
-            'uuid'           => Str::uuid(),
-            'firstName'      => 'Juan',
-            'middleInitial'  => 'D',
-            'lastName'       => 'Dela Cruz',
-            'email'          => 'librarian@stidavao.edu.ph',
-            'password'       => Hash::make('password123'),
-            'phoneNumber'    => '09123456789',
-            'birthDate'      => '1990-01-01',
-            'address'        => 'Davao City',
-            'userType'       => 'librarian',
-        ]);
+        $this->createLibrarian('Juan', 'D', 'Dela Cruz', 'librarian@stidavao.edu.ph', '09123456789', 'Davao City');
+        $this->createLibrarian('Maria', 'S', 'Santos', 'maria.santos@stidavao.edu.ph', '09187654321', 'Davao City');
+    }
 
-        Librarian::create([
-            'librarianID' => $user->userID,
-            'uuid'        => Str::uuid(),
-            'role'        => 'librarian',
-        ]);
+    private function createLibrarian(string $first, string $middle, string $last, string $email, string $phone, string $address): void
+    {
+        $user = User::firstOrCreate(
+            ['email' => $email],
+            [
+                'uuid'          => Str::uuid(),
+                'firstName'     => $first,
+                'middleInitial' => $middle,
+                'lastName'      => $last,
+                'password'      => Hash::make('password123'),
+                'phoneNumber'   => $phone,
+                'birthDate'     => '1990-01-01',
+                'address'       => $address,
+                'userType'      => 'librarian',
+            ]
+        );
+
+        Librarian::firstOrCreate(
+            ['librarianID' => $user->userID],
+            ['uuid' => Str::uuid(), 'role' => 'librarian']
+        );
     }
 }

@@ -1,0 +1,89 @@
+{
+  "name": "EntryPoint Local",
+  "variables": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000/api"
+    },
+    {
+      "key": "libToken",
+      "value": ""
+    },
+    {
+      "key": "stuToken",
+      "value": ""
+    },
+    {
+      "key": "stamp",
+      "value": ""
+    },
+    {
+      "key": "studentID",
+      "value": ""
+    },
+    {
+      "key": "studentEmail",
+      "value": ""
+    },
+    {
+      "key": "barcode",
+      "value": ""
+    },
+    {
+      "key": "bookID",
+      "value": ""
+    },
+    {
+      "key": "copyID",
+      "value": ""
+    },
+    {
+      "key": "copyID_B",
+      "value": ""
+    },
+    {
+      "key": "reservationID",
+      "value": ""
+    },
+    {
+      "key": "loanID",
+      "value": ""
+    },
+    {
+      "key": "loanID_B",
+      "value": ""
+    },
+    {
+      "key": "reportID",
+      "value": ""
+    },
+    {
+      "key": "resID",
+      "value": ""
+    },
+    {
+      "key": "usageID",
+      "value": ""
+    },
+    {
+      "key": "achievementID",
+      "value": ""
+    },
+    {
+      "key": "attendanceLogID",
+      "value": ""
+    },
+    {
+      "key": "itemID",
+      "value": ""
+    },
+    {
+      "key": "redemptionID",
+      "value": ""
+    },
+    {
+      "key": "suggestionID",
+      "value": ""
+    }
+  ]
+}

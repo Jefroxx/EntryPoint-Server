@@ -17,9 +17,4 @@ class MarketItem extends Model
     {
         return $this->hasMany(PointRedemption::class, 'itemID', 'itemID');
     }
-
-    public function inStock(): bool
-    {
-        return $this->stock > 0;
-    }
 }

@@ -14,22 +14,27 @@ class Book extends Model
 
     protected $fillable = [
         'uuid',
-        'categoryID',
+        'subjectID',
+        'areasOfLibrary',
         'title',
-        'callNumber',
+        'classNumber',
+        'isbn',
+        'publicationYear',
+        'volume',
+        'edition',
+        'pages',
+        'publisher',
+        'sourceOfFund',
+        'cost',
+        'copyNumber',
+        'remarks',
         'coverImageURL',
         'shelfLocation',
     ];
 
-    public function category()
+    public function subject()
     {
-        return $this->belongsTo(BookCategory::class, 'categoryID', 'categoryID');
-    }
-
-    public function authors()
-    {
-        return $this->belongsToMany(Author::class, 'book_author', 'bookID', 'authorID')
-            ->withPivot('role');
+        return $this->belongsTo(BookSubject::class, 'subjectID', 'subjectID');
     }
 
     public function copies()
@@ -37,18 +42,9 @@ class Book extends Model
         return $this->hasMany(BookCopy::class, 'bookID', 'bookID');
     }
 
-    public function totalCopiesCount(): int
+    public function authors()
     {
-        return $this->copies()->where('status', '!=', 'retired')->count();
-    }
-
-    public function availableCopiesCount(): int
-    {
-        return $this->copies()->where('status', 'available')->count();
-    }
-
-    public function isAvailable(): bool
-    {
-        return $this->availableCopiesCount() > 0;
+        return $this->belongsToMany(Author::class, 'book_author', 'bookID', 'authorID')
+            ->withPivot('role');
     }
 }

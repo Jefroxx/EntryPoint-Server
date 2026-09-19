@@ -3,75 +3,33 @@
 namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreCartRequest;
 use App\Models\Wishlist;
+use App\Services\WishlistService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class CartController extends Controller
 {
-    private const MAX_CART_ITEMS = 3;
+    public function __construct(private WishlistService $wishlistService)
+    {
+    }
 
     public function index(Request $request)
     {
         $student = $request->user()->student;
 
-        $cart = Wishlist::where('studentID', $student->studentID)
-            ->where('inCart', true)
-            ->with('book.category', 'book.authors')
-            ->get();
-
-        return response()->json(['cart' => $cart]);
+        return response()->json(['cart' => $this->wishlistService->cartIndex($student->studentID)]);
     }
 
-    public function store(Request $request)
+    public function store(StoreCartRequest $request)
     {
-        $validated = $request->validate([
-            'bookID' => ['required', 'integer', 'exists:books,bookID'],
-        ]);
-
         $student = $request->user()->student;
 
-        $item = DB::transaction(function () use ($validated, $student) {
-            $currentCartCount = Wishlist::where('studentID', $student->studentID)
-                ->where('inCart', true)
-                ->lockForUpdate()
-                ->count();
-
-            $existing = Wishlist::where('studentID', $student->studentID)
-                ->where('bookID', $validated['bookID'])
-                ->first();
-
-            if ($existing && $existing->inCart) {
-                throw ValidationException::withMessages([
-                    'bookID' => ['This book is already in your cart.'],
-                ]);
-            }
-
-            if (! $existing && $currentCartCount >= self::MAX_CART_ITEMS) {
-                throw ValidationException::withMessages([
-                    'bookID' => ['Your cart is full (max ' . self::MAX_CART_ITEMS . ' books).'],
-                ]);
-            }
-
-            if ($existing) {
-                $existing->update(['inCart' => true]);
-                return $existing;
-            }
-
-            return Wishlist::create([
-                'uuid'      => Str::uuid(),
-                'studentID' => $student->studentID,
-                'bookID'    => $validated['bookID'],
-                'inCart'    => true,
-                'addedAt'   => now(),
-            ]);
-        });
+        $item = $this->wishlistService->addToCart($student->studentID, $request->validated()['bookID']);
 
         return response()->json([
             'message' => 'Added to cart.',
-            'item'    => $item->load('book'),
+            'item'    => $item,
         ], 201);
     }
 
@@ -79,11 +37,7 @@ class CartController extends Controller
     {
         $student = $request->user()->student;
 
-        if ($wishlist->studentID !== $student->studentID) {
-            return response()->json(['message' => 'This item does not belong to you.'], 403);
-        }
-
-        $wishlist->update(['inCart' => false]);
+        $this->wishlistService->removeFromCart($wishlist, $student->studentID);
 
         return response()->json(['message' => 'Removed from cart.']);
     }

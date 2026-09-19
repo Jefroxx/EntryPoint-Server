@@ -1,0 +1,796 @@
+{
+  "v": 2,
+  "name": "EntryPoint API - Full Regression",
+  "folders": [],
+  "requests": [
+    {
+      "v": "3",
+      "name": "01 - Librarian Login",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/login",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "none",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"email\":\"librarian@stidavao.edu.ph\",\"password\":\"password123\"}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Login succeeds (200)\", () => pw.expect(pw.response.status).toBe(200));\npw.env.set(\"libToken\", pw.response.body.access_token);\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "02 - Register Student",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/register",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "none",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"firstName\": \"Hoppscotch\",\n  \"lastName\": \"Tester\",\n  \"email\": \"hopp_<<stamp>>@davao.sti.edu.ph\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"studentIDNumber\": \"HOPP-<<stamp>>\"\n}"
+      },
+      "preRequestScript": "pw.env.set(\"stamp\", Date.now().toString());",
+      "testScript": "\npw.test(\"Registration submitted (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"studentID\", String(pw.response.body.student.studentID));\npw.env.set(\"studentEmail\", pw.response.body.student.user.email);\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "03 - Librarian Approves Student",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/students/<<studentID>>/approve",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Approval succeeds (200)\", () => pw.expect(pw.response.status).toBe(200));\npw.test(\"Barcode was generated\", () => pw.expect(pw.response.body.student.barcodeValue).not.toBe(null));\npw.env.set(\"barcode\", pw.response.body.student.barcodeValue);\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "04 - Student Login",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/login",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "none",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"email\":\"<<studentEmail>>\",\"password\":\"password123\"}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Login succeeds (200)\", () => pw.expect(pw.response.status).toBe(200));\npw.env.set(\"stuToken\", pw.response.body.access_token);\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "05 - GET /user as student",
+      "method": "GET",
+      "endpoint": "<<baseUrl>>/user",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Returns 200\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "06 - Librarian Creates Book A (circulation)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/books",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"title\": \"Test Driven Laravel\",\n  \"classNumber\": \"QA76.T3\",\n  \"quantity\": 1,\n  \"areasOfLibrary\": \"circulation\",\n  \"subjectName\": \"Software Engineering\",\n  \"authors\": [{\"name\": \"Ada Lovelace\"}]\n}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Book created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"bookID\", String(pw.response.body.book.bookID));\npw.env.set(\"copyID\", String(pw.response.body.book.copies[0].copyID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "07 - Librarian Creates Book B (for self-return test)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/books",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"title\": \"Self Return Patterns\",\n  \"classNumber\": \"QA76.S4\",\n  \"quantity\": 1,\n  \"areasOfLibrary\": \"circulation\",\n  \"subjectName\": \"Software Engineering\",\n  \"authors\": [{\"name\": \"Grace Hopper\"}]\n}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Book created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"copyID_B\", String(pw.response.body.book.copies[0].copyID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "08 - Student Adds Book A to Wishlist",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/wishlist",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"bookID\": <<bookID>>}"
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Added (201)\", () => pw.expect(pw.response.status).toBe(201));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "09 - Student Adds Book A to Cart",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/cart",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"bookID\": <<bookID>>}"
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Added to cart (201)\", () => pw.expect(pw.response.status).toBe(201));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "10 - Student Checks Out Cart -> Reservation",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/reservations",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Reservation created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.test(\"Reservation status is Waiting\", () => pw.expect(pw.response.body.reservations[0].status).toBe(\"Waiting\"));\npw.env.set(\"reservationID\", String(pw.response.body.reservations[0].reservationID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "11 - Student Views Reservations (queuePosition)",
+      "method": "GET",
+      "endpoint": "<<baseUrl>>/student/reservations",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Returns 200\", () => pw.expect(pw.response.status).toBe(200));\npw.test(\"First in queue (position 1)\", () => pw.expect(pw.response.body.reservations[0].queuePosition).toBe(1));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "12 - Librarian Accepts Reservation",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/reservations/<<reservationID>>/accept",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Accepted (200)\", () => pw.expect(pw.response.status).toBe(200));\npw.test(\"Status is Accepted\", () => pw.expect(pw.response.body.reservation.status).toBe(\"Accepted\"));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "13 - Librarian Creates Loan from Reservation (Fulfilled enum path)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/loans",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"studentID\": <<studentID>>, \"copyID\": <<copyID>>, \"reservationID\": <<reservationID>>}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Loan created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"loanID\", String(pw.response.body.loan.loanID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "14 - Librarian Returns Loan Directly",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/loans/<<loanID>>/return",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Returned (200)\", () => pw.expect(pw.response.status).toBe(200));\npw.test(\"Copy available again\", () => pw.expect(pw.response.body.loan.copy.status).toBe(\"available\"));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "15 - Librarian Creates Loan for Book B",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/loans",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"studentID\": <<studentID>>, \"copyID\": <<copyID_B>>}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Loan created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"loanID_B\", String(pw.response.body.loan.loanID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "16 - Student Self-Returns Book B",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/loans/<<loanID_B>>/self-return",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Report submitted (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"reportID\", String(pw.response.body.report.reportID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "17 - Student Self-Returns Book B AGAIN (expect 422 - already pending)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/loans/<<loanID_B>>/self-return",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Blocked (422)\", () => pw.expect(pw.response.status).toBe(422));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "18 - Librarian Verifies Self-Return Report",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/self-return-reports/<<reportID>>/verify",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Verified (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "19 - Librarian Creates Resource (Computer 1)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/resources",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"resourceType\": \"computer\", \"name\": \"Computer 1\"}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Resource created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"resID\", String(pw.response.body.resource.resID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "20 - Librarian Starts Resource Usage Session",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/resource-usage-logs",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"resID\": <<resID>>, \"studentID\": <<studentID>>}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Session started (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"usageID\", String(pw.response.body.usageLog.usageID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "21 - Librarian Tries Second Session for Same Student (expect 422)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/resource-usage-logs",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"resID\": <<resID>>, \"studentID\": <<studentID>>}"
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Blocked (422)\", () => pw.expect(pw.response.status).toBe(422));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "22 - Librarian Ends Resource Usage Session",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/resource-usage-logs/<<usageID>>/end",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Session ended (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "23 - Librarian Creates Achievement (First Visit)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/achievements",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"name\": \"First Visit\", \"criteriaJSON\": {\"metric\": \"visitStreak\", \"threshold\": 1}, \"pointsReward\": 20}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Achievement created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"achievementID\", String(pw.response.body.achievement.achievementID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "24 - Librarian Scans Barcode -> Check In (auto-unlocks achievement)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/attendance-logs/scan",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"barcodeValue\": \"<<barcode>>\"}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Checked in (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"attendanceLogID\", String(pw.response.body.log.logID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "25 - Student Views Achievements (expect Unlocked)",
+      "method": "GET",
+      "endpoint": "<<baseUrl>>/student/achievements",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Returns 200\", () => pw.expect(pw.response.status).toBe(200));\npw.test(\"First Visit is Unlocked\", () => pw.expect(pw.response.body.achievements[0].status).toBe(\"Unlocked\"));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "26 - Student Redeems Achievement",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/achievements/<<achievementID>>/redeem",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Redeemed (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "27 - Librarian Scans Barcode Again -> Check Out",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/attendance-logs/scan",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"barcodeValue\": \"<<barcode>>\"}"
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Checked out (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "28 - Librarian Creates Market Item (Pencil)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/market-items",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"name\": \"Pencil\", \"type\": \"supply\", \"pointCost\": 5, \"stock\": 10}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Item created (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"itemID\", String(pw.response.body.item.itemID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "29 - Student Views Market Items (affordability check)",
+      "method": "GET",
+      "endpoint": "<<baseUrl>>/student/market-items",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Returns 200\", () => pw.expect(pw.response.status).toBe(200));\npw.test(\"Has 20 points from achievement redemption\", () => pw.expect(pw.response.body.points).toBe(20));\npw.test(\"Pencil is affordable\", () => pw.expect(pw.response.body.items[0].affordable).toBe(true));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "30 - Student Adds 2x Pencil to Market Cart",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/market-cart",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"itemID\": <<itemID>>, \"quantity\": 2}"
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Added (201)\", () => pw.expect(pw.response.status).toBe(201));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "31 - Student Checks Out Market Cart",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/market-cart/checkout",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Checkout succeeds (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.test(\"Spent 10 points for 2x Pencil\", () => pw.expect(pw.response.body.redemptions[0].pointsSpent).toBe(10));\npw.env.set(\"redemptionID\", String(pw.response.body.redemptions[0].redemptionID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "32 - Librarian Fulfills Redemption",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/point-redemptions/<<redemptionID>>/fulfill",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Fulfilled (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "33 - Student Submits Book Suggestion",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/student/book-suggestions",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": "application/json",
+        "body": "{\"title\": \"Clean Architecture\", \"author\": \"Robert C. Martin\", \"reason\": \"Would help with our capstone design\"}"
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Submitted (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"suggestionID\", String(pw.response.body.suggestion.suggestionID));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "34 - Librarian Approves Book Suggestion",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/book-suggestions/<<suggestionID>>/approve",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Approved (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "35 - Librarian Approves Again (expect 422 - not pending)",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/librarian/book-suggestions/<<suggestionID>>/approve",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Blocked (422)\", () => pw.expect(pw.response.status).toBe(422));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "36 - Student Views Notifications",
+      "method": "GET",
+      "endpoint": "<<baseUrl>>/notifications",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "\npw.test(\"Returns 200\", () => pw.expect(pw.response.status).toBe(200));\npw.test(\"Has unread notifications\", () => pw.expect(pw.response.body.unreadCount > 0).toBe(true));\n",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "37 - Student Marks All Notifications Read",
+      "method": "PATCH",
+      "endpoint": "<<baseUrl>>/notifications/read-all",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Marked read (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "38 - Student Logout",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/logout",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<stuToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Logged out (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    },
+    {
+      "v": "3",
+      "name": "39 - Librarian Logout",
+      "method": "POST",
+      "endpoint": "<<baseUrl>>/logout",
+      "params": [],
+      "headers": [],
+      "auth": {
+        "authType": "bearer",
+        "token": "<<libToken>>",
+        "authActive": true
+      },
+      "body": {
+        "contentType": null,
+        "body": null
+      },
+      "preRequestScript": "",
+      "testScript": "pw.test(\"Logged out (200)\", () => pw.expect(pw.response.status).toBe(200));",
+      "requestVariables": []
+    }
+  ],
+  "auth": {
+    "authType": "none",
+    "authActive": true
+  },
+  "headers": [
+    {
+      "key": "Accept",
+      "value": "application/json",
+      "active": true,
+      "description": ""
+    }
+  ]
+}

@@ -9,9 +9,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('authors', function (Blueprint $table) {
-            $table->id('authorID'); // Updated
+            $table->id('authorID');
             $table->uuid('uuid')->unique();
             $table->string('name');
+            $table->string('cutterNumber')->nullable()->unique();
             $table->timestamps();
         });
     }

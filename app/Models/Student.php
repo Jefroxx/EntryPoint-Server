@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 class Student extends Model
 {
@@ -27,15 +26,6 @@ class Student extends Model
         'reviewedByLibrarianID',
         'reviewedAt',
     ];
-
-    public static function generateUniqueBarcode(): string
-    {
-        do {
-            $code = 'STI-' . strtoupper(Str::random(10));
-        } while (self::where('barcodeValue', $code)->exists());
-
-        return $code;
-    }
 
     protected $casts = [
         'reviewedAt' => 'datetime',
@@ -76,16 +66,21 @@ class Student extends Model
         return $this->hasMany(BookSuggestion::class, 'studentID', 'studentID');
     }
 
-    public function badges()
+    public function achievements()
     {
         // Don't forget to update your pivot columns to camelCase here!
-        return $this->belongsToMany(Badge::class, 'student_badge', 'studentID', 'badgeID')
-            ->withPivot(['triggerEvent', 'earnedAt']);
+        return $this->belongsToMany(Achievement::class, 'student_achievement', 'studentID', 'achievementID')
+            ->withPivot(['triggerEvent', 'earnedAt', 'redeemedAt']);
     }
 
     public function pointRedemptions()
     {
         return $this->hasMany(PointRedemption::class, 'studentID', 'studentID');
+    }
+
+    public function marketCartItems()
+    {
+        return $this->hasMany(MarketCartItem::class, 'studentID', 'studentID');
     }
 
     public function resourceUsageLogs()
