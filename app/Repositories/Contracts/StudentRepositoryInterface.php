@@ -24,6 +24,12 @@ interface StudentRepositoryInterface extends RepositoryInterface
 
     public function findByBarcode(string $barcode): ?Student;
 
+    /**
+     * Looks a student up by barcode or by student ID number (the typed fallback at the scan
+     * station). $lock takes a row lock, for use inside a transaction.
+     */
+    public function findForScan(string $code, bool $lock = false): ?Student;
+
     public function notHavingAchievement(int $achievementID): Collection;
 
     public function approvedCount(): int;

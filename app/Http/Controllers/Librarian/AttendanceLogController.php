@@ -30,12 +30,23 @@ class AttendanceLogController extends Controller
 
     public function store(StoreAttendanceScanRequest $request)
     {
-        $log = $this->attendanceService->scan($request->validated()['barcodeValue']);
-        $isCheckIn = $log->wasRecentlyCreated;
+        $result = $this->attendanceService->scan($request->validated()['barcodeValue']);
+
+        $isCheckIn = $result['action'] === 'check_in';
+        $student = $result['student'];
 
         return response()->json([
-            'message' => $isCheckIn ? 'Checked in.' : 'Checked out.',
-            'log'     => $log,
+            'message'         => $isCheckIn ? 'Checked in.' : 'Checked out.',
+            'action'          => $result['action'],
+            'log'             => $result['log'],
+            'student'         => [
+                'name'            => $student->user->fullName,
+                'program'         => $student->academicProgram,
+                'studentIDNumber' => $student->studentIDNumber,
+                'visitStreak'     => $student->visitStreak,
+            ],
+            'durationMinutes' => $result['durationMinutes'],
+            'autoClosed'      => $result['autoClosed'],
         ], $isCheckIn ? 201 : 200);
     }
 }

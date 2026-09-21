@@ -15,6 +15,11 @@ interface AttendanceLogRepositoryInterface extends RepositoryInterface
 
     public function openLogForStudent(int $studentID): ?AttendanceLog;
 
+    public function latestForStudent(int $studentID): ?AttendanceLog;
+
+    /** Visits still open from an earlier day (the student never scanned out). */
+    public function staleOpenLogs(): Collection;
+
     public function recentForStudent(int $studentID, int $limit): Collection;
 
     public function hasVisitedToday(int $studentID): bool;

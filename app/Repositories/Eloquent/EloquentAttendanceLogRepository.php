@@ -76,6 +76,20 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
             ->first();
     }
 
+    public function latestForStudent(int $studentID): ?AttendanceLog
+    {
+        return AttendanceLog::where('studentID', $studentID)
+            ->latest('entryTime')
+            ->first();
+    }
+
+    public function staleOpenLogs(): Collection
+    {
+        return AttendanceLog::whereNull('exitTime')
+            ->where('entryTime', '<', today())
+            ->get();
+    }
+
     public function hasVisitedToday(int $studentID): bool
     {
         return AttendanceLog::where('studentID', $studentID)

@@ -27,6 +27,13 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
         return Student::where('barcodeValue', $barcode)->first();
     }
 
+    public function findForScan(string $code, bool $lock = false): ?Student
+    {
+        $query = Student::where(fn ($where) => $where->where('barcodeValue', $code)->orWhere('studentIDNumber', $code));
+
+        return ($lock ? $query->lockForUpdate() : $query)->first();
+    }
+
     public function notHavingAchievement(int $achievementID): Collection
     {
         return Student::whereDoesntHave(

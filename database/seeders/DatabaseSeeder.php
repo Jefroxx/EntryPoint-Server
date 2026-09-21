@@ -10,18 +10,18 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             LibrarianSeeder::class,
-            StudentSeeder::class,
-            CatalogSeeder::class,
-            PenaltySeeder::class,
-            LoanSeeder::class,
-            ReservationSeeder::class,
-            SelfReturnReportSeeder::class,
-            ResourceSeeder::class,
-            AchievementSeeder::class,
-            AttendanceLogSeeder::class,
-            MarketSeeder::class,
-            BookSuggestionSeeder::class,
-            NotificationSeeder::class,
+            // StudentSeeder::class,
+            // CatalogSeeder::class,
+            // PenaltySeeder::class,
+            // LoanSeeder::class,
+            // ReservationSeeder::class,
+            // SelfReturnReportSeeder::class,
+            // ResourceSeeder::class,
+            // AchievementSeeder::class,
+            // AttendanceLogSeeder::class,
+            // MarketSeeder::class,
+            // BookSuggestionSeeder::class,
+            // NotificationSeeder::class,
         ]);
     }
 }

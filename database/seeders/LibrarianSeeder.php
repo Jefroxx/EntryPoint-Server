@@ -13,7 +13,7 @@ class LibrarianSeeder extends Seeder
     public function run(): void
     {
         $this->createLibrarian('Juan', 'D', 'Dela Cruz', 'librarian@stidavao.edu.ph', '09123456789', 'Davao City');
-        $this->createLibrarian('Maria', 'S', 'Santos', 'maria.santos@stidavao.edu.ph', '09187654321', 'Davao City');
+        // $this->createLibrarian('Maria', 'S', 'Santos', 'maria.santos@stidavao.edu.ph', '09187654321', 'Davao City');
     }
 
     private function createLibrarian(string $first, string $middle, string $last, string $email, string $phone, string $address): void

@@ -14,8 +14,7 @@ class BookSuggestionService
     public function __construct(
         private BookSuggestionRepositoryInterface $suggestions,
         private NotificationService $notifications,
-    ) {
-    }
+    ) {}
 
     public function listForLibrarian(?string $status): Collection
     {

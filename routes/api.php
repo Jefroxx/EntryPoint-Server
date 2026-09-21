@@ -106,7 +106,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/attendance-logs', [AttendanceLogController::class, 'index']);
         Route::get('/attendance-logs/stats', [AttendanceLogController::class, 'stats']);
-        Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store']);
+        Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store'])->middleware('throttle:120,1');
 
         Route::get('/students', [StudentApprovalController::class, 'index']);
         Route::get('/students/stats', [StudentApprovalController::class, 'stats']);
