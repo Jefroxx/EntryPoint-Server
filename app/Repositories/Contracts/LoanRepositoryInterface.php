@@ -25,6 +25,15 @@ interface LoanRepositoryInterface extends RepositoryInterface
     public function activeCount(): int;
 
     /**
+     * A student's own loans (book soft-deleted or not), active ones first.
+     */
+    public function forStudentWithBooks(int $studentID): Collection;
+
+    public function activeCountForStudent(int $studentID): int;
+
+    public function overdueCountForStudent(int $studentID): int;
+
+    /**
      * Counts non-null $dateColumn values between $start and $end, grouped
      * by calendar day, e.g. for a checkout/return activity chart.
      */

@@ -40,6 +40,14 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
             ->paginate($perPage);
     }
 
+    public function recentForStudent(int $studentID, int $limit): Collection
+    {
+        return AttendanceLog::where('studentID', $studentID)
+            ->orderByDesc('entryTime')
+            ->limit($limit)
+            ->get();
+    }
+
     public function currentlyInLibraryCount(): int
     {
         return AttendanceLog::whereNull('exitTime')->count();
@@ -66,6 +74,20 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
             ->whereNull('exitTime')
             ->latest('entryTime')
             ->first();
+    }
+
+    public function latestForStudent(int $studentID): ?AttendanceLog
+    {
+        return AttendanceLog::where('studentID', $studentID)
+            ->latest('entryTime')
+            ->first();
+    }
+
+    public function staleOpenLogs(): Collection
+    {
+        return AttendanceLog::whereNull('exitTime')
+            ->where('entryTime', '<', today())
+            ->get();
     }
 
     public function hasVisitedToday(int $studentID): bool

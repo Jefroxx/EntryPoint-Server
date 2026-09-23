@@ -20,4 +20,14 @@ interface ReservationRepositoryInterface extends RepositoryInterface
     public function earliestWaitingForBook(int $bookID): ?Reservation;
 
     public function queuePositionAheadOf(int $bookID, \DateTimeInterface $reservedAt): int;
+
+    public function readyCountForStudent(int $studentID): int;
+
+    /**
+     * Number of Waiting reservations per book, keyed by bookID.
+     *
+     * @param  array<int,int>  $bookIDs
+     * @return array<int,int>
+     */
+    public function waitingCountsByBook(array $bookIDs): array;
 }

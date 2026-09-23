@@ -7,6 +7,7 @@ use App\Models\PenaltyRule;
 use App\Models\PenaltyType;
 use App\Repositories\Contracts\PenaltyRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
 class EloquentPenaltyRepository extends BaseRepository implements PenaltyRepositoryInterface
@@ -29,6 +30,25 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
     public function unpaidCount(): int
     {
         return Penalty::where('paymentStatus', 'Unpaid')->count();
+    }
+
+    public function forStudentWithBooks(int $studentID): Collection
+    {
+        return Penalty::whereHas('loan', fn ($query) => $query->where('studentID', $studentID))
+            ->with([
+                'loan.copy.book' => fn ($query) => $query->withTrashed(),
+                'loan.copy.book.authors',
+                'loan.copy.book.subject',
+            ])
+            ->orderByDesc('computedAt')
+            ->get();
+    }
+
+    public function unpaidTotalForStudent(int $studentID): float
+    {
+        return (float) Penalty::whereHas('loan', fn ($query) => $query->where('studentID', $studentID))
+            ->where('paymentStatus', 'Unpaid')
+            ->sum('amount');
     }
 
     public function paginate(?string $search, ?string $status, int $perPage): LengthAwarePaginator

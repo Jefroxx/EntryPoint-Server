@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 
 class ReservationService
 {
-    private const MAX_ACTIVE_RESERVATIONS = 3;
+    public const MAX_ACTIVE_RESERVATIONS = 3;
 
     public function __construct(
         private ReservationRepositoryInterface $reservations,

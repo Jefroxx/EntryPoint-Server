@@ -55,9 +55,16 @@ class EloquentWishlistRepository extends BaseRepository implements WishlistRepos
         return $query->count();
     }
 
+    public function wishlistCountForStudent(int $studentID): int
+    {
+        return Wishlist::where('studentID', $studentID)->where('inWishlist', true)->count();
+    }
+
+    /** Empties the cart after checkout. Hearted books stay on the wishlist; cart-only rows go. */
     public function deleteCartForStudent(int $studentID): void
     {
-        Wishlist::where('studentID', $studentID)->where('inCart', true)->delete();
+        Wishlist::where('studentID', $studentID)->where('inCart', true)->where('inWishlist', false)->delete();
+        Wishlist::where('studentID', $studentID)->where('inCart', true)->update(['inCart' => false]);
     }
 
     public function existsForStudentAndBook(int $studentID, int $bookID): bool
