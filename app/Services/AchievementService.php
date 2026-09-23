@@ -71,6 +71,7 @@ class AchievementService
                 'achievementID' => $achievement->achievementID,
                 'name'          => $achievement->name,
                 'pointsReward'  => $achievement->pointsReward,
+                'criteria'      => $achievement->criteriaJSON,
                 'status'        => match (true) {
                     $pivot && $pivot->redeemedAt => 'Redeemed',
                     (bool) $pivot                => 'Unlocked',

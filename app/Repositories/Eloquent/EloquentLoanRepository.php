@@ -43,6 +43,33 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
         return Loan::where('status', 'Active')->count();
     }
 
+    public function forStudentWithBooks(int $studentID): Collection
+    {
+        return Loan::where('studentID', $studentID)
+            ->with([
+                'copy.book' => fn ($query) => $query->withTrashed(),
+                'copy.book.authors',
+                'copy.book.subject',
+                'selfReturnReport',
+            ])
+            ->orderByRaw("CASE WHEN status = 'Active' THEN 0 ELSE 1 END")
+            ->orderBy('dueDate')
+            ->get();
+    }
+
+    public function activeCountForStudent(int $studentID): int
+    {
+        return Loan::where('studentID', $studentID)->where('status', 'Active')->count();
+    }
+
+    public function overdueCountForStudent(int $studentID): int
+    {
+        return Loan::where('studentID', $studentID)
+            ->where('status', 'Active')
+            ->where('dueDate', '<', now())
+            ->count();
+    }
+
     public function countByDayBetween(string $dateColumn, \DateTimeInterface $start, \DateTimeInterface $end): BaseCollection
     {
         // Only ever called internally with a literal column name (never

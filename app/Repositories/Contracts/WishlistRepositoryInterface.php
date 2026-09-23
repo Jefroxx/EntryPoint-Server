@@ -17,6 +17,8 @@ interface WishlistRepositoryInterface extends RepositoryInterface
 
     public function cartCountForStudent(int $studentID, bool $lock = false): int;
 
+    public function wishlistCountForStudent(int $studentID): int;
+
     public function deleteCartForStudent(int $studentID): void;
 
     public function existsForStudentAndBook(int $studentID, int $bookID): bool;

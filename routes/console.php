@@ -15,3 +15,7 @@ Schedule::command('penalties:accrue-overdue')->hourly();
 // Hourly to match — Reserved loans are due overnight (~1 day), so a
 // daily run could miss or badly delay their 24-hour due-soon window.
 Schedule::command('loans:notify-due-soon')->hourly();
+
+// Nightly: close visits a student never scanned out of, at closing time, so the next
+// day's first scan is a check-in and yesterday's stay stays believable.
+Schedule::command('attendance:close-stale')->dailyAt('00:10');

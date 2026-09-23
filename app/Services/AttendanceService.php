@@ -45,24 +45,59 @@ class AttendanceService
     }
 
     /**
-     * One barcode scan toggles attendance: opens a new entry if the student
-     * has no open session, or closes their open session if they do.
+     * One scan toggles attendance: opens a visit if the student has none open, or closes the open
+     * one. A second scan inside the double-scan window is refused, and a visit left open from an
+     * earlier day is closed first (see closeStale()) so today's scan becomes a fresh check-in
+     * rather than a bogus check-out.
+     *
+     * @return array{action: string, log: AttendanceLog, student: Student, durationMinutes: ?int, autoClosed: array}
      */
-    public function scan(string $barcodeValue): AttendanceLog
+    public function scan(string $code): array
     {
-        $student = $this->students->findByBarcode($barcodeValue);
+        $result = DB::transaction(function () use ($code) {
+            // Row lock: two scanners reading the same student at once can't open two visits.
+            $student = $this->students->findForScan($code, lock: true);
 
-        if (! $student || ! $student->isApproved()) {
-            throw ValidationException::withMessages([
-                'barcodeValue' => ['Barcode not recognized or the account is not yet approved.'],
-            ]);
-        }
+            if (! $student) {
+                throw ValidationException::withMessages([
+                    'barcodeValue' => ['Barcode not recognized.'],
+                ]);
+            }
 
-        $log = DB::transaction(function () use ($student) {
-            $openLog = $this->attendanceLogs->openLogForStudent($student->studentID);
+            if (! $student->isApproved()) {
+                throw ValidationException::withMessages([
+                    'barcodeValue' => ['This account is not approved yet.'],
+                ]);
+            }
 
-            if ($openLog) {
-                return $this->attendanceLogs->update($openLog, ['exitTime' => now()]);
+            $latest = $this->attendanceLogs->latestForStudent($student->studentID);
+            $lastScanAt = $latest ? ($latest->exitTime ?? $latest->entryTime) : null;
+            $window = (int) config('attendance.double_scan_seconds');
+
+            if ($lastScanAt && ($secondsAgo = (int) $lastScanAt->diffInSeconds(now())) < $window) {
+                throw ValidationException::withMessages([
+                    'barcodeValue' => ['Just scanned. Try again in ' . ($window - $secondsAgo) . 's.'],
+                ]);
+            }
+
+            $open = $this->attendanceLogs->openLogForStudent($student->studentID);
+            $autoClosed = [];
+
+            if ($open && ! $open->entryTime->isToday()) {
+                $autoClosed[] = $this->closeStale($open);
+                $open = null;
+            }
+
+            if ($open) {
+                $log = $this->attendanceLogs->update($open, ['exitTime' => now()]);
+
+                return [
+                    'action'          => 'check_out',
+                    'log'             => $log,
+                    'student'         => $student,
+                    'durationMinutes' => (int) $log->entryTime->diffInMinutes($log->exitTime),
+                    'autoClosed'      => $autoClosed,
+                ];
             }
 
             $alreadyVisitedToday = $this->attendanceLogs->hasVisitedToday($student->studentID);
@@ -77,20 +112,58 @@ class AttendanceService
                 $this->updateVisitStreak($student);
             }
 
-            return $log;
+            return [
+                'action'          => 'check_in',
+                'log'             => $log,
+                'student'         => $student,
+                'durationMinutes' => null,
+                'autoClosed'      => $autoClosed,
+            ];
         });
 
-        $isCheckIn = $log->wasRecentlyCreated;
+        $isCheckIn = $result['action'] === 'check_in';
+        $log = $result['log'];
 
         $this->notifications->send(
-            $student->studentID,
+            $result['student']->studentID,
             $isCheckIn
                 ? "You've checked in to the library at {$log->entryTime->format('g:i A')}."
                 : "You've checked out of the library at {$log->exitTime->format('g:i A')}.",
             $isCheckIn ? 'attendance_check_in' : 'attendance_check_out'
         );
 
-        return $log;
+        return $result;
+    }
+
+    /**
+     * Closes a visit that was never scanned out, at the configured closing time (or N hours after
+     * entry, see config/attendance.php) instead of "now", so the recorded stay stays believable.
+     *
+     * @return array{logID: int, exitTime: string}
+     */
+    public function closeStale(AttendanceLog $log): array
+    {
+        $exit = config('attendance.auto_close') === 'hours'
+            ? $log->entryTime->copy()->addHours((int) config('attendance.auto_close_hours'))
+            : $log->entryTime->copy()->setTimeFromTimeString((string) config('attendance.closing_time'));
+
+        if ($exit->lessThan($log->entryTime)) {
+            $exit = $log->entryTime->copy(); // came in after closing time
+        }
+
+        $this->attendanceLogs->update($log, ['exitTime' => $exit]);
+
+        return ['logID' => $log->logID, 'exitTime' => $exit->toIso8601String()];
+    }
+
+    /** Nightly clean-up (attendance:close-stale): closes every visit still open from an earlier day. */
+    public function closeStaleVisits(): int
+    {
+        $logs = $this->attendanceLogs->staleOpenLogs();
+
+        $logs->each(fn (AttendanceLog $log) => $this->closeStale($log));
+
+        return $logs->count();
     }
 
     /**

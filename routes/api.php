@@ -19,12 +19,14 @@ use App\Http\Controllers\Librarian\SelfReturnReportController;
 use App\Http\Controllers\Librarian\SettingsController;
 use App\Http\Controllers\Librarian\StudentApprovalController;
 use App\Http\Controllers\Librarian\SubjectController;
+use App\Http\Controllers\Student\AccountController as StudentAccountController;
 use App\Http\Controllers\Student\AchievementController as StudentAchievementController;
 use App\Http\Controllers\Student\BookSuggestionController as StudentBookSuggestionController;
 use App\Http\Controllers\Student\CartController;
 use App\Http\Controllers\Student\LoanController as StudentLoanController;
 use App\Http\Controllers\Student\MarketCartController;
 use App\Http\Controllers\Student\MarketItemController as StudentMarketItemController;
+use App\Http\Controllers\Student\PortalController;
 use App\Http\Controllers\Student\ReservationController as StudentReservationController;
 use App\Http\Controllers\Student\ResourceController as StudentResourceController;
 use App\Http\Controllers\Student\WishlistController;
@@ -52,6 +54,20 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Student-only actions
     Route::middleware('student')->prefix('student')->group(function () {
+        Route::get('/profile', [PortalController::class, 'profile']);
+        Route::patch('/profile', [StudentAccountController::class, 'updateContact']);
+        // Throttled: a wrong current password is otherwise a free guess.
+        Route::put('/password', [StudentAccountController::class, 'changePassword'])->middleware('throttle:6,1');
+        Route::get('/loans', [PortalController::class, 'loans']);
+        Route::get('/penalties', [PortalController::class, 'penalties']);
+        Route::get('/attendance', [PortalController::class, 'attendance']);
+        Route::get('/redemptions', [PortalController::class, 'redemptions']);
+
+        // `subjects` must stay above `{book}` or it would be read as a book id.
+        Route::get('/catalog', [PortalController::class, 'catalog']);
+        Route::get('/catalog/subjects', [PortalController::class, 'subjects']);
+        Route::get('/catalog/{book}', [PortalController::class, 'catalogShow']);
+
         Route::get('/wishlist', [WishlistController::class, 'index']);
         Route::post('/wishlist', [WishlistController::class, 'store']);
         Route::delete('/wishlist/{wishlist}', [WishlistController::class, 'destroy']);
@@ -94,7 +110,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/attendance-logs', [AttendanceLogController::class, 'index']);
         Route::get('/attendance-logs/stats', [AttendanceLogController::class, 'stats']);
-        Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store']);
+        Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store'])->middleware('throttle:120,1');
 
         Route::get('/students', [StudentApprovalController::class, 'index']);
         Route::get('/students/stats', [StudentApprovalController::class, 'stats']);
