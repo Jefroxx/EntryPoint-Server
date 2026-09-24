@@ -38,6 +38,11 @@ abstract class BaseRepository implements RepositoryInterface
         return (bool) $model->delete();
     }
 
+    public function countWhere(array $conditions): int
+    {
+        return $this->model->newQuery()->where($conditions)->count();
+    }
+
     protected function existsBy(string $column, mixed $value): bool
     {
         return $this->model->newQuery()->where($column, $value)->exists();

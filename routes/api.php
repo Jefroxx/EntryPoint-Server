@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Librarian\AchievementController as LibrarianAchievementController;
 use App\Http\Controllers\Librarian\AttendanceLogController;
@@ -37,6 +38,11 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/librarian/login', [AuthController::class, 'librarianLogin']);
+
+// Email confirmation: the link a registering student gets, and "send a new link" from sign-in.
+Route::get('/email/verify/{uuid}/{hash}', [EmailVerificationController::class, 'verify'])
+    ->middleware('throttle:12,1')->name('verification.verify');
+Route::post('/email/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:3,1');
 
 // Protected
 Route::middleware('auth:sanctum')->group(function () {
@@ -102,9 +108,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Librarian-only actions
     Route::middleware('librarian')->prefix('librarian')->group(function () {
+        Route::get('/dashboard/today', [DashboardController::class, 'today']);
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('/dashboard/borrowing-overview', [DashboardController::class, 'borrowingOverview']);
         Route::get('/dashboard/book-status', [DashboardController::class, 'bookStatus']);
+        Route::get('/dashboard/demographics', [DashboardController::class, 'demographics']);
         Route::get('/dashboard/recent-loans', [DashboardController::class, 'recentLoans']);
         Route::get('/dashboard/overdue-loans', [DashboardController::class, 'overdueLoans']);
 
@@ -120,6 +128,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/library/stats', [BookController::class, 'libraryStats']);
 
         Route::post('/books', [BookController::class, 'store']);
+        Route::get('/books/{book}', [BookController::class, 'show']);
         Route::patch('/books/{book}', [BookController::class, 'update']);
         Route::delete('/books/{book}', [BookController::class, 'destroy']);
 

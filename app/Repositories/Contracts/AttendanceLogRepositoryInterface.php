@@ -38,4 +38,10 @@ interface AttendanceLogRepositoryInterface extends RepositoryInterface
      * @return BaseCollection<int,int> counts keyed by MySQL DAYOFWEEK() (1=Sunday..7=Saturday)
      */
     public function countByWeekdayBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection;
+
+    /** One row per visit, as ['studentID' => int, 'day' => 'Y-m-d'], for bucketing by week. */
+    public function visitDaysBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection;
+
+    /** Different students who visited, per academic program (program => count). */
+    public function visitorsByProgramBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection;
 }

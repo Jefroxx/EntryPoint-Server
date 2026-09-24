@@ -17,9 +17,24 @@ class BookController extends Controller
 
     public function index(Request $request)
     {
-        return response()->json(
-            $this->catalog->catalogIndex($request->query('search'), (int) ($request->query('perPage') ?? 15))
-        );
+        $filters = $request->validate([
+            'search'       => ['nullable', 'string', 'max:255'],
+            'subjectID'    => ['nullable', 'integer'],
+            'availability' => ['nullable', 'in:available,unavailable'],
+            'perPage'      => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return response()->json($this->catalog->catalogIndex(
+            $filters['search'] ?? null,
+            isset($filters['subjectID']) ? (int) $filters['subjectID'] : null,
+            $filters['availability'] ?? null,
+            (int) ($filters['perPage'] ?? 15),
+        ));
+    }
+
+    public function show(Book $book)
+    {
+        return response()->json(['book' => $this->catalog->bookDetail($book)]);
     }
 
     public function libraryStats()

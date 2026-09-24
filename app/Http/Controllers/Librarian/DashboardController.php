@@ -12,6 +12,11 @@ class DashboardController extends Controller
     {
     }
 
+    public function today()
+    {
+        return response()->json($this->dashboard->today());
+    }
+
     public function summary()
     {
         return response()->json($this->dashboard->summary());
@@ -20,6 +25,16 @@ class DashboardController extends Controller
     public function borrowingOverview(Request $request)
     {
         return response()->json($this->dashboard->borrowingOverview($request->query('month')));
+    }
+
+    public function demographics(Request $request)
+    {
+        $validated = $request->validate([
+            'scope' => ['nullable', 'in:members,visitors'],
+            'month' => ['nullable', 'date_format:Y-m'],
+        ]);
+
+        return response()->json($this->dashboard->demographics($validated['scope'] ?? 'members', $validated['month'] ?? null));
     }
 
     public function bookStatus()

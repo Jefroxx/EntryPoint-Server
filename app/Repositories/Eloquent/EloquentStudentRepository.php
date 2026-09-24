@@ -47,6 +47,21 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
         return Student::where('registrationStatus', 'approved')->count();
     }
 
+    public function readyForReviewCount(): int
+    {
+        return Student::where('registrationStatus', 'pending')
+            ->whereHas('user', fn ($query) => $query->whereNotNull('emailVerifiedAt'))
+            ->count();
+    }
+
+    public function approvedCountByProgram(): \Illuminate\Support\Collection
+    {
+        return Student::where('registrationStatus', 'approved')
+            ->selectRaw('academicProgram as program, COUNT(*) as total')
+            ->groupBy('academicProgram')
+            ->pluck('total', 'program');
+    }
+
     public function generateUniqueBarcode(): string
     {
         do {

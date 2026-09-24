@@ -19,6 +19,7 @@ class User extends Authenticatable
         'middleInitial',
         'lastName',
         'email',
+        'emailVerifiedAt',
         'password',
         'phoneNumber',
         'birthDate',
@@ -31,7 +32,8 @@ class User extends Authenticatable
     ];
 
     protected $casts = [
-        'birthDate' => 'date',
+        'birthDate'       => 'date',
+        'emailVerifiedAt' => 'datetime',
     ];
 
     public function student()

@@ -28,10 +28,23 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
         return Book::count();
     }
 
-    public function paginateCatalog(?string $search, int $perPage): LengthAwarePaginator
+    public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
     {
-        return Book::with(['subject', 'authors', 'copies'])
-            ->when($search, fn ($query, $term) => $query->where('title', 'like', "%{$term}%"))
+        $onShelf = fn ($copies) => $copies->where('status', 'available');
+
+        return Book::with(['subject', 'authors', 'copies' => fn ($copies) => $copies->where('status', '!=', 'retired')])
+            // Matches what the search box promises: title, author or ISBN (and call number, for staff).
+            ->when($search, function ($query, $term) {
+                $query->where(function ($inner) use ($term) {
+                    $inner->where('title', 'like', "%{$term}%")
+                        ->orWhere('isbn', 'like', "%{$term}%")
+                        ->orWhere('classNumber', 'like', "%{$term}%")
+                        ->orWhereHas('authors', fn ($authors) => $authors->where('name', 'like', "%{$term}%"));
+                });
+            })
+            ->when($subjectID, fn ($query, $id) => $query->where('subjectID', $id))
+            ->when($availability === 'available', fn ($query) => $query->whereHas('copies', $onShelf))
+            ->when($availability === 'unavailable', fn ($query) => $query->whereDoesntHave('copies', $onShelf))
             ->orderByDesc('bookID')
             ->paginate($perPage);
     }

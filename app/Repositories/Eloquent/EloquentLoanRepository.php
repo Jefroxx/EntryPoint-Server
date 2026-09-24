@@ -43,6 +43,16 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
         return Loan::where('status', 'Active')->count();
     }
 
+    public function countsForBook(int $bookID): array
+    {
+        $loans = Loan::whereHas('copy', fn ($copy) => $copy->where('bookID', $bookID));
+
+        return [
+            'total'  => (clone $loans)->count(),
+            'active' => $loans->where('status', 'Active')->count(),
+        ];
+    }
+
     public function forStudentWithBooks(int $studentID): Collection
     {
         return Loan::where('studentID', $studentID)
@@ -129,6 +139,18 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
                 ->where('dueDate', '<=', now()->addHours(24))
                 ->count(),
             'overdue' => Loan::where('status', 'Active')->where('dueDate', '<', now())->count(),
+        ];
+    }
+
+    public function todayCounts(): array
+    {
+        return [
+            'checkedOut' => Loan::whereDate('checkoutDate', today())->count(),
+            'returned'   => Loan::whereDate('returnDate', today())->count(),
+            // Still out and due later today (once the time passes it counts as overdue instead).
+            'dueToday'   => Loan::where('status', 'Active')
+                ->whereBetween('dueDate', [now(), now()->endOfDay()])
+                ->count(),
         ];
     }
 
