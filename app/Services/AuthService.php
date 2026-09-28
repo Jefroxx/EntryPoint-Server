@@ -16,7 +16,7 @@ class AuthService
     public function __construct(
         private UserRepositoryInterface $users,
         private StudentRepositoryInterface $students,
-        private NotificationService $notifications,
+        private EmailVerificationService $verification,
     ) {
     }
 
@@ -46,10 +46,8 @@ class AuthService
             ]);
         });
 
-        $this->notifications->notifyAllLibrarians(
-            "New student registration pending approval: {$validated['firstName']} {$validated['lastName']}",
-            'new_registration'
-        );
+        // Librarians are told once the student clicks the link (EmailVerificationService::verify), not now.
+        $this->verification->sendLink($student->user);
 
         return $student->load('user');
     }
@@ -70,6 +68,15 @@ class AuthService
         }
 
         $student = $user->student;
+
+        // Checked before approval status, since an unconfirmed registration hasn't reached a librarian yet.
+        // `verification` is a flag the sign-in page reads to offer "Send a new link".
+        if (! $user->emailVerifiedAt) {
+            throw ValidationException::withMessages([
+                'email'        => ["Confirm your email first. We sent a link to {$user->email}; check your inbox and Junk folder."],
+                'verification' => ['required'],
+            ]);
+        }
 
         if (! $student || $student->registrationStatus !== 'approved') {
             $status = $student->registrationStatus ?? 'pending';

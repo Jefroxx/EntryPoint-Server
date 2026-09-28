@@ -24,6 +24,16 @@ interface LoanRepositoryInterface extends RepositoryInterface
 
     public function activeCount(): int;
 
+    /** @return array{checkedOut: int, returned: int, dueToday: int} */
+    public function todayCounts(): array;
+
+    /**
+     * Every loan ever made of any copy of this book, and how many are still out.
+     *
+     * @return array{total: int, active: int}
+     */
+    public function countsForBook(int $bookID): array;
+
     /**
      * A student's own loans (book soft-deleted or not), active ones first.
      */

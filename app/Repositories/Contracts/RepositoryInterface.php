@@ -15,4 +15,7 @@ interface RepositoryInterface
     public function update(Model $model, array $attributes): Model;
 
     public function delete(Model $model): bool;
+
+    /** Rows matching simple column = value conditions, e.g. ['status' => 'Pending']. */
+    public function countWhere(array $conditions): int;
 }

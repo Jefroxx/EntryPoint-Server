@@ -18,7 +18,7 @@ class AuthController extends Controller
         $student = $this->auth->register($request->validated());
 
         return response()->json([
-            'message' => 'Registration submitted. Your account is pending librarian approval.',
+            'message' => 'Registration submitted. Confirm your email with the link we sent, then a librarian will review it.',
             'student' => $student,
         ], 201);
     }
