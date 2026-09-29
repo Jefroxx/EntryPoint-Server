@@ -52,7 +52,7 @@ class BookFactory extends Factory
         return [
             'uuid'            => Str::uuid(),
             'subjectID'       => BookSubject::inRandomOrder()->value('subjectID'),
-            'areasOfLibrary'  => $this->faker->randomElement([
+            'areaOfLibrary'  => $this->faker->randomElement([
                 'circulation', 'circulation', 'circulation', // weighted toward circulation
                 'reserved', 'filipiniana', 'fiction', 'thesis', 'journal',
             ]),

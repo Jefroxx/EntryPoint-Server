@@ -38,7 +38,14 @@ class LoanController extends Controller
         return response()->json([
             'message' => 'Book checked out successfully.',
             'loan'    => $loan,
+            'receipt' => $this->circulation->receipt($loan, $request->user()->fullName),
         ], 201);
+    }
+
+    /** The checkout receipt again, for a reprint. */
+    public function receipt(Request $request, Loan $loan)
+    {
+        return response()->json(['receipt' => $this->circulation->receipt($loan, $request->user()->fullName)]);
     }
 
     /**

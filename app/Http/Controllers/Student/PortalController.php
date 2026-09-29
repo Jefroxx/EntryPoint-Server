@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Student;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StudentCatalogRequest;
 use App\Models\Book;
+use App\Services\HallOfFameService;
 use App\Services\StudentPortalService;
 use Illuminate\Http\Request;
 
@@ -17,6 +18,11 @@ class PortalController extends Controller
     public function profile(Request $request)
     {
         return response()->json($this->portalService->profile($request->user()->student));
+    }
+
+    public function hallOfFame(Request $request, HallOfFameService $hallOfFame)
+    {
+        return response()->json($hallOfFame->board($request->user()->student->studentID));
     }
 
     public function loans(Request $request)

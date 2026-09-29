@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreBookRequest;
+use App\Http\Requests\UpdateBookCopyRequest;
 use App\Http\Requests\UpdateBookRequest;
 use App\Models\Book;
+use App\Models\BookCopy;
 use App\Services\CatalogService;
 use Illuminate\Http\Request;
 
@@ -30,6 +32,37 @@ class BookController extends Controller
             $filters['availability'] ?? null,
             (int) ($filters['perPage'] ?? 15),
         ));
+    }
+
+    public function copies(Request $request)
+    {
+        $filters = $request->validate([
+            'search'    => ['nullable', 'string', 'max:255'],
+            'subjectID' => ['nullable', 'integer'],
+            'status'    => ['nullable', 'in:available,borrowed,lost,damaged'],
+            'area'      => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            'perPage'   => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return response()->json($this->catalog->copyCatalog(
+            $filters['search'] ?? null,
+            isset($filters['subjectID']) ? (int) $filters['subjectID'] : null,
+            $filters['status'] ?? null,
+            $filters['area'] ?? null,
+            (int) ($filters['perPage'] ?? 15),
+        ));
+    }
+
+    public function updateCopy(UpdateBookCopyRequest $request, BookCopy $copy)
+    {
+        $copy = $this->catalog->updateCopyStatus($copy, $request->validated('status'));
+
+        return response()->json([
+            'message' => $copy->status === 'retired'
+                ? "Accession no. {$copy->accessionNumber} removed from the catalog."
+                : "Accession no. {$copy->accessionNumber} updated.",
+            'copy' => $copy->only(['copyID', 'accessionNumber', 'status']),
+        ]);
     }
 
     public function show(Book $book)

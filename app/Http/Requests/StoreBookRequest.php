@@ -21,7 +21,7 @@ class StoreBookRequest extends FormRequest
             'classNumber'    => ['nullable', 'string', 'max:100'],
             // Alias for classNumber (the Nuxt client's naming).
             'callNumber'     => ['nullable', 'string', 'max:100'],
-            'areasOfLibrary' => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            'areaOfLibrary' => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
             'quantity'       => ['required', 'integer', 'min:1', 'max:100'],

@@ -115,7 +115,7 @@ class StudentPortalService
         $rows = $this->penalties->forStudentWithBooks($student->studentID)->map(function (Penalty $penalty) {
             $loan = $penalty->loan;
             $book = $loan->copy->book;
-            $rule = $this->penalties->ruleForArea($book->areasOfLibrary);
+            $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
             $unit = $rule?->rateUnit === 'hour' ? 'hour' : 'day';
 
             return [
@@ -190,7 +190,10 @@ class StudentPortalService
         $this->books->loadForStudent($book);
         $queues = $this->reservations->waitingCountsByBook([$book->bookID]);
 
-        return $this->catalogRow($book, $queues[$book->bookID] ?? 0);
+        return [
+            ...$this->catalogRow($book, $queues[$book->bookID] ?? 0),
+            'pages' => app(BookPageService::class)->forBook($book),
+        ];
     }
 
     public function subjects(): BaseCollection
@@ -206,7 +209,7 @@ class StudentPortalService
     }
 
     // The student app still speaks `callNumber` / `circulationType`; the
-    // catalog columns are now `classNumber` / `areasOfLibrary`.
+    // catalog columns are now `classNumber` / `areaOfLibrary`.
     private function catalogRow(Book $book, int $queueLength): array
     {
         return $this->bookBrief($book) + [
@@ -214,7 +217,7 @@ class StudentPortalService
             'isbn'            => $book->isbn,
             'publicationYear' => $book->publicationYear,
             'shelfLocation'   => $book->shelfLocation,
-            'circulationType' => $book->areasOfLibrary,
+            'circulationType' => $book->areaOfLibrary,
             'totalCopies'     => (int) ($book->total_copies ?? 0),
             'availableCopies' => (int) ($book->available_copies ?? 0),
             'queueLength'     => $queueLength,
