@@ -19,6 +19,7 @@ use App\Http\Controllers\Librarian\ResourceUsageLogController;
 use App\Http\Controllers\Librarian\ReportController;
 use App\Http\Controllers\Librarian\SelfReturnReportController;
 use App\Http\Controllers\Librarian\SettingsController;
+use App\Http\Controllers\Librarian\StudentApprovalController;
 use App\Http\Controllers\Librarian\SubjectController;
 use App\Http\Controllers\Student\AccountController as StudentAccountController;
 use App\Http\Controllers\Student\AchievementController as StudentAchievementController;
