@@ -8,9 +8,9 @@
 <tr>
 <td class="brand-cell" align="center">
 <a href="{{ $url }}" style="display: inline-block;">
-{{-- Attached inline by the Mailable (see StudentApproved::LOGO_CID) rather than hotlinked, so
+{{-- Attached inline by the Mailable (see BrandedMail::LOGO_CID) rather than hotlinked, so
      Outlook and Gmail show it without the recipient clicking "download pictures". --}}
-<img src="cid:{{ \App\Mail\StudentApproved::LOGO_CID }}" class="logo" width="168" alt="{{ config('app.name') }}">
+<img src="cid:{{ \App\Mail\BrandedMail::LOGO_CID }}" class="logo" width="168" alt="{{ config('app.name') }}">
 </a>
 </td>
 </tr>

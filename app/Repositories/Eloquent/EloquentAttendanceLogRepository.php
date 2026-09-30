@@ -115,6 +115,26 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
         return $average ? round((float) $average, 1) : 0.0;
     }
 
+    public function visitDaysBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection
+    {
+        return AttendanceLog::whereBetween('entryTime', [$start, $end])
+            ->selectRaw('studentID, DATE(entryTime) as day')
+            ->toBase()
+            ->get()
+            ->map(fn ($row) => ['studentID' => (int) $row->studentID, 'day' => (string) $row->day]);
+    }
+
+    public function visitorsByProgramBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection
+    {
+        $logs = (new AttendanceLog)->getTable();
+
+        return AttendanceLog::join('students', 'students.studentID', '=', "{$logs}.studentID")
+            ->whereBetween("{$logs}.entryTime", [$start, $end])
+            ->selectRaw("students.academicProgram as program, COUNT(DISTINCT {$logs}.studentID) as total")
+            ->groupBy('students.academicProgram')
+            ->pluck('total', 'program');
+    }
+
     public function countByWeekdayBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection
     {
         return AttendanceLog::whereBetween('entryTime', [$start, $end])

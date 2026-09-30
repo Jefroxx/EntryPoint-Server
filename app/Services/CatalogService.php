@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Author;
 use App\Models\Book;
+use App\Models\BookCopy;
 use App\Models\BookSubject;
 use App\Repositories\Contracts\AuthorRepositoryInterface;
 use App\Repositories\Contracts\BookCopyRepositoryInterface;
@@ -72,9 +73,9 @@ class CatalogService
      * remapped to match the frontend's contract (`callNumber` instead of
      * the internal `classNumber`), independent of the storage schema.
      */
-    public function catalogIndex(?string $search, int $perPage): LengthAwarePaginator
+    public function catalogIndex(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
     {
-        return $this->books->paginateCatalog($search, $perPage)->through(fn (Book $book) => [
+        return $this->books->paginateCatalog($search, $subjectID, $availability, $perPage)->through(fn (Book $book) => [
             'bookID'        => $book->bookID,
             'title'         => $book->title,
             'isbn'          => $book->isbn,
@@ -94,6 +95,51 @@ class CatalogService
                 'status'          => $copy->status,
             ])->values(),
         ]);
+    }
+
+    /**
+     * The Book Catalog tab: one row per copy, each with its own accession number and status next to
+     * the fuller book record (publisher, edition, volume, year, pages, area of the library, fund, cost...).
+     */
+    public function copyCatalog(?string $search, ?int $subjectID, ?string $status, ?string $area, int $perPage): LengthAwarePaginator
+    {
+        return $this->bookCopies->paginateCopyCatalog($search, $subjectID, $status, $area, $perPage)->through(fn ($copy) => [
+            'copyID'          => $copy->copyID,
+            'accessionNumber' => $copy->accessionNumber,
+            'barcodeValue'    => $copy->barcodeValue,
+            'status'          => $copy->status,
+            'book'            => [
+                ...$copy->book->only([
+                    'bookID', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
+                    'publisher', 'sourceOfFund', 'cost', 'shelfLocation', 'coverImageURL',
+                ]),
+                'callNumber' => $copy->book->classNumber,
+                'subject'    => $copy->book->subject?->only(['subjectID', 'name']),
+                'authors'    => $copy->book->authors->pluck('name')->values(),
+            ],
+        ]);
+    }
+
+    /**
+     * Changes one copy's status from the Book Catalog: back on the shelf, damaged, lost, or retired
+     * (removed from the catalog; its accession number is not reused). A copy out on loan changes only
+     * through check-in, so it can't be edited here.
+     */
+    public function updateCopyStatus(BookCopy $copy, string $status): BookCopy
+    {
+        if ($copy->status === 'borrowed') {
+            throw ValidationException::withMessages([
+                'status' => ["Accession no. {$copy->accessionNumber} is out on loan. Check it in first."],
+            ]);
+        }
+
+        if ($copy->status === 'retired') {
+            throw ValidationException::withMessages([
+                'status' => ["Accession no. {$copy->accessionNumber} has already been removed from the catalog."],
+            ]);
+        }
+
+        return $this->bookCopies->update($copy, ['status' => $status]);
     }
 
     public function createBook(array $validated): Book
@@ -153,7 +199,7 @@ class CatalogService
             $book = $this->books->create([
                 'uuid'            => Str::uuid(),
                 'subjectID'       => $subject->subjectID,
-                'areasOfLibrary'  => $validated['areasOfLibrary'] ?? 'circulation',
+                'areaOfLibrary'   => $validated['areaOfLibrary'] ?? 'circulation',
                 'title'           => $validated['title'],
                 'classNumber'     => $classNumber,
                 'isbn'            => $validated['isbn'] ?? null,
@@ -203,7 +249,7 @@ class CatalogService
             }
 
             $book->fill(collect($validated)->only([
-                'title', 'classNumber', 'areasOfLibrary', 'isbn', 'publicationYear', 'volume', 'edition',
+                'title', 'classNumber', 'areaOfLibrary', 'isbn', 'publicationYear', 'volume', 'edition',
                 'pages', 'publisher', 'sourceOfFund', 'cost', 'copyNumber', 'remarks',
                 'coverImageURL', 'shelfLocation',
             ])->toArray());
@@ -231,17 +277,57 @@ class CatalogService
         return $this->books->loadCatalogRelations($book->fresh());
     }
 
+    /**
+     * Everything the librarian's "View details" and "Edit book" screens show: every stored field,
+     * authors with their roles, each non-retired copy, and how much the book has been borrowed.
+     */
+    public function bookDetail(Book $book): array
+    {
+        $book->load(['subject', 'authors', 'copies' => fn ($copies) => $copies->where('status', '!=', 'retired')]);
+
+        return [
+            ...$book->only([
+                'bookID', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
+                'publisher', 'sourceOfFund', 'cost', 'copyNumber', 'remarks', 'coverImageURL', 'shelfLocation',
+            ]),
+            'callNumber' => $book->classNumber,
+            'subject'    => $book->subject?->only(['subjectID', 'name']),
+            'authors'    => $book->authors->map(fn (Author $author) => [
+                'authorID' => $author->authorID,
+                'name'     => $author->name,
+                'role'     => $author->pivot->role,
+            ])->values(),
+            'copies' => $book->copies->map(fn ($copy) => [
+                'copyID'          => $copy->copyID,
+                'accessionNumber' => $copy->accessionNumber,
+                'barcodeValue'    => $copy->barcodeValue,
+                'status'          => $copy->status,
+            ])->values(),
+            'loans'     => $this->loans->countsForBook($book->bookID),
+            'pages'     => app(BookPageService::class)->forBook($book),
+            'createdAt' => $book->created_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Books are soft-deleted, so loan, fine and reservation history that points at them survives.
+     * Its copies are retired too, so they stop counting towards the shelf stats and can't be checked out.
+     */
     public function deleteBook(Book $book): void
     {
         $activeLoans = $this->bookCopies->countByStatusForBook($book->bookID, 'borrowed');
 
         if ($activeLoans > 0) {
             throw ValidationException::withMessages([
-                'book' => ["Cannot delete: {$activeLoans} copy(ies) of this book are currently borrowed."],
+                'book' => ["Cannot delete: {$activeLoans} " . Str::plural('copy', $activeLoans) . ' of this book '
+                    . ($activeLoans === 1 ? 'is' : 'are') . ' still borrowed. Check them in first.'],
             ]);
         }
 
-        $this->books->delete($book);
+        DB::transaction(function () use ($book) {
+            $book->copies()->where('status', '!=', 'retired')->update(['status' => 'retired']);
+            $this->books->delete($book);
+        });
     }
 
     private function createCopy(int $bookID): void
@@ -249,7 +335,6 @@ class CatalogService
         $this->bookCopies->create([
             'uuid'            => Str::uuid(),
             'bookID'          => $bookID,
-            'accessionNumber' => $this->bookCopies->generateUniqueAccessionNumber(),
             'barcodeValue'    => $this->bookCopies->generateUniqueBarcode(),
             'status'          => 'available',
         ]);

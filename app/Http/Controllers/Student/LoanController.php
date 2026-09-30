@@ -13,6 +13,17 @@ class LoanController extends Controller
     {
     }
 
+    /**
+     * A digital copy of the checkout receipt, for when the paper one is lost. Only the student's own
+     * loans; anyone else's answers "not found", so loan numbers can't be probed.
+     */
+    public function receipt(Request $request, Loan $loan)
+    {
+        abort_unless($loan->studentID === $request->user()->student->studentID, 404);
+
+        return response()->json(['receipt' => $this->circulation->receipt($loan)]);
+    }
+
     public function selfReturn(Request $request, Loan $loan)
     {
         $report = $this->circulation->studentSubmitSelfReturn(

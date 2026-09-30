@@ -34,5 +34,11 @@ interface StudentRepositoryInterface extends RepositoryInterface
 
     public function approvedCount(): int;
 
+    /** Pending registrations whose email is confirmed, i.e. the ones a librarian can approve now. */
+    public function readyForReviewCount(): int;
+
+    /** Approved members per academic program (program => count). */
+    public function approvedCountByProgram(): \Illuminate\Support\Collection;
+
     public function generateUniqueBarcode(): string;
 }

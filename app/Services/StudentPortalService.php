@@ -15,15 +15,17 @@ use App\Repositories\Contracts\LoanRepositoryInterface;
 use App\Repositories\Contracts\PenaltyRepositoryInterface;
 use App\Repositories\Contracts\PointRedemptionRepositoryInterface;
 use App\Repositories\Contracts\ReservationRepositoryInterface;
+use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Repositories\Contracts\WishlistRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection as BaseCollection;
 
 /**
- * Read-only data behind the student app: profile and counters, the student's
- * own loans / fines / visits / redemptions, and a catalog carrying live
- * availability. Everything here is scoped to the signed-in student.
+ * Data behind the student app: profile and counters, the student's own
+ * loans / fines / visits / redemptions, and a catalog carrying live
+ * availability. Everything here is scoped to the signed-in student. The one
+ * write is updateContact(): the contact details a student may change themselves.
  */
 class StudentPortalService
 {
@@ -37,7 +39,17 @@ class StudentPortalService
         private BookRepositoryInterface $books,
         private BookSubjectRepositoryInterface $subjects,
         private CirculationService $circulation,
+        private UserRepositoryInterface $users,
     ) {
+    }
+
+    /** Phone, address and birth date only (see UpdateStudentContactRequest). Blank clears the field. */
+    public function updateContact(Student $student, array $data): void
+    {
+        $fields = array_intersect_key($data, array_flip(['phoneNumber', 'address', 'birthDate']));
+        $fields = array_map(fn ($value) => is_string($value) && trim($value) === '' ? null : $value, $fields);
+
+        $this->users->update($student->user, $fields);
     }
 
     public function profile(Student $student): array
@@ -54,6 +66,7 @@ class StudentPortalService
                 'email'              => $user->email,
                 'phoneNumber'        => $user->phoneNumber,
                 'address'            => $user->address,
+                'birthDate'          => $user->birthDate ? Carbon::parse($user->birthDate)->toDateString() : null,
                 'studentIDNumber'    => $student->studentIDNumber,
                 'academicProgram'    => $student->academicProgram,
                 'barcodeValue'       => $student->barcodeValue,
@@ -102,7 +115,7 @@ class StudentPortalService
         $rows = $this->penalties->forStudentWithBooks($student->studentID)->map(function (Penalty $penalty) {
             $loan = $penalty->loan;
             $book = $loan->copy->book;
-            $rule = $this->penalties->ruleForArea($book->areasOfLibrary);
+            $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
             $unit = $rule?->rateUnit === 'hour' ? 'hour' : 'day';
 
             return [
@@ -177,7 +190,10 @@ class StudentPortalService
         $this->books->loadForStudent($book);
         $queues = $this->reservations->waitingCountsByBook([$book->bookID]);
 
-        return $this->catalogRow($book, $queues[$book->bookID] ?? 0);
+        return [
+            ...$this->catalogRow($book, $queues[$book->bookID] ?? 0),
+            'pages' => app(BookPageService::class)->forBook($book),
+        ];
     }
 
     public function subjects(): BaseCollection
@@ -193,7 +209,7 @@ class StudentPortalService
     }
 
     // The student app still speaks `callNumber` / `circulationType`; the
-    // catalog columns are now `classNumber` / `areasOfLibrary`.
+    // catalog columns are now `classNumber` / `areaOfLibrary`.
     private function catalogRow(Book $book, int $queueLength): array
     {
         return $this->bookBrief($book) + [
@@ -201,7 +217,7 @@ class StudentPortalService
             'isbn'            => $book->isbn,
             'publicationYear' => $book->publicationYear,
             'shelfLocation'   => $book->shelfLocation,
-            'circulationType' => $book->areasOfLibrary,
+            'circulationType' => $book->areaOfLibrary,
             'totalCopies'     => (int) ($book->total_copies ?? 0),
             'availableCopies' => (int) ($book->available_copies ?? 0),
             'queueLength'     => $queueLength,

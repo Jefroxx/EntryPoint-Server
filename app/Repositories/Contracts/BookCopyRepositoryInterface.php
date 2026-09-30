@@ -4,6 +4,7 @@ namespace App\Repositories\Contracts;
 
 use App\Models\BookCopy;
 use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 
 interface BookCopyRepositoryInterface extends RepositoryInterface
@@ -23,7 +24,12 @@ interface BookCopyRepositoryInterface extends RepositoryInterface
 
     public function hasAvailableForBook(int $bookID): bool;
 
-    public function generateUniqueAccessionNumber(): string;
-
     public function generateUniqueBarcode(): string;
+
+    /**
+     * The Book Catalog: one row per copy (retired copies excluded), with its book, subject and authors.
+     * `search`: all digits matches an accession number exactly (or part of an ISBN); anything else
+     * matches the title, ISBN, call number or an author.
+     */
+    public function paginateCopyCatalog(?string $search, ?int $subjectID, ?string $status, ?string $area, int $perPage): LengthAwarePaginator;
 }

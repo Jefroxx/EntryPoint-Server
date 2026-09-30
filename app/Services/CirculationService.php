@@ -124,7 +124,7 @@ class CirculationService
                 'uuid'         => Str::uuid(),
                 'studentID'    => $validated['studentID'],
                 'copyID'       => $copy->copyID,
-                'loanType'     => $copy->book->areasOfLibrary,
+                'loanType'     => $copy->book->areaOfLibrary,
                 'checkoutDate' => now(),
                 'dueDate'      => $this->computeDueDate($copy->book),
                 'status'       => 'Active',
@@ -162,6 +162,47 @@ class CirculationService
      * studentSubmitSelfReturn(), which stages a report for later librarian
      * verification).
      */
+    /**
+     * Everything a checkout receipt shows: who borrowed what (the book's full record and the copy's
+     * accession number), when it's due, and what a late return costs under the current fine rule.
+     * Fines are counted from the due date (see accruePenalty()), so that is what the receipt states. The fine
+     * rule is the one in force now; the dates are the loan's own.
+     */
+    public function receipt(Loan $loan, ?string $printedBy = null): array
+    {
+        $loan->loadMissing(['student.user', 'copy.book.authors', 'copy.book.subject']);
+        $book = $loan->copy->book;
+        $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
+
+        return [
+            'receiptNumber' => 'L-' . str_pad((string) $loan->loanID, 6, '0', STR_PAD_LEFT),
+            'status'        => $loan->status,
+            'checkoutDate'  => $loan->checkoutDate?->toIso8601String(),
+            'dueDate'       => $loan->dueDate?->toIso8601String(),
+            'returnDate'    => $loan->returnDate?->toIso8601String(),
+            'student'       => [
+                'name'            => $loan->student->user->fullName,
+                'studentIDNumber' => $loan->student->studentIDNumber,
+                'program'         => $loan->student->academicProgram,
+            ],
+            'book' => [
+                ...$book->only([
+                    'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages', 'publisher',
+                ]),
+                'callNumber'      => $book->classNumber,
+                'subject'         => $book->subject?->name,
+                'authors'         => $book->authors->pluck('name')->values(),
+                'accessionNumber' => $loan->copy->accessionNumber,
+                'barcodeValue'    => $loan->copy->barcodeValue,
+            ],
+            'fine' => $rule ? [
+                'rate'     => (float) $rule->rate,
+                'rateUnit' => $rule->rateUnit,
+            ] : null,
+            'printedBy' => $printedBy,
+        ];
+    }
+
     public function returnBook(Loan $loan): Loan
     {
         if ($loan->status !== 'Active') {
@@ -359,7 +400,7 @@ class CirculationService
     private function accruePenalty(Loan $loan): ?Penalty
     {
         $book = $loan->copy->book;
-        $rule = $this->penalties->ruleForArea($book->areasOfLibrary);
+        $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
 
         if (! $rule) {
             return null; // area isn't configured for penalties (e.g. not loanable)
@@ -402,7 +443,7 @@ class CirculationService
 
     private function loanRules(Book $book): array
     {
-        $period = $this->loanPeriods->find($book->areasOfLibrary);
+        $period = $this->loanPeriods->find($book->areaOfLibrary);
 
         if (! $period) {
             return [];
@@ -421,7 +462,7 @@ class CirculationService
 
         if (empty($rules['loanable'] ?? false)) {
             throw ValidationException::withMessages([
-                'copyID' => ["Books under '{$book->areasOfLibrary}' are for library use only and cannot be loaned out."],
+                'copyID' => ["Books under '{$book->areaOfLibrary}' are for library use only and cannot be loaned out."],
             ]);
         }
     }

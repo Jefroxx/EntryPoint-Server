@@ -10,7 +10,7 @@ email and password you registered with.
 Sign in to the portal
 </x-mail::button>
 
-Once you're signed in, open **Student Barcode** to get the barcode you'll scan at the library entrance —
+Once you're signed in, open **Library ID** to get the barcode you'll scan at the library entrance —
 your visit streak starts on your first scan.
 
 <x-slot:subcopy>

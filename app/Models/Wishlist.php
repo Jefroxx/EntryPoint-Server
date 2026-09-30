@@ -16,12 +16,14 @@ class Wishlist extends Model
         'studentID',
         'bookID',
         'inCart',
+        'inWishlist',
         'addedAt',
     ];
 
     protected $casts = [
-        'addedAt' => 'datetime',
-        'inCart'  => 'boolean',
+        'addedAt'    => 'datetime',
+        'inCart'     => 'boolean',
+        'inWishlist' => 'boolean',
     ];
     public function student()
     {

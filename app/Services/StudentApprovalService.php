@@ -38,6 +38,10 @@ class StudentApprovalService
             throw ValidationException::withMessages(['student' => ['Student is already approved.']]);
         }
 
+        if (! $student->user->emailVerifiedAt) {
+            throw ValidationException::withMessages(['student' => ["This student hasn't confirmed their email yet."]]);
+        }
+
         $this->students->update($student, [
             'registrationStatus'    => 'approved',
             'barcodeValue'          => $this->students->generateUniqueBarcode(),

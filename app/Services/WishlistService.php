@@ -35,7 +35,8 @@ class WishlistService
                 ]);
             }
 
-            if (! $existing && $currentCartCount >= self::MAX_CART_ITEMS) {
+            // Applies to hearted books too: moving one from the wishlist still takes a cart slot.
+            if ($currentCartCount >= self::MAX_CART_ITEMS) {
                 throw ValidationException::withMessages([
                     'bookID' => ['Your cart is full (max ' . self::MAX_CART_ITEMS . ' books).'],
                 ]);
@@ -45,12 +46,14 @@ class WishlistService
                 return $this->wishlists->update($existing, ['inCart' => true]);
             }
 
+            // In the cart only; putting a book in the cart doesn't heart it.
             return $this->wishlists->create([
-                'uuid'      => Str::uuid(),
-                'studentID' => $studentID,
-                'bookID'    => $bookID,
-                'inCart'    => true,
-                'addedAt'   => now(),
+                'uuid'       => Str::uuid(),
+                'studentID'  => $studentID,
+                'bookID'     => $bookID,
+                'inCart'     => true,
+                'inWishlist' => false,
+                'addedAt'    => now(),
             ]);
         });
 
@@ -63,7 +66,12 @@ class WishlistService
             throw new AuthorizationException('This item does not belong to you.');
         }
 
-        $this->wishlists->update($wishlist, ['inCart' => false]);
+        // A hearted book goes back to just being hearted; a cart-only row has nothing left to hold.
+        if ($wishlist->inWishlist) {
+            $this->wishlists->update($wishlist, ['inCart' => false]);
+        } else {
+            $this->wishlists->delete($wishlist);
+        }
     }
 
     public function wishlistIndex(int $studentID): Collection
@@ -73,18 +81,24 @@ class WishlistService
 
     public function addToWishlist(int $studentID, int $bookID): Wishlist
     {
-        if ($this->wishlists->existsForStudentAndBook($studentID, $bookID)) {
+        $existing = $this->wishlists->findByStudentAndBook($studentID, $bookID);
+
+        if ($existing?->inWishlist) {
             throw ValidationException::withMessages([
                 'bookID' => ['This book is already in your wishlist.'],
             ]);
         }
 
-        $wishlistItem = $this->wishlists->create([
-            'uuid'      => Str::uuid(),
-            'studentID' => $studentID,
-            'bookID'    => $bookID,
-            'addedAt'   => now(),
-        ]);
+        // Already in the cart: the same row now carries the heart too.
+        $wishlistItem = $existing
+            ? $this->wishlists->update($existing, ['inWishlist' => true])
+            : $this->wishlists->create([
+                'uuid'       => Str::uuid(),
+                'studentID'  => $studentID,
+                'bookID'     => $bookID,
+                'inWishlist' => true,
+                'addedAt'    => now(),
+            ]);
 
         return $wishlistItem->load('book');
     }
@@ -95,6 +109,11 @@ class WishlistService
             throw new AuthorizationException('This wishlist item does not belong to you.');
         }
 
-        $this->wishlists->delete($wishlist);
+        // Un-hearting a book that's in the cart leaves it in the cart.
+        if ($wishlist->inCart) {
+            $this->wishlists->update($wishlist, ['inWishlist' => false]);
+        } else {
+            $this->wishlists->delete($wishlist);
+        }
     }
 }
