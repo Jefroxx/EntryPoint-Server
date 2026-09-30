@@ -13,7 +13,6 @@ class BookCopyFactory extends Factory
         return [
             'uuid'            => Str::uuid(),
             'bookID'          => Book::factory(),
-            'accessionNumber' => 'ACC-' . $this->faker->unique()->numerify('####-####'),
             'barcodeValue'    => 'BK-' . strtoupper($this->faker->unique()->bothify('??########')),
             'status'          => 'available',
         ];

@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 class SettingsService
 {
     // The only areas the client's Settings page edits — the other
-    // areasOfLibrary values (fiction, thesis, journal, dissertation) keep
+    // areaOfLibrary values (fiction, thesis, journal, dissertation) keep
     // whatever loan_periods row the classification migration seeded.
     private const COLLECTION_AREAS = ['circulation', 'reserved', 'filipiniana'];
 

@@ -17,7 +17,7 @@ class UpdateBookRequest extends FormRequest
             'title'          => ['sometimes', 'string', 'max:255'],
             'classNumber'    => ['sometimes', 'string', 'max:100'],
             'callNumber'     => ['sometimes', 'string', 'max:100'],
-            'areasOfLibrary' => ['sometimes', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            'areaOfLibrary' => ['sometimes', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
 

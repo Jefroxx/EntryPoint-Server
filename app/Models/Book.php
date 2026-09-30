@@ -15,7 +15,7 @@ class Book extends Model
     protected $fillable = [
         'uuid',
         'subjectID',
-        'areasOfLibrary',
+        'areaOfLibrary',
         'title',
         'classNumber',
         'isbn',
@@ -35,6 +35,11 @@ class Book extends Model
     public function subject()
     {
         return $this->belongsTo(BookSubject::class, 'subjectID', 'subjectID');
+    }
+
+    public function pages()
+    {
+        return $this->hasMany(BookPage::class, 'bookID', 'bookID');
     }
 
     public function copies()

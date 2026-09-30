@@ -4,12 +4,18 @@ namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
 use App\Services\DashboardService;
+use App\Services\HallOfFameService;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
     public function __construct(private DashboardService $dashboard)
     {
+    }
+
+    public function hallOfFame(HallOfFameService $hallOfFame)
+    {
+        return response()->json($hallOfFame->staffBoard());
     }
 
     public function today()
