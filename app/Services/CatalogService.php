@@ -11,7 +11,9 @@ use App\Repositories\Contracts\BookCopyRepositoryInterface;
 use App\Repositories\Contracts\BookRepositoryInterface;
 use App\Repositories\Contracts\BookSubjectRepositoryInterface;
 use App\Repositories\Contracts\LoanRepositoryInterface;
+use App\Repositories\Contracts\ReservationRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -50,6 +52,8 @@ class CatalogService
         private BookSubjectRepositoryInterface $subjects,
         private LoanRepositoryInterface $loans,
         private LibraryClassificationService $classification,
+        private StockLogService $stockLog,
+        private ReservationRepositoryInterface $reservations,
     ) {
     }
 
@@ -94,6 +98,7 @@ class CatalogService
                 'accessionNumber' => $copy->accessionNumber,
                 'status'          => $copy->status,
             ])->values(),
+            'heldCopies' => (int) ($book->held_copies ?? 0),
         ]);
     }
 
@@ -139,7 +144,71 @@ class CatalogService
             ]);
         }
 
+        if ($status === 'retired') {
+            return $this->retireCopy($copy, 'Removed');
+        }
+
         return $this->bookCopies->update($copy, ['status' => $status]);
+    }
+
+    /**
+     * Adds `$quantity` more copies of a book that is already in the catalog, each with the next accession
+     * number, and logs every one in the stock log.
+     *
+     * @return Collection<int, BookCopy>
+     */
+    public function addCopies(Book $book, int $quantity, ?string $note = null): Collection
+    {
+        return DB::transaction(function () use ($book, $quantity, $note) {
+            $copies = [];
+
+            for ($i = 0; $i < $quantity; $i++) {
+                $copies[] = $this->createCopy($book, 'Added copy', $note);
+            }
+
+            return new Collection($copies);
+        });
+    }
+
+    /** Takes one copy out of the catalog (retires it, so its accession number is never reused) and logs why. */
+    public function removeCopy(BookCopy $copy, string $reason, ?string $note = null): BookCopy
+    {
+        return $this->retireCopy($copy, $reason, $note);
+    }
+
+    private function retireCopy(BookCopy $copy, string $reason, ?string $note = null): BookCopy
+    {
+        return DB::transaction(function () use ($copy, $reason, $note) {
+            $copy = $this->bookCopies->lockForUpdateWithBook($copy->copyID);
+
+            if ($copy->status === 'borrowed') {
+                throw ValidationException::withMessages([
+                    'status' => ["Accession no. {$copy->accessionNumber} is out on loan. Check it in first."],
+                ]);
+            }
+
+            if ($copy->status === 'retired') {
+                throw ValidationException::withMessages([
+                    'status' => ["Accession no. {$copy->accessionNumber} has already been removed from the catalog."],
+                ]);
+            }
+
+            // A shelf copy that an accepted reservation is waiting on can't be taken out from under it.
+            if ($copy->status === 'available') {
+                $free = $this->bookCopies->availableCountForBook($copy->bookID) - $this->reservations->acceptedCountForBook($copy->bookID);
+
+                if ($free <= 0) {
+                    throw ValidationException::withMessages([
+                        'status' => ["Accession no. {$copy->accessionNumber} is held for an accepted reservation. Let the student collect it first."],
+                    ]);
+                }
+            }
+
+            $retired = $this->bookCopies->update($copy, ['status' => 'retired']);
+            $this->stockLog->removed($copy->book, $retired, $reason, $note);
+
+            return $retired;
+        });
     }
 
     public function createBook(array $validated): Book
@@ -224,7 +293,7 @@ class CatalogService
             }
 
             for ($i = 0; $i < $validated['quantity']; $i++) {
-                $this->createCopy($book->bookID);
+                $this->createCopy($book, 'New book');
             }
 
             return $book;
@@ -267,10 +336,6 @@ class CatalogService
                 $book->authors()->sync($syncData);
             }
 
-            if (array_key_exists('quantity', $validated)) {
-                $this->adjustCopyQuantity($book, $validated['quantity']);
-            }
-
             return $book;
         });
 
@@ -303,6 +368,7 @@ class CatalogService
                 'barcodeValue'    => $copy->barcodeValue,
                 'status'          => $copy->status,
             ])->values(),
+            'heldCopies' => $book->reservations()->where('status', 'Accepted')->count(),
             'loans'     => $this->loans->countsForBook($book->bookID),
             'pages'     => app(BookPageService::class)->forBook($book),
             'createdAt' => $book->created_at?->toIso8601String(),
@@ -325,47 +391,27 @@ class CatalogService
         }
 
         DB::transaction(function () use ($book) {
-            $book->copies()->where('status', '!=', 'retired')->update(['status' => 'retired']);
+            foreach ($book->copies()->where('status', '!=', 'retired')->get() as $copy) {
+                $copy->update(['status' => 'retired']);
+                $this->stockLog->removed($book, $copy, 'Book removed', 'The whole book was removed from the catalog.');
+            }
+
             $this->books->delete($book);
         });
     }
 
-    private function createCopy(int $bookID): void
+    private function createCopy(Book $book, string $reason, ?string $note = null): BookCopy
     {
-        $this->bookCopies->create([
+        $copy = $this->bookCopies->create([
             'uuid'            => Str::uuid(),
-            'bookID'          => $bookID,
+            'bookID'          => $book->bookID,
             'barcodeValue'    => $this->bookCopies->generateUniqueBarcode(),
             'status'          => 'available',
         ]);
-    }
 
-    private function adjustCopyQuantity(Book $book, int $desiredQuantity): void
-    {
-        $currentCount = $this->bookCopies->countActiveForBook($book->bookID);
+        $this->stockLog->added($book, $copy, $reason, $note);
 
-        if ($desiredQuantity > $currentCount) {
-            for ($i = 0; $i < $desiredQuantity - $currentCount; $i++) {
-                $this->createCopy($book->bookID);
-            }
-
-            return;
-        }
-
-        if ($desiredQuantity < $currentCount) {
-            $toRemove = $currentCount - $desiredQuantity;
-            $removable = $this->bookCopies->availableForBook($book->bookID, $toRemove);
-
-            if ($removable->count() < $toRemove) {
-                throw ValidationException::withMessages([
-                    'quantity' => ["Cannot reduce to {$desiredQuantity}: only {$removable->count()} copies are currently available to retire (others are borrowed, lost, or damaged)."],
-                ]);
-            }
-
-            foreach ($removable as $copy) {
-                $this->bookCopies->update($copy, ['status' => 'retired']);
-            }
-        }
+        return $copy;
     }
 
     /**

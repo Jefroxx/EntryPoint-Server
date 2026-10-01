@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Mail\StudentApproved;
+use App\Mail\StudentRejected;
 use App\Models\Student;
 use App\Repositories\Contracts\StudentRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -83,6 +84,12 @@ class StudentApprovalService
             'Your registration was not approved. Please contact the library for details.',
             'registration_rejected'
         );
+
+        try {
+            Mail::to($student->user->email)->send(new StudentRejected($student));
+        } catch (Throwable $exception) {
+            Log::error("Rejection email failed for student {$student->studentID}", ['exception' => $exception]);
+        }
 
         return $student->fresh();
     }

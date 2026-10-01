@@ -17,6 +17,7 @@ use App\Http\Controllers\Librarian\ReportController;
 use App\Http\Controllers\Librarian\ReservationController as LibrarianReservationController;
 use App\Http\Controllers\Librarian\ResourceController as LibrarianResourceController;
 use App\Http\Controllers\Librarian\ResourceUsageLogController;
+use App\Http\Controllers\Librarian\ScanController;
 use App\Http\Controllers\Librarian\SelfReturnReportController;
 use App\Http\Controllers\Librarian\SettingsController;
 use App\Http\Controllers\Librarian\StudentApprovalController;
@@ -123,6 +124,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/attendance-logs', [AttendanceLogController::class, 'index']);
         Route::get('/attendance-logs/stats', [AttendanceLogController::class, 'stats']);
         Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store'])->middleware('throttle:120,1');
+        // The universal scanner: the code says whether it's a student ID, a receipt, a slip or a facility.
+        Route::post('/scan', [ScanController::class, 'store'])->middleware('throttle:120,1');
 
         Route::get('/students', [StudentApprovalController::class, 'index']);
         Route::get('/students/stats', [StudentApprovalController::class, 'stats']);
@@ -132,6 +135,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/library/stats', [BookController::class, 'libraryStats']);
         Route::get('/copies', [BookController::class, 'copies']);
         Route::patch('/copies/{copy}', [BookController::class, 'updateCopy']);
+        Route::post('/copies/{copy}/remove', [BookController::class, 'removeCopy']);
+        Route::post('/books/{book}/copies', [BookController::class, 'addCopies']);
+        Route::get('/stock-logs', [BookController::class, 'stockLogs']);
 
         Route::post('/books', [BookController::class, 'store']);
         Route::get('/books/{book}', [BookController::class, 'show']);
@@ -157,6 +163,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/loans/stats', [LoanController::class, 'stats']);
         Route::post('/loans', [LoanController::class, 'store']);
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnBook']);
+        Route::post('/loans/{loan}/receive', [LoanController::class, 'receive']);
+        Route::post('/loans/{loan}/finish-return', [LoanController::class, 'finishReturn']);
         Route::get('/loans/{loan}/receipt', [LoanController::class, 'receipt']);
 
         Route::get('/penalties', [PenaltyController::class, 'index']);
@@ -171,6 +179,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/reservations', [LibrarianReservationController::class, 'index']);
         Route::get('/reservations/queue/{bookID}', [LibrarianReservationController::class, 'queueForBook']);
+        Route::get('/reservations/lookup/{code}', [LibrarianReservationController::class, 'lookup']);
         Route::post('/reservations/{reservation}/accept', [LibrarianReservationController::class, 'accept']);
         Route::post('/reservations/{reservation}/reject', [LibrarianReservationController::class, 'reject']);
 
@@ -192,6 +201,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/market-items', [LibrarianMarketItemController::class, 'store']);
         Route::patch('/market-items/{item}', [LibrarianMarketItemController::class, 'update']);
         Route::delete('/market-items/{item}', [LibrarianMarketItemController::class, 'destroy']);
+        Route::post('/market-items/{item}/photo', [LibrarianMarketItemController::class, 'storePhoto']);
+        Route::delete('/market-items/{item}/photo', [LibrarianMarketItemController::class, 'destroyPhoto']);
 
         Route::get('/point-redemptions', [PointRedemptionController::class, 'index']);
         Route::post('/point-redemptions/{redemption}/fulfill', [PointRedemptionController::class, 'fulfill']);

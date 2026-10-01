@@ -29,6 +29,12 @@ class ReservationController extends Controller
         return response()->json(['queue' => $this->reservationService->queueForBook($bookID)]);
     }
 
+    /** Looks up an accepted reservation from the code on the student's pickup slip. */
+    public function lookup(string $code)
+    {
+        return response()->json(['reservation' => $this->reservationService->findByPickupCode($code)]);
+    }
+
     public function accept(Reservation $reservation)
     {
         $reservation = $this->reservationService->accept($reservation);

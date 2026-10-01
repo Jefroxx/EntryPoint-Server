@@ -95,7 +95,25 @@ class CirculationService
                 ]);
             }
 
+            // A student collecting a book they have an accepted reservation for is collecting that reservation,
+            // even if the librarian checked the book out without picking it; otherwise it would stay Accepted
+            // and keep holding a copy the student already has.
+            if (empty($validated['reservationID'])) {
+                $own = $this->reservations->acceptedForStudentAndBook($validated['studentID'], $copy->bookID);
+
+                if ($own) {
+                    $validated['reservationID'] = $own->reservationID;
+                }
+            }
+
             $reservation = null;
+            if (empty($validated['reservationID'])
+                && $this->bookCopies->availableCountForBook($copy->bookID) <= $this->reservations->acceptedCountForBook($copy->bookID)) {
+                throw ValidationException::withMessages([
+                    'copyID' => ['Every available copy of this book is held for an accepted reservation.'],
+                ]);
+            }
+
             if (! empty($validated['reservationID'])) {
                 $reservation = $this->reservations->findOrFail($validated['reservationID']);
 
@@ -205,6 +223,11 @@ class CirculationService
 
     public function returnBook(Loan $loan): Loan
     {
+        // A book already handed over and waiting to be checked finishes as "in good condition".
+        if ($loan->status === 'Received') {
+            return $this->finishReturn($loan, 'good');
+        }
+
         if ($loan->status !== 'Active') {
             throw ValidationException::withMessages([
                 'loan' => ["Only an 'Active' loan can be returned."],
@@ -219,6 +242,89 @@ class CirculationService
             $loan->studentID,
             "Your return of \"{$loan->copy->book->title}\" has been processed. Thank you!",
             'loan_returned'
+        );
+
+        return $loan;
+    }
+
+    /** The loan behind a borrowing receipt's barcode (L-000123), or null if the code isn't one. */
+    public function findByReceiptCode(string $code): ?Loan
+    {
+        if (! preg_match('/^L-(\d{1,9})$/i', trim($code), $m)) {
+            return null;
+        }
+
+        return $this->loans->find((int) $m[1]);
+    }
+
+    /**
+     * The student has handed the book over, so it is now in the librarian's hands, but it isn't back on the
+     * shelf until the librarian has checked it. The return time is fixed here (a late fine stops growing at the
+     * moment the book was handed over), the loan becomes "Received", and the copy stays off the shelf.
+     */
+    public function receiveBook(Loan $loan): Loan
+    {
+        if ($loan->status === 'Received') {
+            throw ValidationException::withMessages([
+                'loan' => ['This book was already received. Check it for damage to finish the return.'],
+            ]);
+        }
+
+        if ($loan->status !== 'Active') {
+            throw ValidationException::withMessages([
+                'loan' => ['This loan is already closed.'],
+            ]);
+        }
+
+        DB::transaction(function () use ($loan) {
+            $this->loans->update($loan, ['returnDate' => now(), 'status' => 'Received']);
+            $this->accruePenalty($loan);
+        });
+
+        $this->loans->loadForResponse($loan);
+
+        $this->notifications->send(
+            $loan->studentID,
+            "We've received \"{$loan->copy->book->title}\". A librarian will check its condition to finish your return.",
+            'loan_received'
+        );
+
+        return $loan;
+    }
+
+    /**
+     * After checking the received book: in good condition it goes back on the shelf (and the next person in the
+     * reservation queue is told), damaged it stays off the shelf marked as damaged.
+     *
+     * @param  'good'|'damaged'  $condition
+     */
+    public function finishReturn(Loan $loan, string $condition, ?string $note = null): Loan
+    {
+        if ($loan->status !== 'Received') {
+            throw ValidationException::withMessages([
+                'loan' => ['Only a book that has been received can be checked and finished.'],
+            ]);
+        }
+
+        DB::transaction(function () use ($loan, $condition) {
+            $this->loans->update($loan, ['status' => 'Returned']);
+            $this->bookCopies->update($loan->copy, ['status' => $condition === 'damaged' ? 'damaged' : 'available']);
+            $this->accruePenalty($loan);
+
+            if ($condition !== 'damaged') {
+                $this->reservationService->notifyNextInQueue($loan->copy->bookID);
+            }
+        });
+
+        $this->loans->loadForResponse($loan);
+
+        $title = $loan->copy->book->title;
+        $this->notifications->send(
+            $loan->studentID,
+            $condition === 'damaged'
+                ? "\"{$title}\" was returned with damage" . ($note ? ": {$note}" : '') . '. Please visit the library desk.'
+                : "Your return of \"{$title}\" has been checked. Thank you!",
+            $condition === 'damaged' ? 'loan_returned_damaged' : 'loan_returned'
         );
 
         return $loan;
@@ -391,7 +497,7 @@ class CirculationService
      */
     private function markReturned(Loan $loan): void
     {
-        $this->loans->update($loan, ['returnDate' => now(), 'status' => 'Returned']);
+        $this->loans->update($loan, ['returnDate' => $loan->returnDate ?? now(), 'status' => 'Returned']);
         $this->bookCopies->update($loan->copy, ['status' => 'available']);
         $this->accruePenalty($loan);
         $this->reservationService->notifyNextInQueue($loan->copy->bookID);

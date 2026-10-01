@@ -7,6 +7,7 @@ use App\Models\BookCopy;
 use App\Models\BookSubject;
 use App\Models\Librarian;
 use App\Models\LoanPeriod;
+use App\Models\Reservation;
 use App\Models\PenaltyRule;
 use App\Models\PenaltyType;
 use App\Models\Student;
@@ -92,5 +93,46 @@ class LoanReceiptTest extends TestCase
         $this->getJson("/api/librarian/loans/{$loanID}/receipt")->assertOk()->assertJsonPath('receipt.book.title', $book->title);
 
         $this->actingAs($student->user)->getJson("/api/librarian/loans/{$loanID}/receipt")->assertForbidden();
+    }
+
+    public function test_an_accepted_reservation_has_a_pickup_code_the_desk_can_look_up_and_check_out(): void
+    {
+        $student = Student::factory()->create(['registrationStatus' => 'approved']);
+        $book = Book::factory()->create(['areaOfLibrary' => 'circulation']);
+        $copy = BookCopy::factory()->create(['bookID' => $book->bookID]);
+        $reservation = Reservation::create(['uuid' => Str::uuid(), 'studentID' => $student->studentID, 'bookID' => $book->bookID, 'status' => 'Accepted']);
+
+        $code = 'R-' . str_pad((string) $reservation->reservationID, 6, '0', STR_PAD_LEFT);
+
+        $this->actingAs($student->user)->getJson('/api/student/reservations')
+            ->assertOk()
+            ->assertJsonPath('reservations.0.pickupCode', $code);
+
+        $this->actingAs($this->librarian)->getJson("/api/librarian/reservations/lookup/{$code}")
+            ->assertOk()
+            ->assertJsonPath('reservation.reservationID', $reservation->reservationID)
+            ->assertJsonPath('reservation.student.studentID', $student->studentID);
+
+        $this->postJson('/api/librarian/loans', [
+            'studentID' => $student->studentID, 'copyID' => $copy->copyID, 'reservationID' => $reservation->reservationID,
+        ])->assertCreated();
+
+        $this->getJson("/api/librarian/reservations/lookup/{$code}")
+            ->assertStatus(422)
+            ->assertJsonPath('errors.code.0', 'This reservation has already been collected.');
+    }
+
+    public function test_lookup_refuses_unknown_and_unaccepted_codes(): void
+    {
+        $student = Student::factory()->create(['registrationStatus' => 'approved']);
+        $book = Book::factory()->create();
+        $waiting = Reservation::create(['uuid' => Str::uuid(), 'studentID' => $student->studentID, 'bookID' => $book->bookID, 'status' => 'Waiting']);
+
+        $this->actingAs($this->librarian);
+        $this->getJson('/api/librarian/reservations/lookup/nonsense')->assertStatus(422);
+        $this->getJson('/api/librarian/reservations/lookup/R-999999')->assertStatus(422);
+        $this->getJson('/api/librarian/reservations/lookup/R-' . str_pad((string) $waiting->reservationID, 6, '0', STR_PAD_LEFT))
+            ->assertStatus(422)
+            ->assertJsonPath('errors.code.0', 'This reservation has not been accepted yet.');
     }
 }

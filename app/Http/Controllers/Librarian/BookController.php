@@ -8,12 +8,15 @@ use App\Http\Requests\UpdateBookCopyRequest;
 use App\Http\Requests\UpdateBookRequest;
 use App\Models\Book;
 use App\Models\BookCopy;
+use App\Models\BookStockLog;
+use App\Services\StockLogService;
+use Illuminate\Validation\Rule;
 use App\Services\CatalogService;
 use Illuminate\Http\Request;
 
 class BookController extends Controller
 {
-    public function __construct(private CatalogService $catalog)
+    public function __construct(private CatalogService $catalog, private StockLogService $stockLog)
     {
     }
 
@@ -63,6 +66,59 @@ class BookController extends Controller
                 : "Accession no. {$copy->accessionNumber} updated.",
             'copy' => $copy->only(['copyID', 'accessionNumber', 'status']),
         ]);
+    }
+
+    /** Adds more copies of a book that is already in the catalog. */
+    public function addCopies(Request $request, Book $book)
+    {
+        $data = $request->validate([
+            'quantity' => ['required', 'integer', 'min:1', 'max:50'],
+            'note'     => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $copies = $this->catalog->addCopies($book, $data['quantity'], $data['note'] ?? null);
+        $numbers = $copies->pluck('accessionNumber')->implode(', ');
+
+        return response()->json([
+            'message' => $copies->count() === 1
+                ? "Added accession no. {$numbers}."
+                : "Added {$copies->count()} copies (accession nos. {$numbers}).",
+            'copies' => $copies->map(fn (BookCopy $copy) => $copy->only(['copyID', 'accessionNumber', 'status']))->values(),
+        ], 201);
+    }
+
+    /** Removes one copy from the catalog, recording why. */
+    public function removeCopy(Request $request, BookCopy $copy)
+    {
+        $data = $request->validate([
+            'reason' => ['required', Rule::in(BookStockLog::REMOVE_REASONS)],
+            'note'   => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $copy = $this->catalog->removeCopy($copy, $data['reason'], $data['note'] ?? null);
+
+        return response()->json([
+            'message' => "Accession no. {$copy->accessionNumber} removed from the catalog.",
+            'copy'    => $copy->only(['copyID', 'accessionNumber', 'status']),
+        ]);
+    }
+
+    /** The stock log: every copy added or removed, newest first. */
+    public function stockLogs(Request $request)
+    {
+        $filters = $request->validate([
+            'search'  => ['nullable', 'string', 'max:255'],
+            'action'  => ['nullable', Rule::in(BookStockLog::ACTIONS)],
+            'bookID'  => ['nullable', 'integer'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return response()->json($this->stockLog->paginate(
+            $filters['search'] ?? null,
+            $filters['action'] ?? null,
+            isset($filters['bookID']) ? (int) $filters['bookID'] : null,
+            (int) ($filters['perPage'] ?? 15),
+        ));
     }
 
     public function show(Book $book)

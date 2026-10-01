@@ -54,6 +54,33 @@ class LoanController extends Controller
      * to Student\LoanController::selfReturn(), which stages a report
      * for later librarian verification).
      */
+    /** The student handed the book over: it is now in the librarian's hands, pending a check for damage. */
+    public function receive(Loan $loan)
+    {
+        $loan = $this->circulation->receiveBook($loan);
+
+        return response()->json([
+            'message' => 'Book received. Check it for damage to finish the return.',
+            'loan'    => $loan,
+        ]);
+    }
+
+    /** After checking the received book: back on the shelf if it is fine, marked damaged if it isn't. */
+    public function finishReturn(Request $request, Loan $loan)
+    {
+        $data = $request->validate([
+            'condition' => ['required', 'in:good,damaged'],
+            'note'      => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $loan = $this->circulation->finishReturn($loan, $data['condition'], $data['note'] ?? null);
+
+        return response()->json([
+            'message' => $data['condition'] === 'damaged' ? 'Return finished. The copy is marked damaged.' : 'Return finished. The copy is back on the shelf.',
+            'loan'    => $loan,
+        ]);
+    }
+
     public function returnBook(Loan $loan)
     {
         $loan = $this->circulation->returnBook($loan);

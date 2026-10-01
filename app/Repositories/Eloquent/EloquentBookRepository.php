@@ -30,9 +30,12 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
 
     public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
     {
-        $onShelf = fn ($copies) => $copies->where('status', 'available');
+        // "Free" means on the shelf and not held for an accepted reservation.
+        $free = "(select count(*) from book_copies where book_copies.bookID = books.bookID and book_copies.status = 'available')
+            > (select count(*) from reservations where reservations.bookID = books.bookID and reservations.status = 'Accepted')";
 
         return Book::with(['subject', 'authors', 'copies' => fn ($copies) => $copies->where('status', '!=', 'retired')])
+            ->withCount(['reservations as held_copies' => fn ($reservations) => $reservations->where('status', 'Accepted')])
             // Matches what the search box promises: title, author or ISBN (and call number, for staff).
             ->when($search, function ($query, $term) {
                 $query->where(function ($inner) use ($term) {
@@ -43,8 +46,8 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
                 });
             })
             ->when($subjectID, fn ($query, $id) => $query->where('subjectID', $id))
-            ->when($availability === 'available', fn ($query) => $query->whereHas('copies', $onShelf))
-            ->when($availability === 'unavailable', fn ($query) => $query->whereDoesntHave('copies', $onShelf))
+            ->when($availability === 'available', fn ($query) => $query->whereRaw($free))
+            ->when($availability === 'unavailable', fn ($query) => $query->whereRaw("not ({$free})"))
             ->orderByDesc('bookID')
             ->paginate($perPage);
     }
@@ -62,7 +65,10 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
                 });
             })
             ->when($subjectID, fn ($query, $id) => $query->where('subjectID', $id))
-            ->when($availableOnly, fn ($query) => $query->whereHas('copies', fn ($copies) => $copies->where('status', 'available')))
+            ->when($availableOnly, fn ($query) => $query->whereRaw(
+                "(select count(*) from book_copies where book_copies.bookID = books.bookID and book_copies.status = 'available')
+                > (select count(*) from reservations where reservations.bookID = books.bookID and reservations.status = 'Accepted')"
+            ))
             ->orderBy('title')
             ->paginate($perPage);
     }
@@ -77,6 +83,7 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
         return [
             'copies as total_copies'     => fn ($query) => $query->where('status', '!=', 'retired'),
             'copies as available_copies' => fn ($query) => $query->where('status', 'available'),
+            'reservations as held_copies' => fn ($query) => $query->where('status', 'Accepted'),
         ];
     }
 }

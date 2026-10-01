@@ -16,6 +16,17 @@ class Resource extends Model
 
     public const STATUSES = ['Available', 'In Use', 'Unavailable'];
 
+    protected $appends = ['barcodeValue'];
+
+    /**
+     * The code on the facility's printed label (F-000012). The universal scanner reads the prefix to know it is
+     * a computer or study room, so scanning it starts or ends a session instead of an attendance check-in.
+     */
+    public function getBarcodeValueAttribute(): string
+    {
+        return 'F-' . str_pad((string) $this->resID, 6, '0', STR_PAD_LEFT);
+    }
+
     public function usageLogs()
     {
         return $this->hasMany(ResourceUsageLog::class, 'resID', 'resID');

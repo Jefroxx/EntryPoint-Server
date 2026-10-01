@@ -219,7 +219,8 @@ class StudentPortalService
             'shelfLocation'   => $book->shelfLocation,
             'circulationType' => $book->areaOfLibrary,
             'totalCopies'     => (int) ($book->total_copies ?? 0),
-            'availableCopies' => (int) ($book->available_copies ?? 0),
+            // Copies held for an accepted reservation aren't up for grabs.
+            'availableCopies' => max(0, (int) ($book->available_copies ?? 0) - (int) ($book->held_copies ?? 0)),
             'queueLength'     => $queueLength,
         ];
     }
