@@ -96,6 +96,7 @@ class StudentPortalService
 
             return [
                 'loanID'       => $loan->loanID,
+                'uuid'         => $loan->uuid,
                 'status'       => $reported ? 'Reported' : $loan->status,
                 'checkoutDate' => $loan->checkoutDate,
                 'dueDate'      => $loan->dueDate,
@@ -229,6 +230,7 @@ class StudentPortalService
     {
         return [
             'bookID'        => $book->bookID,
+            'uuid'          => $book->uuid,
             'title'         => $book->title,
             'coverImageURL' => $book->coverImageURL,
             'subject'       => $book->subject

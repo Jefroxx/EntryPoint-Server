@@ -66,6 +66,7 @@ class ScanService
             'message' => 'Book received. Check it for damage.',
             'loan'    => [
                 'loanID'          => $loan->loanID,
+                'uuid'            => $loan->uuid,
                 'receiptNumber'   => 'L-' . str_pad((string) $loan->loanID, 6, '0', STR_PAD_LEFT),
                 'bookTitle'       => $loan->copy->book->title,
                 'accessionNumber' => $loan->copy->accessionNumber,
@@ -88,6 +89,7 @@ class ScanService
             'message'     => 'Reservation found. Open the checkout.',
             'reservation' => [
                 'reservationID'   => $reservation->reservationID,
+                'uuid'            => $reservation->uuid,
                 'pickupCode'      => $reservation->pickupCode,
                 'studentID'       => $reservation->studentID,
                 'bookID'          => $reservation->bookID,

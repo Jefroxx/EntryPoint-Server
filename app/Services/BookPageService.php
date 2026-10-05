@@ -100,6 +100,7 @@ class BookPageService
     {
         return [
             'pageID'   => $page->pageID,
+            'uuid'     => $page->uuid,
             'section'  => $page->section,
             'position' => $page->position,
             // Built from the request's own address, so the link works whatever APP_URL says.

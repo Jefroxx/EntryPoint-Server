@@ -37,7 +37,7 @@ class StockLogTest extends TestCase
     public function test_adding_copies_to_an_existing_book_logs_each_one(): void
     {
         $response = $this->actingAs($this->librarian)
-            ->postJson("/api/librarian/books/{$this->book->bookID}/copies", ['quantity' => 2, 'note' => 'Donated by the Class of 2025'])
+            ->postJson("/api/librarian/books/{$this->book->uuid}/copies", ['quantity' => 2, 'note' => 'Donated by the Class of 2025'])
             ->assertCreated();
 
         $this->assertCount(2, $response->json('copies'));
@@ -55,7 +55,7 @@ class StockLogTest extends TestCase
         $extra = BookCopy::factory()->create(['bookID' => $this->book->bookID]);
 
         $this->actingAs($this->librarian)
-            ->postJson("/api/librarian/copies/{$extra->copyID}/remove", ['reason' => 'Damaged', 'note' => 'Water damage'])
+            ->postJson("/api/librarian/copies/{$extra->uuid}/remove", ['reason' => 'Damaged', 'note' => 'Water damage'])
             ->assertOk();
 
         $this->assertSame('retired', $extra->fresh()->status);
@@ -64,30 +64,31 @@ class StockLogTest extends TestCase
         $this->assertSame('Damaged', $log->reason);
         $this->assertSame((string) $extra->accessionNumber, $log->accessionNumber);
 
-        $this->postJson("/api/librarian/copies/{$extra->copyID}/remove", ['reason' => 'Lost'])->assertStatus(422);
-        $this->postJson("/api/librarian/copies/{$extra->copyID}/remove", ['reason' => 'Because'])->assertStatus(422);
+        $this->postJson("/api/librarian/copies/{$extra->uuid}/remove", ['reason' => 'Lost'])->assertStatus(422);
+        $this->postJson("/api/librarian/copies/{$extra->uuid}/remove", ['reason' => 'Because'])->assertStatus(422);
     }
 
     public function test_a_borrowed_copy_or_one_held_for_a_reservation_cannot_be_removed(): void
     {
         $borrowed = BookCopy::factory()->create(['bookID' => $this->book->bookID, 'status' => 'borrowed']);
-        $this->actingAs($this->librarian)->postJson("/api/librarian/copies/{$borrowed->copyID}/remove", ['reason' => 'Lost'])->assertStatus(422);
+        $this->actingAs($this->librarian)->postJson("/api/librarian/copies/{$borrowed->uuid}/remove", ['reason' => 'Lost'])->assertStatus(422);
 
         // The book's only shelf copy is promised to an accepted reservation.
         $student = Student::factory()->create(['registrationStatus' => 'approved']);
         Reservation::create(['uuid' => Str::uuid(), 'studentID' => $student->studentID, 'bookID' => $this->book->bookID, 'status' => 'Accepted']);
         $held = BookCopy::where('bookID', $this->book->bookID)->where('status', 'available')->first();
 
-        $this->postJson("/api/librarian/copies/{$held->copyID}/remove", ['reason' => 'Lost'])->assertStatus(422);
+        $this->postJson("/api/librarian/copies/{$held->uuid}/remove", ['reason' => 'Lost'])->assertStatus(422);
         $this->assertSame(0, BookStockLog::where('action', 'removed')->count());
     }
 
     public function test_the_stock_log_lists_newest_first_and_filters_by_action(): void
     {
         $this->actingAs($this->librarian);
-        $this->postJson("/api/librarian/books/{$this->book->bookID}/copies", ['quantity' => 1])->assertCreated();
+        $this->postJson("/api/librarian/books/{$this->book->uuid}/copies", ['quantity' => 1])->assertCreated();
         $copyID = BookCopy::where('bookID', $this->book->bookID)->orderByDesc('copyID')->value('copyID');
-        $this->postJson("/api/librarian/copies/{$copyID}/remove", ['reason' => 'Withdrawn'])->assertOk();
+        $copyUuid = BookCopy::find($copyID)->uuid;
+        $this->postJson("/api/librarian/copies/{$copyUuid}/remove", ['reason' => 'Withdrawn'])->assertOk();
 
         $this->getJson('/api/librarian/stock-logs')->assertOk()
             ->assertJsonPath('total', 2)

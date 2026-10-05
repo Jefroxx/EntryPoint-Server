@@ -70,14 +70,15 @@ class LoanReceiptTest extends TestCase
         $loanID = $this->actingAs($this->librarian)
             ->postJson('/api/librarian/loans', ['studentID' => $owner->studentID, 'copyID' => $copy->copyID])
             ->json('loan.loanID');
+        $loanUuid = \App\Models\Loan::find($loanID)->uuid;
 
         $this->actingAs($owner->user)
-            ->getJson("/api/student/loans/{$loanID}/receipt")
+            ->getJson("/api/student/loans/{$loanUuid}/receipt")
             ->assertOk()
             ->assertJsonPath('receipt.book.title', 'El Filibusterismo')
             ->assertJsonPath('receipt.printedBy', null);
 
-        $this->actingAs($other->user)->getJson("/api/student/loans/{$loanID}/receipt")->assertNotFound();
+        $this->actingAs($other->user)->getJson("/api/student/loans/{$loanUuid}/receipt")->assertNotFound();
     }
 
     public function test_a_receipt_can_be_reprinted_and_students_cannot_fetch_it(): void
@@ -89,10 +90,11 @@ class LoanReceiptTest extends TestCase
         $loanID = $this->actingAs($this->librarian)
             ->postJson('/api/librarian/loans', ['studentID' => $student->studentID, 'copyID' => $copy->copyID])
             ->json('loan.loanID');
+        $loanUuid = \App\Models\Loan::find($loanID)->uuid;
 
-        $this->getJson("/api/librarian/loans/{$loanID}/receipt")->assertOk()->assertJsonPath('receipt.book.title', $book->title);
+        $this->getJson("/api/librarian/loans/{$loanUuid}/receipt")->assertOk()->assertJsonPath('receipt.book.title', $book->title);
 
-        $this->actingAs($student->user)->getJson("/api/librarian/loans/{$loanID}/receipt")->assertForbidden();
+        $this->actingAs($student->user)->getJson("/api/librarian/loans/{$loanUuid}/receipt")->assertForbidden();
     }
 
     public function test_an_accepted_reservation_has_a_pickup_code_the_desk_can_look_up_and_check_out(): void

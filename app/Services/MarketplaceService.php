@@ -106,6 +106,7 @@ class MarketplaceService
     {
         $items = $this->marketItems->orderedByPointCost()->map(fn (MarketItem $item) => [
             'itemID'     => $item->itemID,
+            'uuid'       => $item->uuid,
             'name'       => $item->name,
             'type'       => $item->type,
             'photoURL'   => $item->photoURL,

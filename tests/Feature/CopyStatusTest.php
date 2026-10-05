@@ -34,11 +34,11 @@ class CopyStatusTest extends TestCase
         $copy = BookCopy::factory()->create(['bookID' => $this->book->bookID]);
 
         $this->actingAs($this->librarian)
-            ->patchJson("/api/librarian/copies/{$copy->copyID}", ['status' => 'damaged'])
+            ->patchJson("/api/librarian/copies/{$copy->uuid}", ['status' => 'damaged'])
             ->assertOk()
             ->assertJsonPath('copy.status', 'damaged');
 
-        $this->patchJson("/api/librarian/copies/{$copy->copyID}", ['status' => 'available'])->assertOk();
+        $this->patchJson("/api/librarian/copies/{$copy->uuid}", ['status' => 'available'])->assertOk();
         $this->assertSame('available', $copy->fresh()->status);
     }
 
@@ -47,7 +47,7 @@ class CopyStatusTest extends TestCase
         $copy = BookCopy::factory()->create(['bookID' => $this->book->bookID]);
 
         $this->actingAs($this->librarian)
-            ->patchJson("/api/librarian/copies/{$copy->copyID}", ['status' => 'retired'])
+            ->patchJson("/api/librarian/copies/{$copy->uuid}", ['status' => 'retired'])
             ->assertOk();
 
         $this->getJson('/api/librarian/copies')->assertJsonPath('total', 0);
@@ -58,7 +58,7 @@ class CopyStatusTest extends TestCase
         $copy = BookCopy::factory()->borrowed()->create(['bookID' => $this->book->bookID]);
 
         $this->actingAs($this->librarian)
-            ->patchJson("/api/librarian/copies/{$copy->copyID}", ['status' => 'lost'])
+            ->patchJson("/api/librarian/copies/{$copy->uuid}", ['status' => 'lost'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('status');
 
@@ -70,7 +70,7 @@ class CopyStatusTest extends TestCase
         $copy = BookCopy::factory()->create(['bookID' => $this->book->bookID]);
 
         $this->actingAs($this->librarian)
-            ->patchJson("/api/librarian/copies/{$copy->copyID}", ['status' => 'borrowed'])
+            ->patchJson("/api/librarian/copies/{$copy->uuid}", ['status' => 'borrowed'])
             ->assertUnprocessable();
     }
 
@@ -80,7 +80,7 @@ class CopyStatusTest extends TestCase
         $student = User::factory()->create(['userType' => 'student']);
 
         $this->actingAs($student)
-            ->patchJson("/api/librarian/copies/{$copy->copyID}", ['status' => 'lost'])
+            ->patchJson("/api/librarian/copies/{$copy->uuid}", ['status' => 'lost'])
             ->assertForbidden();
     }
 }

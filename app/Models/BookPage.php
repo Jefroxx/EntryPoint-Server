@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesUuidRouteKey;
 use Illuminate\Database\Eloquent\Model;
 
 /** A photo of one of a book's reference pages; see BookPageService. */
 class BookPage extends Model
 {
+    use UsesUuidRouteKey;
+
     protected $primaryKey = 'pageID';
 
     /** In the order they appear in a book; also the order they're shown in. */

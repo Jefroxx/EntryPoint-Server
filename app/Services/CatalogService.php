@@ -81,6 +81,7 @@ class CatalogService
     {
         return $this->books->paginateCatalog($search, $subjectID, $availability, $perPage)->through(fn (Book $book) => [
             'bookID'        => $book->bookID,
+            'uuid'          => $book->uuid,
             'title'         => $book->title,
             'isbn'          => $book->isbn,
             'callNumber'    => $book->classNumber,
@@ -95,6 +96,7 @@ class CatalogService
             ])->values(),
             'copies' => $book->copies->map(fn ($copy) => [
                 'copyID'          => $copy->copyID,
+                'uuid'            => $copy->uuid,
                 'accessionNumber' => $copy->accessionNumber,
                 'status'          => $copy->status,
             ])->values(),
@@ -110,12 +112,13 @@ class CatalogService
     {
         return $this->bookCopies->paginateCopyCatalog($search, $subjectID, $status, $area, $perPage)->through(fn ($copy) => [
             'copyID'          => $copy->copyID,
+            'uuid'            => $copy->uuid,
             'accessionNumber' => $copy->accessionNumber,
             'barcodeValue'    => $copy->barcodeValue,
             'status'          => $copy->status,
             'book'            => [
                 ...$copy->book->only([
-                    'bookID', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
+                    'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
                     'publisher', 'sourceOfFund', 'cost', 'shelfLocation', 'coverImageURL',
                 ]),
                 'callNumber' => $copy->book->classNumber,
@@ -352,7 +355,7 @@ class CatalogService
 
         return [
             ...$book->only([
-                'bookID', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
+                'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
                 'publisher', 'sourceOfFund', 'cost', 'copyNumber', 'remarks', 'coverImageURL', 'shelfLocation',
             ]),
             'callNumber' => $book->classNumber,
@@ -364,6 +367,7 @@ class CatalogService
             ])->values(),
             'copies' => $book->copies->map(fn ($copy) => [
                 'copyID'          => $copy->copyID,
+                'uuid'            => $copy->uuid,
                 'accessionNumber' => $copy->accessionNumber,
                 'barcodeValue'    => $copy->barcodeValue,
                 'status'          => $copy->status,

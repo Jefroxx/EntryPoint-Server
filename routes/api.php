@@ -178,7 +178,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/overview', [ReportController::class, 'overview']);
 
         Route::get('/reservations', [LibrarianReservationController::class, 'index']);
-        Route::get('/reservations/queue/{bookID}', [LibrarianReservationController::class, 'queueForBook']);
+        Route::get('/reservations/queue/{book}', [LibrarianReservationController::class, 'queueForBook']);
         Route::get('/reservations/lookup/{code}', [LibrarianReservationController::class, 'lookup']);
         Route::post('/reservations/{reservation}/accept', [LibrarianReservationController::class, 'accept']);
         Route::post('/reservations/{reservation}/reject', [LibrarianReservationController::class, 'reject']);

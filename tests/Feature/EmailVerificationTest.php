@@ -152,13 +152,13 @@ class EmailVerificationTest extends TestCase
         $this->register();
         $student = Student::first();
 
-        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->studentID}/approve")
+        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/approve")
             ->assertStatus(422)
             ->assertJsonPath('errors.student.0', "This student hasn't confirmed their email yet.");
 
         $this->get($this->mailedLink());
 
-        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->studentID}/approve")->assertOk();
+        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/approve")->assertOk();
         Mail::assertSent(StudentApproved::class, fn ($mail) => $mail->hasTo('ana@school.edu.ph'));
     }
 
@@ -168,7 +168,7 @@ class EmailVerificationTest extends TestCase
         $this->register();
         $student = Student::first();
 
-        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->studentID}/reject")->assertOk();
+        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/reject")->assertOk();
 
         Mail::assertSent(StudentRejected::class, fn ($mail) => $mail->hasTo('ana@school.edu.ph'));
         Mail::assertNotSent(StudentApproved::class);

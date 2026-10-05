@@ -69,6 +69,7 @@ class AchievementService
 
             return [
                 'achievementID' => $achievement->achievementID,
+                'uuid'          => $achievement->uuid,
                 'name'          => $achievement->name,
                 'pointsReward'  => $achievement->pointsReward,
                 'criteria'      => $achievement->criteriaJSON,

@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Student extends Model
 {
-    use HasFactory;
+    use HasFactory, UsesUuidRouteKey;
 
     // Shared PK pattern: students.studentID IS users.userID (class-table inheritance)
     protected $primaryKey = 'studentID';
