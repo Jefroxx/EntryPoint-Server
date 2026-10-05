@@ -24,9 +24,79 @@ class ReservationService
     ) {
     }
 
+    /**
+     * Whether a copy of the book is free to promise to someone. An accepted reservation holds a copy
+     * until it is collected, so those copies are not counted as available.
+     */
+    public function hasUnheldCopy(int $bookID): bool
+    {
+        return $this->unheldCopyCount($bookID) > 0;
+    }
+
+    /**
+     * Why a Waiting reservation can't be accepted right now, or null if it can. First come, first served:
+     * with N free copies only the first N people in line may be accepted.
+     */
+    private function acceptBlock(Reservation $reservation): ?string
+    {
+        $free = $this->unheldCopyCount($reservation->bookID);
+
+        if ($free <= 0) {
+            return 'No copy of this book is available right now.';
+        }
+
+        // Despite its name this returns the person's place in line (1 = first), not how many are ahead.
+        $position = $this->reservations->queuePositionAheadOf($reservation->bookID, $reservation->reservedAt);
+
+        if ($position > $free) {
+            return "Not their turn yet: they're #{$position} in line and only {$free} " . ($free === 1 ? 'copy is' : 'copies are') . ' free.';
+        }
+
+        return null;
+    }
+
+    private function unheldCopyCount(int $bookID): int
+    {
+        return $this->bookCopies->availableCountForBook($bookID) - $this->reservations->acceptedCountForBook($bookID);
+    }
+
     public function listAll(?string $status): Collection
     {
-        return $this->reservations->listWithFilters($status);
+        $reservations = $this->reservations->listWithFilters($status);
+
+        // Lets the librarian UI grey out "Accept" up front, with the reason, instead of failing on click.
+        return $reservations->each(fn (Reservation $r) => $r->setAttribute(
+            'acceptBlock',
+            $r->status === 'Waiting' ? $this->acceptBlock($r) : null,
+        ));
+    }
+
+    /**
+     * Resolves a pickup slip's code to the reservation behind it, for the checkout desk. Only an
+     * Accepted reservation can be collected, so any other state is explained instead of returned.
+     */
+    public function findByPickupCode(string $code): Reservation
+    {
+        $reservation = preg_match('/^R-(\d{1,9})$/i', trim($code), $m)
+            ? Reservation::with(['student.user', 'book'])->find((int) $m[1])
+            : null;
+
+        if (! $reservation) {
+            throw ValidationException::withMessages(['code' => ["No reservation matches that pickup code."]]);
+        }
+
+        $problem = match ($reservation->status) {
+            'Waiting'   => 'This reservation has not been accepted yet.',
+            'Rejected'  => 'This reservation was rejected.',
+            'Fulfilled' => 'This reservation has already been collected.',
+            default     => null,
+        };
+
+        if ($problem) {
+            throw ValidationException::withMessages(['code' => [$problem]]);
+        }
+
+        return $reservation;
     }
 
     public function queueForBook(int $bookID): Collection
@@ -117,20 +187,9 @@ class ReservationService
             ]);
         }
 
-        // Rule 1: must be the earliest Waiting reservation for this book (FIFO)
-        $earliestWaiting = $this->reservations->earliestWaitingForBook($reservation->bookID);
-
-        if ($earliestWaiting && $earliestWaiting->reservationID !== $reservation->reservationID) {
-            throw ValidationException::withMessages([
-                'reservation' => ["Cannot accept out of order. Reservation #{$earliestWaiting->reservationID} for this book is ahead in the queue and must be handled first."],
-            ]);
-        }
-
-        // Rule 2: an available copy must exist right now
-        if (! $this->bookCopies->hasAvailableForBook($reservation->bookID)) {
-            throw ValidationException::withMessages([
-                'reservation' => ['No available copy of this book right now. Cannot accept the reservation.'],
-            ]);
+        // First come, first served: with N free copies, only the first N people in line can be accepted.
+        if ($block = $this->acceptBlock($reservation)) {
+            throw ValidationException::withMessages(['reservation' => [$block]]);
         }
 
         $this->reservations->update($reservation, ['status' => 'Accepted']);
@@ -187,7 +246,7 @@ class ReservationService
      */
     public function notifyNextInQueue(int $bookID): void
     {
-        if (! $this->bookCopies->hasAvailableForBook($bookID)) {
+        if (! $this->hasUnheldCopy($bookID)) {
             return;
         }
 

@@ -44,6 +44,11 @@ class EloquentBookCopyRepository extends BaseRepository implements BookCopyRepos
         return BookCopy::where('bookID', $bookID)->where('status', 'available')->exists();
     }
 
+    public function availableCountForBook(int $bookID): int
+    {
+        return BookCopy::where('bookID', $bookID)->where('status', 'available')->count();
+    }
+
     public function countsByStatus(): BaseCollection
     {
         return BookCopy::selectRaw('status, COUNT(*) as total')

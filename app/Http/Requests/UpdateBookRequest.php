@@ -40,7 +40,6 @@ class UpdateBookRequest extends FormRequest
             'authors.*.name'          => ['nullable', 'string', 'max:255', 'required_without:authors.*.authorID'],
             'authors.*.role'          => ['nullable', 'string', 'max:100'],
 
-            'quantity'       => ['sometimes', 'integer', 'min:0', 'max:100'],
         ];
     }
 }

@@ -12,12 +12,16 @@ use App\Repositories\Contracts\PointRedemptionRepositoryInterface;
 use App\Repositories\Contracts\StudentRepositoryInterface;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class MarketplaceService
 {
+    private const PHOTO_DISK = 'public';
+
     public function __construct(
         private MarketItemRepositoryInterface $marketItems,
         private MarketCartItemRepositoryInterface $marketCartItems,
@@ -58,6 +62,44 @@ class MarketplaceService
         }
 
         $this->marketItems->delete($item);
+
+        if ($item->photoPath) {
+            Storage::disk(self::PHOTO_DISK)->delete($item->photoPath);
+        }
+    }
+
+    /**
+     * Sets or replaces an item's photo. The browser shrinks it before upload (the server has no image
+     * library), so it's stored as received, on the public disk under market-items/. A new file name each
+     * time, so a replaced photo never shows from the browser's cache.
+     */
+    public function setItemPhoto(MarketItem $item, UploadedFile $photo): MarketItem
+    {
+        $extension = match ($photo->getMimeType()) {
+            'image/png'  => 'png',
+            'image/webp' => 'webp',
+            default      => 'jpg',
+        };
+        $path = $photo->storeAs('market-items', Str::uuid() . '.' . $extension, self::PHOTO_DISK);
+        $previous = $item->photoPath;
+
+        $item = $this->marketItems->update($item, ['photoPath' => $path])->fresh();
+
+        if ($previous) {
+            Storage::disk(self::PHOTO_DISK)->delete($previous);
+        }
+
+        return $item;
+    }
+
+    public function removeItemPhoto(MarketItem $item): MarketItem
+    {
+        if ($item->photoPath) {
+            Storage::disk(self::PHOTO_DISK)->delete($item->photoPath);
+            $item = $this->marketItems->update($item, ['photoPath' => null])->fresh();
+        }
+
+        return $item;
     }
 
     public function studentIndex(Student $student): array
@@ -66,6 +108,7 @@ class MarketplaceService
             'itemID'     => $item->itemID,
             'name'       => $item->name,
             'type'       => $item->type,
+            'photoURL'   => $item->photoURL,
             'pointCost'  => $item->pointCost,
             'stock'      => $item->stock,
             'inStock'    => $item->stock > 0,

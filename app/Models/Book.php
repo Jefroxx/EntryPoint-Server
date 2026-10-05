@@ -47,6 +47,11 @@ class Book extends Model
         return $this->hasMany(BookCopy::class, 'bookID', 'bookID');
     }
 
+    public function reservations()
+    {
+        return $this->hasMany(Reservation::class, 'bookID', 'bookID');
+    }
+
     public function authors()
     {
         return $this->belongsToMany(Author::class, 'book_author', 'bookID', 'authorID')

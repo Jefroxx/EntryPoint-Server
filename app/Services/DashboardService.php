@@ -186,6 +186,10 @@ class DashboardService
             return 'Returned';
         }
 
+        if ($loan->status === 'Received') {
+            return 'Received';
+        }
+
         if ($loan->dueDate->isPast()) {
             return 'Due';
         }
