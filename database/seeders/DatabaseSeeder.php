@@ -17,10 +17,11 @@ class DatabaseSeeder extends Seeder
             ReservationSeeder::class,
             SelfReturnReportSeeder::class,
             ResourceSeeder::class,
-            AchievementSeeder::class,
             AttendanceLogSeeder::class,
             MarketSeeder::class,
             BookSuggestionSeeder::class,
+            // After loans, visits, suggestions and redemptions exist: achievements are measured from them.
+            AchievementSeeder::class,
             NotificationSeeder::class,
         ]);
     }

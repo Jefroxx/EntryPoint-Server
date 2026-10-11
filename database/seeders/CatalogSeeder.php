@@ -47,6 +47,9 @@ class CatalogSeeder extends Seeder
                     BookCopy::factory()->create([
                         'bookID' => $book->bookID,
                         'status' => $i === 0 ? $status : 'available',
+                        // Every copy records where it came from; these copies take their book's.
+                        'sourceOfFund' => $book->sourceOfFund,
+                        'cost'         => $book->cost,
                     ]);
                 }
             });

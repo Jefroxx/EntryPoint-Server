@@ -116,6 +116,10 @@ class CatalogService
             'accessionNumber' => $copy->accessionNumber,
             'barcodeValue'    => $copy->barcodeValue,
             'status'          => $copy->status,
+            // This copy's own record of where it came from (null for copies that predate it).
+            'sourceOfFund'    => $copy->sourceOfFund,
+            'cost'            => $copy->cost,
+            'remarks'         => $copy->remarks,
             'book'            => [
                 ...$copy->book->only([
                     'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
@@ -156,17 +160,19 @@ class CatalogService
 
     /**
      * Adds `$quantity` more copies of a book that is already in the catalog, each with the next accession
-     * number, and logs every one in the stock log.
+     * number, and logs every one in the stock log. `$acquisition` is where they came from: sourceOfFund,
+     * cost (of each copy) and optional remarks, kept on every copy; the remarks also go into the stock log.
      *
+     * @param  array{sourceOfFund?: string, cost?: float|int|string, remarks?: string|null}  $acquisition
      * @return Collection<int, BookCopy>
      */
-    public function addCopies(Book $book, int $quantity, ?string $note = null): Collection
+    public function addCopies(Book $book, int $quantity, array $acquisition = []): Collection
     {
-        return DB::transaction(function () use ($book, $quantity, $note) {
+        return DB::transaction(function () use ($book, $quantity, $acquisition) {
             $copies = [];
 
             for ($i = 0; $i < $quantity; $i++) {
-                $copies[] = $this->createCopy($book, 'Added copy', $note);
+                $copies[] = $this->createCopy($book, 'Added copy', $acquisition['remarks'] ?? null, $acquisition);
             }
 
             return new Collection($copies);
@@ -282,7 +288,6 @@ class CatalogService
                 'publisher'       => $validated['publisher'] ?? null,
                 'sourceOfFund'    => $validated['sourceOfFund'] ?? null,
                 'cost'            => $validated['cost'] ?? null,
-                'copyNumber'      => $validated['copyNumber'] ?? null,
                 'remarks'         => $validated['remarks'] ?? null,
                 'coverImageURL'   => $validated['coverImageURL'] ?? null,
                 'shelfLocation'   => $validated['shelfLocation'] ?? null,
@@ -322,7 +327,7 @@ class CatalogService
 
             $book->fill(collect($validated)->only([
                 'title', 'classNumber', 'areaOfLibrary', 'isbn', 'publicationYear', 'volume', 'edition',
-                'pages', 'publisher', 'sourceOfFund', 'cost', 'copyNumber', 'remarks',
+                'pages', 'publisher', 'sourceOfFund', 'cost', 'remarks',
                 'coverImageURL', 'shelfLocation',
             ])->toArray());
             $book->save();
@@ -356,9 +361,11 @@ class CatalogService
         return [
             ...$book->only([
                 'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
-                'publisher', 'sourceOfFund', 'cost', 'copyNumber', 'remarks', 'coverImageURL', 'shelfLocation',
+                'publisher', 'sourceOfFund', 'cost', 'remarks', 'coverImageURL', 'shelfLocation',
             ]),
             'callNumber' => $book->classNumber,
+            // `pages` further down is the page photos, so the number of pages is sent under its own name.
+            'pageCount'  => $book->pages,
             'subject'    => $book->subject?->only(['subjectID', 'name']),
             'authors'    => $book->authors->map(fn (Author $author) => [
                 'authorID' => $author->authorID,
@@ -404,13 +411,19 @@ class CatalogService
         });
     }
 
-    private function createCopy(Book $book, string $reason, ?string $note = null): BookCopy
+    /**
+     * @param  array{sourceOfFund?: string, cost?: float|int|string, remarks?: string|null}  $acquisition
+     */
+    private function createCopy(Book $book, string $reason, ?string $note = null, array $acquisition = []): BookCopy
     {
         $copy = $this->bookCopies->create([
             'uuid'            => Str::uuid(),
             'bookID'          => $book->bookID,
             'barcodeValue'    => $this->bookCopies->generateUniqueBarcode(),
             'status'          => 'available',
+            'sourceOfFund'    => $acquisition['sourceOfFund'] ?? null,
+            'cost'            => $acquisition['cost'] ?? null,
+            'remarks'         => $acquisition['remarks'] ?? null,
         ]);
 
         $this->stockLog->added($book, $copy, $reason, $note);

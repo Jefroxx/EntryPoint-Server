@@ -26,15 +26,16 @@ class StoreBookRequest extends FormRequest
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
             'quantity'       => ['required', 'integer', 'min:1', 'max:100'],
 
-            'isbn'             => ['nullable', 'string', 'max:20'],
-            'publicationYear'  => ['nullable', 'integer', 'min:1000', 'max:9999'],
-            'volume'         => ['nullable', 'string', 'max:50'],
-            'edition'        => ['nullable', 'string', 'max:50'],
-            'pages'          => ['nullable', 'integer', 'min:1'],
-            'publisher'      => ['nullable', 'string', 'max:255'],
-            'sourceOfFund'   => ['nullable', 'string', 'max:255'],
-            'cost'           => ['nullable', 'numeric', 'min:0'],
-            'copyNumber'     => ['nullable', 'string', 'max:50'],
+            // A new book's record is complete: only the remarks may be left out.
+            // (A book with no edition or volume says "N/A". A donated book costs 0.)
+            'isbn'             => ['required', 'string', 'max:20'],
+            'publicationYear'  => ['required', 'integer', 'min:1000', 'max:9999'],
+            'volume'         => ['required', 'string', 'max:50'],
+            'edition'        => ['required', 'string', 'max:50'],
+            'pages'          => ['required', 'integer', 'min:1'],
+            'publisher'      => ['required', 'string', 'max:255'],
+            'sourceOfFund'   => ['required', 'string', 'max:255'],
+            'cost'           => ['required', 'numeric', 'min:0'],
             'remarks'        => ['nullable', 'string', 'max:1000'],
 
             'subjectID'      => ['nullable', 'integer', 'exists:book_subjects,subjectID', 'required_without:subjectName'],

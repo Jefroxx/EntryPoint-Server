@@ -29,7 +29,6 @@ class Book extends Model
         'publisher',
         'sourceOfFund',
         'cost',
-        'copyNumber',
         'remarks',
         'coverImageURL',
         'shelfLocation',

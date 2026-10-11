@@ -162,6 +162,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/loans', [LoanController::class, 'index']);
         Route::get('/loans/stats', [LoanController::class, 'stats']);
         Route::post('/loans', [LoanController::class, 'store']);
+        Route::get('/loans/{loan}/return-preview', [LoanController::class, 'returnPreview']);
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnBook']);
         Route::post('/loans/{loan}/receive', [LoanController::class, 'receive']);
         Route::post('/loans/{loan}/finish-return', [LoanController::class, 'finishReturn']);
@@ -172,6 +173,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/penalties/{penalty}/settle', [PenaltyController::class, 'settle']);
 
         Route::get('/self-return-reports', [SelfReturnReportController::class, 'index']);
+        Route::get('/self-return-reports/{report}/preview', [SelfReturnReportController::class, 'preview']);
         Route::post('/self-return-reports/{report}/verify', [SelfReturnReportController::class, 'verify']);
         Route::post('/self-return-reports/{report}/reject', [SelfReturnReportController::class, 'reject']);
 

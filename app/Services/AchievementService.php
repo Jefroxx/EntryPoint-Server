@@ -18,12 +18,22 @@ class AchievementService
         private AchievementRepositoryInterface $achievements,
         private StudentRepositoryInterface $students,
         private NotificationService $notifications,
+        private AchievementMetrics $metrics,
     ) {
+    }
+
+    /** What a librarian can choose an achievement to be about (key, label, unit of the number). */
+    public function metricCatalog(): array
+    {
+        return $this->metrics->catalog();
     }
 
     public function listWithCounts(): Collection
     {
-        return $this->achievements->withUnlockCounts();
+        return $this->achievements->withUnlockCounts()->each(fn (Achievement $a) => $a->setAttribute(
+            'description',
+            $this->metrics->describe($a->criteriaJSON['metric'] ?? null, $a->criteriaJSON['threshold'] ?? null),
+        ));
     }
 
     public function create(array $validated): Achievement
@@ -63,9 +73,13 @@ class AchievementService
     public function indexForStudent(Student $student): BaseCollection
     {
         $unlocked = $this->achievements->unlockedByStudent($student)->keyBy('achievementID');
+        $measured = []; // each metric is counted once per request, however many achievements use it
 
-        return $this->achievements->orderedByName()->map(function (Achievement $achievement) use ($unlocked) {
+        return $this->achievements->orderedByName()->map(function (Achievement $achievement) use ($unlocked, $student, &$measured) {
             $pivot = $unlocked->get($achievement->achievementID)?->pivot;
+            $metric = $achievement->criteriaJSON['metric'] ?? null;
+            $threshold = (int) ($achievement->criteriaJSON['threshold'] ?? 0);
+            $current = $metric ? ($measured[$metric] ??= $this->metrics->value($metric, $student)) : 0;
 
             return [
                 'achievementID' => $achievement->achievementID,
@@ -73,6 +87,9 @@ class AchievementService
                 'name'          => $achievement->name,
                 'pointsReward'  => $achievement->pointsReward,
                 'criteria'      => $achievement->criteriaJSON,
+                // In plain words ("Borrow 5 books"), and how far along the student is.
+                'description'   => $this->metrics->describe($metric, $threshold),
+                'progress'      => ['current' => $current, 'target' => $threshold],
                 'status'        => match (true) {
                     $pivot && $pivot->redeemedAt => 'Redeemed',
                     (bool) $pivot                => 'Unlocked',
@@ -121,10 +138,11 @@ class AchievementService
      * unlocks any whose criteria are now met. This replaces the old
      * Student::booted() model-event hook that fired automatically whenever
      * knowledgeScore/visitStreak changed — there is no implicit trigger
-     * anymore, so every Service that increases one of those two columns
-     * (this service's own redeem(), MarketplaceService's refund path,
-     * AttendanceService's streak update) MUST call this explicitly
-     * afterward. A pure decrease (e.g. spending points) never needs this
+     * anymore, so every Service that changes a number an achievement counts
+     * (this service's own redeem(), MarketplaceService's refund path and
+     * redemptions, AttendanceService's visits, CirculationService's checkouts
+     * and returns, BookSuggestionService's approvals) MUST call this
+     * explicitly afterward. A pure decrease (e.g. spending points) never needs this
      * call: meetsCriteria() is a ">=" check, so a smaller number can never
      * newly satisfy a threshold it didn't already satisfy.
      */
@@ -136,6 +154,21 @@ class AchievementService
                     $this->unlockFor($achievement, $student);
                 }
             });
+    }
+
+    /**
+     * Re-checks every approved student against every achievement they haven't unlocked. For after achievements are
+     * added in bulk or the data changed outside the app; day to day each event re-checks its own student.
+     *
+     * @return int how many achievements were newly unlocked
+     */
+    public function evaluateForEveryone(): int
+    {
+        $before = DB::table('student_achievement')->count();
+
+        Student::where('registrationStatus', 'approved')->each(fn (Student $student) => $this->evaluateForStudent($student));
+
+        return DB::table('student_achievement')->count() - $before;
     }
 
     /**
@@ -163,7 +196,7 @@ class AchievementService
             return false;
         }
 
-        return $student->{$metric} >= $threshold;
+        return $this->metrics->value($metric, $student) >= $threshold;
     }
 
     /**

@@ -37,7 +37,7 @@ class StockLogTest extends TestCase
     public function test_adding_copies_to_an_existing_book_logs_each_one(): void
     {
         $response = $this->actingAs($this->librarian)
-            ->postJson("/api/librarian/books/{$this->book->uuid}/copies", ['quantity' => 2, 'note' => 'Donated by the Class of 2025'])
+            ->postJson("/api/librarian/books/{$this->book->uuid}/copies", ['quantity' => 2, 'sourceOfFund' => 'Donation', 'cost' => 0, 'remarks' => 'Donated by the Class of 2025'])
             ->assertCreated();
 
         $this->assertCount(2, $response->json('copies'));
@@ -85,7 +85,7 @@ class StockLogTest extends TestCase
     public function test_the_stock_log_lists_newest_first_and_filters_by_action(): void
     {
         $this->actingAs($this->librarian);
-        $this->postJson("/api/librarian/books/{$this->book->uuid}/copies", ['quantity' => 1])->assertCreated();
+        $this->postJson("/api/librarian/books/{$this->book->uuid}/copies", ['quantity' => 1, 'sourceOfFund' => 'Library budget', 'cost' => 250])->assertCreated();
         $copyID = BookCopy::where('bookID', $this->book->bookID)->orderByDesc('copyID')->value('copyID');
         $copyUuid = BookCopy::find($copyID)->uuid;
         $this->postJson("/api/librarian/copies/{$copyUuid}/remove", ['reason' => 'Withdrawn'])->assertOk();

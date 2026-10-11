@@ -18,6 +18,9 @@ class BookCopy extends Model
         'accessionNumber',
         'barcodeValue',
         'status',
+        'sourceOfFund',
+        'cost',
+        'remarks',
     ];
 
     /**
@@ -37,6 +40,7 @@ class BookCopy extends Model
     {
         return [
             'accessionNumber' => 'integer',
+            'cost'            => 'decimal:2',
         ];
     }
 
