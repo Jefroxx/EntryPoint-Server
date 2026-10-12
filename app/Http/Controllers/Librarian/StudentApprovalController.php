@@ -37,7 +37,7 @@ class StudentApprovalController extends Controller
     {
         $type = $request->query('memberType');
 
-        return in_array($type, Student::MEMBER_TYPES, true) ? $type : null;
+        return in_array($type, [...Student::MEMBER_TYPES, 'members'], true) ? $type : null;
     }
 
     public function approve(Request $request, Student $student)

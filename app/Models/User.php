@@ -26,6 +26,7 @@ class User extends Authenticatable
         'address',
         'userType',
         'disabledAt',
+        'mustChangePassword',
     ];
 
     protected $hidden = [
@@ -36,6 +37,7 @@ class User extends Authenticatable
         'birthDate'       => 'date',
         'emailVerifiedAt' => 'datetime',
         'disabledAt'      => 'datetime',
+        'mustChangePassword' => 'boolean',
     ];
 
     public function student()

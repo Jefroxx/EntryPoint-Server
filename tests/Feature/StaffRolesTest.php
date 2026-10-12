@@ -276,4 +276,18 @@ class StaffRolesTest extends TestCase
         $this->assertSame(1, $chart->json('total'));
         $this->assertSame(['BS Nursing'], array_column($chart->json('slices'), 'label'));
     }
+
+    public function test_the_members_filter_lists_faculty_and_staff_together_and_never_students(): void
+    {
+        $librarian = $this->staff('librarian');
+        Student::factory()->approved()->create();
+        $faculty = Student::factory()->faculty()->approved()->create();
+        $staff = Student::factory()->staff()->approved()->create();
+
+        $rows = $this->actingAs($librarian)->getJson('/api/librarian/students?status=approved&memberType=members')->assertOk()->json('data');
+
+        $this->assertEqualsCanonicalizing([(string) $faculty->uuid, (string) $staff->uuid], array_column($rows, 'uuid'));
+        $this->assertEqualsCanonicalizing(['faculty', 'staff'], array_column($rows, 'memberType'));
+        $this->actingAs($librarian)->getJson('/api/librarian/students/stats?memberType=members')->assertOk()->assertJsonPath('approved', 2);
+    }
 }

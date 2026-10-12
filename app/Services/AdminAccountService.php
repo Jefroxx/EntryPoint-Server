@@ -92,6 +92,7 @@ class AdminAccountService
                 'phoneNumber'     => $data['phoneNumber'] ?? null,
                 'userType'        => 'librarian',
                 'emailVerifiedAt' => now(),
+                'mustChangePassword' => true,
             ]);
 
             return Librarian::create(['librarianID' => $user->userID, 'uuid' => Str::uuid(), 'role' => $data['role']]);
@@ -178,6 +179,7 @@ class AdminAccountService
                 'userType'        => 'student',
                 // Made by the administrator, so there is no email to confirm and no registration to approve.
                 'emailVerifiedAt' => now(),
+                'mustChangePassword' => true,
             ]);
 
             return Student::create([
@@ -259,7 +261,7 @@ class AdminAccountService
     {
         $password = $this->temporaryPassword();
 
-        $target->update(['password' => Hash::make($password)]);
+        $target->update(['password' => Hash::make($password), 'mustChangePassword' => true]);
         $target->tokens()->delete();
 
         $this->audit->record($actor, 'account.password-reset', "Reset the password of {$target->fullName}");

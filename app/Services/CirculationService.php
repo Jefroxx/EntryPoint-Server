@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Book;
 use App\Models\Loan;
 use App\Models\Penalty;
+use App\Models\PenaltyRule;
 use App\Models\SelfReturnReport;
 use App\Repositories\Contracts\BookCopyRepositoryInterface;
 use App\Repositories\Contracts\LoanPeriodRepositoryInterface;
@@ -246,7 +247,7 @@ class CirculationService
         $user = $student->user;
 
         $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
-        $unitsLate = $rule ? $this->elapsedUnits($loan->dueDate, now(), $rule->rateUnit) : 0;
+        $unitsLate = $rule ? $this->lateUnits($loan->dueDate, now(), $rule) : 0;
 
         // An overdue book can already have its fine on record (the hourly job writes it), and the desk may have
         // marked it paid in the Penalties tab: then the window can say so itself instead of asking.
@@ -289,6 +290,8 @@ class CirculationService
                 // False when the collection has no fine rule: a late book is then not charged at all.
                 'hasRule'   => (bool) $rule,
                 'unitsLate' => $unitsLate,
+                // Days after the due time during which nothing is charged; the units above are counted after it.
+                'graceDays' => (int) ($rule?->gracePeriodDays ?? 0),
                 'rateUnit'  => $rule?->rateUnit,
                 'rate'      => $rule ? (float) $rule->rate : null,
                 'amount'    => $rule ? round($rule->rate * $unitsLate, 2) : 0.0,
@@ -638,7 +641,7 @@ class CirculationService
         }
 
         $endTime = $loan->returnDate ?? now();
-        $elapsedUnits = $this->elapsedUnits($loan->dueDate, $endTime, $rule->rateUnit);
+        $elapsedUnits = $this->lateUnits($loan->dueDate, $endTime, $rule);
 
         if ($elapsedUnits <= 0) {
             return null; // not actually overdue
@@ -653,6 +656,17 @@ class CirculationService
         $penalty->save();
 
         return $penalty;
+    }
+
+    /**
+     * How many units a fine is charged for: the lateness that is left once the rule's grace period (whole days after
+     * the due time) has passed. Within the grace period nothing is charged.
+     */
+    public function lateUnits(\DateTimeInterface $due, \DateTimeInterface $end, PenaltyRule $rule): int
+    {
+        $chargeFrom = Carbon::parse($due)->addDays((int) ($rule->gracePeriodDays ?? 0));
+
+        return $this->elapsedUnits($chargeFrom, $end, $rule->rateUnit);
     }
 
     public function elapsedUnits(\DateTimeInterface $due, \DateTimeInterface $end, string $unit): int

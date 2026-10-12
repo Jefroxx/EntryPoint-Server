@@ -18,7 +18,7 @@ class AuditLogController extends Controller
             $request->query('search'),
             $request->query('area'),
             $request->query('actor') ? (int) $request->query('actor') : null,
-            (int) ($request->query('perPage') ?? 20),
+            min(500, max(1, (int) ($request->query('perPage') ?? 20))),
         );
 
         return response()->json([

@@ -24,6 +24,8 @@ return [
         'resource'    => 'Resources',
         'settings'    => 'Settings',
         'account'     => 'Accounts',
+        'announcements' => 'Announcements',
+        'privacy'     => 'Data privacy',
         'roles'       => 'Roles and permissions',
     ],
 

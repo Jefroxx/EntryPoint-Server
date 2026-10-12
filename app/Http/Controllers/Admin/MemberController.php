@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\ImportMembersRequest;
 use App\Http\Requests\Admin\StoreMemberRequest;
 use App\Http\Requests\Admin\UpdateMemberRequest;
 use App\Models\Student;
 use App\Services\AdminAccountService;
+use App\Services\MemberImportService;
 use Illuminate\Http\Request;
 
 /** Faculty and staff members. (Students register themselves and are approved on the librarian side.) */
@@ -23,6 +25,21 @@ class MemberController extends Controller
             $request->query('type'),
             (int) ($request->query('perPage') ?? 15),
         ));
+    }
+
+    /**
+     * Create many accounts from a list. With dryRun the rows are only checked: the answer says which would be created
+     * and which skipped (and why), so the screen can show it before anything is made.
+     */
+    public function import(ImportMembersRequest $request, MemberImportService $import)
+    {
+        $rows = $request->validated('rows');
+
+        if ($request->boolean('dryRun')) {
+            return response()->json($import->check($rows));
+        }
+
+        return response()->json($import->import($request->user(), $rows), 201);
     }
 
     public function store(StoreMemberRequest $request)

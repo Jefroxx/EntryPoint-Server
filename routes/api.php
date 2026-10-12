@@ -63,6 +63,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Student-only actions
     Route::middleware('student')->prefix('student')->group(function () {
         Route::get('/profile', [PortalController::class, 'profile']);
+        Route::get('/announcements', [\App\Http\Controllers\AnnouncementFeedController::class, 'student']);
         Route::patch('/profile', [StudentAccountController::class, 'updateContact']);
         // Throttled: a wrong current password is otherwise a free guess.
         Route::put('/password', [StudentAccountController::class, 'changePassword'])->middleware('throttle:6,1');
@@ -126,10 +127,20 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/members', [\App\Http\Controllers\Admin\MemberController::class, 'index']);
         Route::post('/members', [\App\Http\Controllers\Admin\MemberController::class, 'store']);
+        Route::post('/members/import', [\App\Http\Controllers\Admin\MemberController::class, 'import']);
         Route::patch('/members/{student}', [\App\Http\Controllers\Admin\MemberController::class, 'update']);
         Route::post('/members/{student}/disable', [\App\Http\Controllers\Admin\MemberController::class, 'disable']);
         Route::post('/members/{student}/enable', [\App\Http\Controllers\Admin\MemberController::class, 'enable']);
         Route::post('/members/{student}/reset-password', [\App\Http\Controllers\Admin\MemberController::class, 'resetPassword']);
+
+        Route::get('/announcements', [\App\Http\Controllers\Admin\AnnouncementController::class, 'index']);
+        Route::post('/announcements', [\App\Http\Controllers\Admin\AnnouncementController::class, 'store']);
+        Route::patch('/announcements/{announcement}', [\App\Http\Controllers\Admin\AnnouncementController::class, 'update']);
+        Route::delete('/announcements/{announcement}', [\App\Http\Controllers\Admin\AnnouncementController::class, 'destroy']);
+
+        Route::get('/privacy/search', [\App\Http\Controllers\Admin\PrivacyController::class, 'search']);
+        Route::get('/privacy/members/{student}/export', [\App\Http\Controllers\Admin\PrivacyController::class, 'export']);
+        Route::post('/privacy/members/{student}/anonymize', [\App\Http\Controllers\Admin\PrivacyController::class, 'anonymize']);
 
         Route::get('/roles', [\App\Http\Controllers\Admin\RoleController::class, 'index']);
         Route::put('/roles/{role}', [\App\Http\Controllers\Admin\RoleController::class, 'update']);
@@ -141,6 +152,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(['librarian', 'staff.permission', 'audit'])->prefix('librarian')->group(function () {
         // The signed-in staff account's role and permissions.
         Route::get('/me', [\App\Http\Controllers\Librarian\MeController::class, 'show']);
+        Route::get('/announcements', [\App\Http\Controllers\AnnouncementFeedController::class, 'staff']);
 
         Route::get('/dashboard/today', [DashboardController::class, 'today']);
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
