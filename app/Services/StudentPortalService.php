@@ -69,6 +69,8 @@ class StudentPortalService
                 'birthDate'          => $user->birthDate ? Carbon::parse($user->birthDate)->toDateString() : null,
                 'studentIDNumber'    => $student->studentIDNumber,
                 'academicProgram'    => $student->academicProgram,
+                'memberType'         => $student->memberType,
+                'department'         => $student->department,
                 'barcodeValue'       => $student->barcodeValue,
                 'registrationStatus' => $student->registrationStatus,
             ],

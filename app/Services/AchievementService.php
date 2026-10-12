@@ -148,6 +148,11 @@ class AchievementService
      */
     public function evaluateForStudent(Student $student): void
     {
+        // Achievements are for students; faculty and staff members never unlock them.
+        if (! $student->takesPartInEngagement()) {
+            return;
+        }
+
         $this->achievements->notYetUnlockedByStudent($student)
             ->each(function (Achievement $achievement) use ($student) {
                 if ($this->meetsCriteria($achievement, $student)) {
@@ -166,7 +171,7 @@ class AchievementService
     {
         $before = DB::table('student_achievement')->count();
 
-        Student::where('registrationStatus', 'approved')->each(fn (Student $student) => $this->evaluateForStudent($student));
+        Student::where('registrationStatus', 'approved')->where('memberType', 'student')->each(fn (Student $student) => $this->evaluateForStudent($student));
 
         return DB::table('student_achievement')->count() - $before;
     }
@@ -181,7 +186,7 @@ class AchievementService
     {
         $this->students->notHavingAchievement($achievement->achievementID)
             ->each(function (Student $student) use ($achievement) {
-                if ($this->meetsCriteria($achievement, $student)) {
+                if ($student->takesPartInEngagement() && $this->meetsCriteria($achievement, $student)) {
                     $this->unlockFor($achievement, $student);
                 }
             });

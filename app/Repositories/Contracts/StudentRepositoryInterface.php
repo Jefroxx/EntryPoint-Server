@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Collection;
 
 interface StudentRepositoryInterface extends RepositoryInterface
 {
-    public function paginate(?string $search, ?string $program, ?string $status, int $perPage): LengthAwarePaginator;
+    public function paginate(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null): LengthAwarePaginator;
 
     /**
      * @return array{total: int, pending: int, approved: int, rejected: int}
      */
-    public function countsByRegistrationStatus(): array;
+    public function countsByRegistrationStatus(?string $memberType = null): array;
 
     /**
      * Adjusts a student's knowledgeScore by $delta (positive to credit,

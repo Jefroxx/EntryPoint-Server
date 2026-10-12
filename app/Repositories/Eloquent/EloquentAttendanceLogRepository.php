@@ -130,6 +130,8 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
 
         return AttendanceLog::join('students', 'students.studentID', '=', "{$logs}.studentID")
             ->whereBetween("{$logs}.entryTime", [$start, $end])
+            // "Students who visited, by program": faculty and staff have no program, so they aren't part of this chart.
+            ->where('students.memberType', 'student')
             ->selectRaw("students.academicProgram as program, COUNT(DISTINCT {$logs}.studentID) as total")
             ->groupBy('students.academicProgram')
             ->pluck('total', 'program');

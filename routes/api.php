@@ -69,8 +69,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/loans', [PortalController::class, 'loans']);
         Route::get('/penalties', [PortalController::class, 'penalties']);
         Route::get('/attendance', [PortalController::class, 'attendance']);
-        Route::get('/hall-of-fame', [PortalController::class, 'hallOfFame']);
-        Route::get('/redemptions', [PortalController::class, 'redemptions']);
+        // Students only (not faculty or staff members): the Hall of Fame, redemptions, achievements and the points shop.
+        Route::get('/hall-of-fame', [PortalController::class, 'hallOfFame'])->middleware('engagement');
+        Route::get('/redemptions', [PortalController::class, 'redemptions'])->middleware('engagement');
 
         // `subjects` must stay above `{book}` or it would be read as a book id.
         Route::get('/catalog', [PortalController::class, 'catalog']);
@@ -94,24 +95,53 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/resources', [StudentResourceController::class, 'index']);
 
-        Route::get('/achievements', [StudentAchievementController::class, 'index']);
-        Route::post('/achievements/{achievement}/redeem', [StudentAchievementController::class, 'redeem']);
+        Route::middleware('engagement')->group(function () {
+            Route::get('/achievements', [StudentAchievementController::class, 'index']);
+            Route::post('/achievements/{achievement}/redeem', [StudentAchievementController::class, 'redeem']);
 
-        Route::get('/market-items', [StudentMarketItemController::class, 'index']);
-        Route::post('/market-items/{item}/redeem', [StudentMarketItemController::class, 'redeem']);
+            Route::get('/market-items', [StudentMarketItemController::class, 'index']);
+            Route::post('/market-items/{item}/redeem', [StudentMarketItemController::class, 'redeem']);
 
-        Route::get('/market-cart', [MarketCartController::class, 'index']);
-        Route::post('/market-cart', [MarketCartController::class, 'store']);
-        Route::patch('/market-cart/{cartItem}', [MarketCartController::class, 'update']);
-        Route::delete('/market-cart/{cartItem}', [MarketCartController::class, 'destroy']);
-        Route::post('/market-cart/checkout', [MarketCartController::class, 'checkout']);
+            Route::get('/market-cart', [MarketCartController::class, 'index']);
+            Route::post('/market-cart', [MarketCartController::class, 'store']);
+            Route::patch('/market-cart/{cartItem}', [MarketCartController::class, 'update']);
+            Route::delete('/market-cart/{cartItem}', [MarketCartController::class, 'destroy']);
+            Route::post('/market-cart/checkout', [MarketCartController::class, 'checkout']);
+        });
 
         Route::get('/book-suggestions', [StudentBookSuggestionController::class, 'index']);
         Route::post('/book-suggestions', [StudentBookSuggestionController::class, 'store']);
     });
 
+    // Administrator-only: accounts, roles and the audit log. (Account changes are logged by the service itself.)
+    Route::middleware(['librarian', 'admin'])->prefix('admin')->group(function () {
+        Route::get('/overview', [\App\Http\Controllers\Admin\OverviewController::class, 'show']);
+
+        Route::get('/staff', [\App\Http\Controllers\Admin\StaffController::class, 'index']);
+        Route::post('/staff', [\App\Http\Controllers\Admin\StaffController::class, 'store']);
+        Route::patch('/staff/{librarian}', [\App\Http\Controllers\Admin\StaffController::class, 'update']);
+        Route::post('/staff/{librarian}/disable', [\App\Http\Controllers\Admin\StaffController::class, 'disable']);
+        Route::post('/staff/{librarian}/enable', [\App\Http\Controllers\Admin\StaffController::class, 'enable']);
+        Route::post('/staff/{librarian}/reset-password', [\App\Http\Controllers\Admin\StaffController::class, 'resetPassword']);
+
+        Route::get('/members', [\App\Http\Controllers\Admin\MemberController::class, 'index']);
+        Route::post('/members', [\App\Http\Controllers\Admin\MemberController::class, 'store']);
+        Route::patch('/members/{student}', [\App\Http\Controllers\Admin\MemberController::class, 'update']);
+        Route::post('/members/{student}/disable', [\App\Http\Controllers\Admin\MemberController::class, 'disable']);
+        Route::post('/members/{student}/enable', [\App\Http\Controllers\Admin\MemberController::class, 'enable']);
+        Route::post('/members/{student}/reset-password', [\App\Http\Controllers\Admin\MemberController::class, 'resetPassword']);
+
+        Route::get('/roles', [\App\Http\Controllers\Admin\RoleController::class, 'index']);
+        Route::put('/roles/{role}', [\App\Http\Controllers\Admin\RoleController::class, 'update']);
+
+        Route::get('/audit-logs', [\App\Http\Controllers\Admin\AuditLogController::class, 'index']);
+    });
+
     // Librarian-only actions
-    Route::middleware('librarian')->prefix('librarian')->group(function () {
+    Route::middleware(['librarian', 'staff.permission', 'audit'])->prefix('librarian')->group(function () {
+        // The signed-in staff account's role and permissions.
+        Route::get('/me', [\App\Http\Controllers\Librarian\MeController::class, 'show']);
+
         Route::get('/dashboard/today', [DashboardController::class, 'today']);
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('/dashboard/borrowing-overview', [DashboardController::class, 'borrowingOverview']);

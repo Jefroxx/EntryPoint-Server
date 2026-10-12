@@ -12,6 +12,14 @@ class EnsureUserIsLibrarian
     {
         $user = $request->user();
 
+        if ($user && $user->disabledAt) {
+            $user->tokens()->delete();
+
+            return response()->json([
+                'message' => 'This account has been disabled. Contact the library administrator.',
+            ], 403);
+        }
+
         if (! $user || $user->userType !== 'librarian') {
             return response()->json([
                 'message' => 'This action is restricted to librarians only.',

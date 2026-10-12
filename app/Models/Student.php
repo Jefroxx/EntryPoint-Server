@@ -19,8 +19,10 @@ class Student extends Model
         'studentID', // Explicitly included because of the 1:1 user mapping
         'uuid',
         'studentIDNumber',
+        'memberType',
         'barcodeValue',
         'academicProgram',
+        'department',
         'knowledgeScore',
         'visitStreak',
         'registrationStatus',
@@ -31,6 +33,19 @@ class Student extends Model
     protected $casts = [
         'reviewedAt' => 'datetime',
     ];
+
+    /** Faculty and staff borrow like students, but only students take part in the Hall of Fame, achievements and points shop. */
+    public const MEMBER_TYPES = ['student', 'faculty', 'staff'];
+
+    public function takesPartInEngagement(): bool
+    {
+        return $this->memberType === 'student';
+    }
+
+    public function scopeStudentsOnly($query)
+    {
+        return $query->where('students.memberType', 'student');
+    }
 
     public function user()
     {

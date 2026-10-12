@@ -180,6 +180,8 @@ class HallOfFameService
             ->join('students as s', 's.studentID', '=', 'r.studentID')
             ->join('users as u', 'u.userID', '=', 's.studentID')
             ->where('s.registrationStatus', 'approved')
+            // Faculty and staff members aren't ranked: the boards are for students.
+            ->where('s.memberType', 'student')
             ->where('r.value', '>', 0)
             ->orderByDesc('r.value')
             ->orderBy('r.studentID')

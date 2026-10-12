@@ -13,13 +13,13 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'librarian' => \App\Http\Middleware\EnsureUserIsLibrarian::class,
-        ]);
-    })
-    ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias([
-            'librarian' => \App\Http\Middleware\EnsureUserIsLibrarian::class,
-            'student'   => \App\Http\Middleware\EnsureUserIsStudent::class,
+            'librarian'        => \App\Http\Middleware\EnsureUserIsLibrarian::class,
+            'student'          => \App\Http\Middleware\EnsureUserIsStudent::class,
+            // Staff roles: `admin` is the admin side; `staff.permission` keeps librarians and assistants to their areas.
+            'admin'            => \App\Http\Middleware\EnsureUserIsAdmin::class,
+            'staff.permission' => \App\Http\Middleware\EnforceStaffPermission::class,
+            'engagement'       => \App\Http\Middleware\EnsureStudentTakesPartInEngagement::class,
+            'audit'            => \App\Http\Middleware\LogStaffActivity::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

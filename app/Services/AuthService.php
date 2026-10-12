@@ -121,6 +121,12 @@ class AuthService
             ]);
         }
 
+        if ($user->isDisabled()) {
+            throw ValidationException::withMessages([
+                'email' => ['This account has been disabled. Contact the library administrator.'],
+            ]);
+        }
+
         return $user;
     }
 

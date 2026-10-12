@@ -14,9 +14,13 @@ class LibrarianSeeder extends Seeder
     {
         $this->createLibrarian('Juan', 'D', 'Dela Cruz', 'librarian@stidavao.edu.ph', '09123456789', 'Davao City');
         $this->createLibrarian('Maria', 'S', 'Santos', 'maria.santos@stidavao.edu.ph', '09187654321', 'Davao City');
+
+        // The administrator (the admin side), and a student assistant at the desk (circulation and attendance only).
+        $this->createLibrarian('Ana', 'R', 'Reyes', 'admin@stidavao.edu.ph', '09171234567', 'Davao City', 'admin');
+        $this->createLibrarian('Paolo', 'M', 'Lim', 'assistant@stidavao.edu.ph', '09181234567', 'Davao City', 'assistant');
     }
 
-    private function createLibrarian(string $first, string $middle, string $last, string $email, string $phone, string $address): void
+    private function createLibrarian(string $first, string $middle, string $last, string $email, string $phone, string $address, string $role = 'librarian'): void
     {
         $user = User::firstOrCreate(
             ['email' => $email],
@@ -35,7 +39,7 @@ class LibrarianSeeder extends Seeder
 
         Librarian::firstOrCreate(
             ['librarianID' => $user->userID],
-            ['uuid' => Str::uuid(), 'role' => 'librarian']
+            ['uuid' => Str::uuid(), 'role' => $role]
         );
     }
 }

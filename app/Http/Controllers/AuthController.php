@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\StudentRegistrationRequest;
 use App\Services\AuthService;
+use App\Services\StaffPermissionService;
 use Illuminate\Http\Request;
 
 class AuthController extends Controller
@@ -33,15 +34,15 @@ class AuthController extends Controller
             'access_token' => $result['token'],
             'token_type'   => 'Bearer',
         ]);
-    }
-
-    public function librarianLogin(LoginRequest $request)
+    }    public function librarianLogin(LoginRequest $request, StaffPermissionService $permissions)
     {
         $validated = $request->validated();
         $result = $this->auth->librarianLogin($validated['email'], $validated['password']);
 
         return response()->json([
             'user'         => $result['user'],
+            // The role decides where the screens send them (admin side or librarian side) and what they show.
+            'staff'        => $permissions->describe($result['user']),
             'access_token' => $result['token'],
             'token_type'   => 'Bearer',
         ]);
