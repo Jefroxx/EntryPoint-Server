@@ -60,8 +60,8 @@ class BookFactory extends Factory
             'classNumber'     => $this->faker->numerify('###.##') . ' ' . strtoupper($this->faker->lexify('?##')),
             'isbn'            => $this->faker->unique()->isbn13(),
             'publicationYear' => $this->faker->numberBetween(1998, 2026),
-            'volume'          => $this->faker->boolean(15) ? (string) $this->faker->numberBetween(1, 3) : null,
-            'edition'         => $this->faker->boolean(30) ? $this->faker->randomElement(['2nd', '3rd', '4th', 'International']) . ' Edition' : null,
+            'volume'          => $this->faker->boolean(15) ? (string) $this->faker->numberBetween(1, 3) : 'N/A',
+            'edition'         => $this->faker->boolean(30) ? $this->faker->randomElement(['2nd', '3rd', '4th', 'International']) . ' Edition' : 'N/A',
             'pages'           => $this->faker->numberBetween(120, 650),
             'publisher'       => $this->faker->randomElement([
                 'Rex Book Store', 'Anvil Publishing', 'C&E Publishing', 'Mutya Publishing House',
@@ -69,7 +69,6 @@ class BookFactory extends Factory
             ]),
             'sourceOfFund'    => $this->faker->randomElement(['Institutional Fund', 'Donation', 'Student Fund', 'Government Subsidy']),
             'cost'            => $this->faker->randomFloat(2, 350, 3500),
-            'copyNumber'      => null,
             'remarks'         => $this->faker->boolean(10) ? $this->faker->sentence(6) : null,
             'coverImageURL'   => null,
             'shelfLocation'   => strtoupper($this->faker->lexify('Shelf-??')) . '-' . $this->faker->numberBetween(1, 40),

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Book;
 use App\Models\Reservation;
 use App\Repositories\Contracts\BookCopyRepositoryInterface;
 use App\Repositories\Contracts\ReservationRepositoryInterface;
@@ -142,6 +143,17 @@ class ReservationService
             if ($this->reservations->alreadyReservedForBooks($studentID, $bookIDs)) {
                 throw ValidationException::withMessages([
                     'cart' => ['One or more books in your cart are already in your active reservations.'],
+                ]);
+            }
+
+            // A book whose every copy is retired can never be lent, so it can't be queued for either.
+            $noCopies = Book::whereIn('bookID', $bookIDs)
+                ->whereDoesntHave('copies', fn ($copies) => $copies->where('status', '!=', 'retired'))
+                ->pluck('title');
+
+            if ($noCopies->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'cart' => ['No copies are available to reserve for: ' . $noCopies->map(fn ($t) => "\"{$t}\"")->join(', ') . '. Remove them from your cart.'],
                 ]);
             }
 

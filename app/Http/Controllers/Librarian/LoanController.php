@@ -81,13 +81,28 @@ class LoanController extends Controller
         ]);
     }
 
-    public function returnBook(Loan $loan)
+    /** The "Return this book?" window: the loan, book and student, and the fine returning it now would charge. */
+    public function returnPreview(Loan $loan)
     {
-        $loan = $this->circulation->returnBook($loan);
+        return response()->json(['preview' => $this->circulation->returnPreview($loan)]);
+    }
+
+    /** Returns the book. `finePaid` says the student paid the late fee at the desk, so the fine is settled with it. */
+    public function returnBook(Request $request, Loan $loan)
+    {
+        $data = $request->validate(['finePaid' => ['sometimes', 'boolean']]);
+
+        $loan = $this->circulation->returnBook($loan, (bool) ($data['finePaid'] ?? false));
+        $penalty = $loan->penalties()->latest('computedAt')->first();
 
         return response()->json([
-            'message' => 'Book returned successfully.',
+            'message' => match (true) {
+                ! $penalty                         => 'Book returned successfully.',
+                $penalty->paymentStatus === 'Paid' => 'Book returned. The late fee was marked as paid.',
+                default                            => 'Book returned. The late fee is still unpaid.',
+            },
             'loan'    => $loan,
+            'penalty' => $penalty?->only(['amount', 'paymentStatus']),
         ]);
     }
 }

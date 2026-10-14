@@ -117,6 +117,13 @@ class SettingsService
             ]);
         }
 
-        $this->users->update($user, ['password' => Hash::make($newPassword)]);
+        // Someone on a temporary password has to pick a different one, or the administrator would still know it.
+        if ($user->mustChangePassword && Hash::check($newPassword, $user->password)) {
+            throw ValidationException::withMessages([
+                'newPassword' => ['Choose a password different from the temporary one.'],
+            ]);
+        }
+
+        $this->users->update($user, ['password' => Hash::make($newPassword), 'mustChangePassword' => false]);
     }
 }

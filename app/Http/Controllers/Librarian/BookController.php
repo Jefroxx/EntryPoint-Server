@@ -68,22 +68,31 @@ class BookController extends Controller
         ]);
     }
 
-    /** Adds more copies of a book that is already in the catalog. */
+    /**
+     * Adds more copies of a book that is already in the catalog. Where they came from is required (source of
+     * fund and the cost of each copy; a donation can cost 0), and remarks are the one optional field.
+     */
     public function addCopies(Request $request, Book $book)
     {
         $data = $request->validate([
-            'quantity' => ['required', 'integer', 'min:1', 'max:50'],
-            'note'     => ['nullable', 'string', 'max:500'],
+            'quantity'     => ['required', 'integer', 'min:1', 'max:50'],
+            'sourceOfFund' => ['required', 'string', 'max:255'],
+            'cost'         => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'remarks'      => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $copies = $this->catalog->addCopies($book, $data['quantity'], $data['note'] ?? null);
+        $copies = $this->catalog->addCopies($book, $data['quantity'], [
+            'sourceOfFund' => trim($data['sourceOfFund']),
+            'cost'         => $data['cost'],
+            'remarks'      => isset($data['remarks']) && trim($data['remarks']) !== '' ? trim($data['remarks']) : null,
+        ]);
         $numbers = $copies->pluck('accessionNumber')->implode(', ');
 
         return response()->json([
             'message' => $copies->count() === 1
                 ? "Added accession no. {$numbers}."
                 : "Added {$copies->count()} copies (accession nos. {$numbers}).",
-            'copies' => $copies->map(fn (BookCopy $copy) => $copy->only(['copyID', 'accessionNumber', 'status']))->values(),
+            'copies' => $copies->map(fn (BookCopy $copy) => $copy->only(['copyID', 'accessionNumber', 'status', 'sourceOfFund', 'cost', 'remarks']))->values(),
         ], 201);
     }
 

@@ -79,7 +79,8 @@ class UniversalScanTest extends TestCase
         [$loanID, $code] = $this->checkout();
         $this->scan($code)->assertOk();
 
-        $this->postJson("/api/librarian/loans/{$loanID}/finish-return", ['condition' => 'damaged', 'note' => 'Torn cover'])->assertOk();
+        $loanUuid = \App\Models\Loan::find($loanID)->uuid;
+        $this->postJson("/api/librarian/loans/{$loanUuid}/finish-return", ['condition' => 'damaged', 'note' => 'Torn cover'])->assertOk();
         $this->assertSame('Returned', \App\Models\Loan::find($loanID)->status);
         $this->assertSame('damaged', $this->copy->fresh()->status);
 
@@ -87,12 +88,14 @@ class UniversalScanTest extends TestCase
         $other = BookCopy::factory()->create(['bookID' => $this->book->bookID]);
         $second = $this->postJson('/api/librarian/loans', ['studentID' => $this->student->studentID, 'copyID' => $other->copyID])->json('loan.loanID');
         $this->scan('L-' . str_pad((string) $second, 6, '0', STR_PAD_LEFT))->assertOk();
-        $this->postJson("/api/librarian/loans/{$second}/finish-return", ['condition' => 'good'])->assertOk();
+        $secondUuid = \App\Models\Loan::find($second)->uuid;
+        $this->postJson("/api/librarian/loans/{$secondUuid}/finish-return", ['condition' => 'good'])->assertOk();
         $this->assertSame('available', $other->fresh()->status);
 
         // An active loan can't be "finished" without being received first.
         $third = $this->postJson('/api/librarian/loans', ['studentID' => $this->student->studentID, 'copyID' => $other->copyID])->json('loan.loanID');
-        $this->postJson("/api/librarian/loans/{$third}/finish-return", ['condition' => 'good'])->assertStatus(422);
+        $thirdUuid = \App\Models\Loan::find($third)->uuid;
+        $this->postJson("/api/librarian/loans/{$thirdUuid}/finish-return", ['condition' => 'good'])->assertStatus(422);
     }
 
     public function test_a_facility_label_then_a_student_id_starts_a_session_and_scanning_it_again_ends_it(): void

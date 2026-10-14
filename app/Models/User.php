@@ -25,6 +25,8 @@ class User extends Authenticatable
         'birthDate',
         'address',
         'userType',
+        'disabledAt',
+        'mustChangePassword',
     ];
 
     protected $hidden = [
@@ -34,6 +36,8 @@ class User extends Authenticatable
     protected $casts = [
         'birthDate'       => 'date',
         'emailVerifiedAt' => 'datetime',
+        'disabledAt'      => 'datetime',
+        'mustChangePassword' => 'boolean',
     ];
 
     public function student()
@@ -49,6 +53,12 @@ class User extends Authenticatable
     public function notifications()
     {
         return $this->hasMany(SystemNotification::class, 'userID', 'userID');
+    }
+
+    /** An account the administrator has switched off: it can't sign in and its tokens are revoked. */
+    public function isDisabled(): bool
+    {
+        return $this->disabledAt !== null;
     }
 
     public function getFullNameAttribute(): string

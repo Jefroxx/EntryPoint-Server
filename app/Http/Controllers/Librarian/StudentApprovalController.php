@@ -19,13 +19,25 @@ class StudentApprovalController extends Controller
             $request->query('search'),
             $request->query('program'),
             $request->query('status'),
-            (int) ($request->query('perPage') ?? 15)
+            (int) ($request->query('perPage') ?? 15),
+            $this->memberType($request),
         ));
     }
 
-    public function stats()
+    public function stats(Request $request)
     {
-        return response()->json($this->studentApproval->stats());
+        return response()->json($this->studentApproval->stats($this->memberType($request)));
+    }
+
+    /**
+     * The Students page asks for students only (?memberType=student). A lookup (checkout, starting a session) leaves it
+     * out and finds faculty and staff members too, since they borrow and visit as well.
+     */
+    private function memberType(Request $request): ?string
+    {
+        $type = $request->query('memberType');
+
+        return in_array($type, [...Student::MEMBER_TYPES, 'members'], true) ? $type : null;
     }
 
     public function approve(Request $request, Student $student)

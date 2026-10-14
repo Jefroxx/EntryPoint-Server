@@ -106,6 +106,7 @@ class MarketplaceService
     {
         $items = $this->marketItems->orderedByPointCost()->map(fn (MarketItem $item) => [
             'itemID'     => $item->itemID,
+            'uuid'       => $item->uuid,
             'name'       => $item->name,
             'type'       => $item->type,
             'photoURL'   => $item->photoURL,
@@ -122,6 +123,9 @@ class MarketplaceService
     {
         $redemption = DB::transaction(fn () => $this->redeemItem($item, $student));
         $redemption->load('item');
+
+        // A redeemed reward counts toward achievements.
+        $this->achievements->evaluateForStudent($student);
 
         $this->notifications->send(
             $student->studentID,
@@ -199,6 +203,8 @@ class MarketplaceService
         });
 
         $redemptions->each(fn ($r) => $r->load('item'));
+
+        $this->achievements->evaluateForStudent($student);
 
         $itemSummary = $redemptions->map(fn ($r) => $r->quantity > 1 ? "{$r->item->name} x{$r->quantity}" : $r->item->name)->join(', ');
         $totalSpent = $redemptions->sum('pointsSpent');

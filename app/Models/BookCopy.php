@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class BookCopy extends Model
 {
-    use HasFactory;
+    use HasFactory, UsesUuidRouteKey;
 
     protected $primaryKey = 'copyID';
 
@@ -17,6 +18,9 @@ class BookCopy extends Model
         'accessionNumber',
         'barcodeValue',
         'status',
+        'sourceOfFund',
+        'cost',
+        'remarks',
     ];
 
     /**
@@ -36,6 +40,7 @@ class BookCopy extends Model
     {
         return [
             'accessionNumber' => 'integer',
+            'cost'            => 'decimal:2',
         ];
     }
 

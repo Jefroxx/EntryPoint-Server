@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 // Laravel's built-in Illuminate\Notifications\Notification class.
 class SystemNotification extends Model
 {
-    use HasFactory;
+    use HasFactory, UsesUuidRouteKey;
 
     protected $table = 'notifications';
     protected $primaryKey = 'notificationID';

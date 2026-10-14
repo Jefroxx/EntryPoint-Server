@@ -20,17 +20,17 @@ class StudentApprovalService
     ) {
     }
 
-    public function index(?string $search, ?string $program, ?string $status, int $perPage): LengthAwarePaginator
+    public function index(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null): LengthAwarePaginator
     {
-        return $this->students->paginate($search, $program, $status, $perPage);
+        return $this->students->paginate($search, $program, $status, $perPage, $memberType);
     }
 
     /**
      * @return array{total: int, pending: int, approved: int, rejected: int}
      */
-    public function stats(): array
+    public function stats(?string $memberType = null): array
     {
-        return $this->students->countsByRegistrationStatus();
+        return $this->students->countsByRegistrationStatus($memberType);
     }
 
     public function approve(Student $student, int $librarianID): Student

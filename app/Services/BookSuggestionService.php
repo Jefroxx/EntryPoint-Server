@@ -14,6 +14,7 @@ class BookSuggestionService
     public function __construct(
         private BookSuggestionRepositoryInterface $suggestions,
         private NotificationService $notifications,
+        private AchievementService $achievements,
     ) {
     }
 
@@ -61,6 +62,9 @@ class BookSuggestionService
             'progressStep'          => 'Approved',
             'reviewedByLibrarianID' => $librarianID,
         ]);
+
+        // An approved suggestion counts toward achievements.
+        $this->achievements->evaluateForStudent($suggestion->student);
 
         $this->notifications->send(
             $suggestion->studentID,

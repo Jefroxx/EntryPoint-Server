@@ -42,7 +42,7 @@ class ReservationHoldTest extends TestCase
 
     private function availableCopiesSeenBy(Student $student): int
     {
-        return $this->actingAs($student->user)->getJson("/api/student/catalog/{$this->book->bookID}")->json('book.availableCopies');
+        return $this->actingAs($student->user)->getJson("/api/student/catalog/{$this->book->uuid}")->json('book.availableCopies');
     }
 
     public function test_accepting_a_reservation_drops_the_available_count_and_blocks_a_second_accept(): void
@@ -54,12 +54,12 @@ class ReservationHoldTest extends TestCase
 
         $this->assertSame(1, $this->availableCopiesSeenBy($ben));
 
-        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$first->reservationID}/accept")->assertOk();
+        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$first->uuid}/accept")->assertOk();
 
         $this->assertSame(0, $this->availableCopiesSeenBy($ben));
 
         // The only copy is now held for Ana, so Ben's reservation can't be accepted.
-        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$second->reservationID}/accept")->assertStatus(422);
+        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$second->uuid}/accept")->assertStatus(422);
     }
 
     public function test_a_held_copy_cannot_be_lent_to_someone_without_the_reservation(): void
@@ -69,7 +69,7 @@ class ReservationHoldTest extends TestCase
         $reservation = $this->reserve($ana);
         $copy = BookCopy::where('bookID', $this->book->bookID)->first();
 
-        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$reservation->reservationID}/accept")->assertOk();
+        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$reservation->uuid}/accept")->assertOk();
 
         $this->postJson('/api/librarian/loans', ['studentID' => $ben->studentID, 'copyID' => $copy->copyID])
             ->assertStatus(422)
@@ -107,7 +107,7 @@ class ReservationHoldTest extends TestCase
         $reservation = $this->reserve($ana);
         $copy = BookCopy::where('bookID', $this->book->bookID)->first();
 
-        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$reservation->reservationID}/accept")->assertOk();
+        $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$reservation->uuid}/accept")->assertOk();
 
         // Checked out without picking the reservation: it must still stop holding a copy.
         $this->postJson('/api/librarian/loans', ['studentID' => $ana->studentID, 'copyID' => $copy->copyID])->assertCreated();

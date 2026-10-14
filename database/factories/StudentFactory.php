@@ -28,6 +28,8 @@ class StudentFactory extends Factory
             ]),
             'uuid'                   => Str::uuid(),
             'studentIDNumber'        => $this->faker->unique()->numerify('##-####-###'),
+            'memberType'             => 'student',
+            'department'             => null,
             'barcodeValue'           => null,
             'academicProgram'        => $this->faker->randomElement([
                 'BS Information Technology', 'BS Computer Science', 'BS Accountancy',
@@ -40,6 +42,26 @@ class StudentFactory extends Factory
             'reviewedByLibrarianID'  => null,
             'reviewedAt'             => null,
         ];
+    }
+
+    /** A faculty member: borrows like a student, but has a department and an employee ID instead of a program. */
+    public function faculty(): static
+    {
+        return $this->state(fn () => [
+            'memberType'      => 'faculty',
+            'academicProgram' => null,
+            'department'      => $this->faker->randomElement(['Information Technology', 'Business and Accountancy', 'Education', 'Hospitality Management']),
+        ]);
+    }
+
+    /** A non-teaching staff member. */
+    public function staff(): static
+    {
+        return $this->state(fn () => [
+            'memberType'      => 'staff',
+            'academicProgram' => null,
+            'department'      => $this->faker->randomElement(["Registrar's Office", 'Finance Office', 'Guidance Office']),
+        ]);
     }
 
     public function approved(): static

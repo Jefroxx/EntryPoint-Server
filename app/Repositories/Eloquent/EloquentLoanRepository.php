@@ -127,6 +127,10 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
             ->when($status === 'overdue', fn ($query) => $query->where('status', 'Active')->where('dueDate', '<', now()))
             ->when($status === 'received', fn ($query) => $query->where('status', 'Received'))
             ->when($status === 'returned', fn ($query) => $query->where('status', 'Returned'))
+            // Loans that have gone overdue still need the librarian, so they lead, the one that slipped
+            // past its due date most recently first. Everything else follows, newest checkout first.
+            ->orderByRaw("CASE WHEN status = 'Active' AND dueDate < ? THEN 0 ELSE 1 END", [now()])
+            ->orderByRaw("CASE WHEN status = 'Active' AND dueDate < ? THEN dueDate END DESC", [now()])
             ->orderByDesc('checkoutDate')
             ->paginate($perPage);
     }
