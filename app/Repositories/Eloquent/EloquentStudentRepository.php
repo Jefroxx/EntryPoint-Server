@@ -54,9 +54,17 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
             ->count();
     }
 
+    /** "members" is faculty and staff together (everyone who is not a student); anything else is one exact type. */
+    private function ofMemberType($query, string $type)
+    {
+        return $type === 'members' ? $query->whereIn('memberType', ['faculty', 'staff']) : $query->where('memberType', $type);
+    }
+
     public function approvedCountByProgram(): \Illuminate\Support\Collection
     {
+        // "Students by program": faculty and staff members have a department, not a program, so they aren't counted.
         return Student::where('registrationStatus', 'approved')
+            ->where('memberType', 'student')
             ->selectRaw('academicProgram as program, COUNT(*) as total')
             ->groupBy('academicProgram')
             ->pluck('total', 'program');
@@ -71,9 +79,10 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
         return $code;
     }
 
-    public function paginate(?string $search, ?string $program, ?string $status, int $perPage): LengthAwarePaginator
+    public function paginate(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null): LengthAwarePaginator
     {
         return Student::with('user')
+            ->when($memberType, fn ($query, $value) => $this->ofMemberType($query, $value))
             ->when($search, fn ($query, $term) => $query->where(function ($q) use ($term) {
                 $q->where('studentIDNumber', 'like', "%{$term}%")
                     ->orWhereHas('user', fn ($uq) => $uq->where('firstName', 'like', "%{$term}%")
@@ -86,9 +95,10 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
             ->paginate($perPage);
     }
 
-    public function countsByRegistrationStatus(): array
+    public function countsByRegistrationStatus(?string $memberType = null): array
     {
-        $counts = Student::selectRaw('registrationStatus, COUNT(*) as total')
+        $counts = Student::when($memberType, fn ($query, $value) => $this->ofMemberType($query, $value))
+            ->selectRaw('registrationStatus, COUNT(*) as total')
             ->groupBy('registrationStatus')
             ->pluck('total', 'registrationStatus');
 

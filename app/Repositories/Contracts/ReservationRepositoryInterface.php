@@ -23,6 +23,12 @@ interface ReservationRepositoryInterface extends RepositoryInterface
 
     public function readyCountForStudent(int $studentID): int;
 
+    /** The student's own Accepted reservation for this book, if any (the earliest one). */
+    public function acceptedForStudentAndBook(int $studentID, int $bookID): ?Reservation;
+
+    /** Accepted reservations for a book: each one holds a copy until it is collected. */
+    public function acceptedCountForBook(int $bookID): int;
+
     /**
      * Number of Waiting reservations per book, keyed by bookID.
      *

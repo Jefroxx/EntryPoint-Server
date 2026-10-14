@@ -69,6 +69,8 @@ class StudentPortalService
                 'birthDate'          => $user->birthDate ? Carbon::parse($user->birthDate)->toDateString() : null,
                 'studentIDNumber'    => $student->studentIDNumber,
                 'academicProgram'    => $student->academicProgram,
+                'memberType'         => $student->memberType,
+                'department'         => $student->department,
                 'barcodeValue'       => $student->barcodeValue,
                 'registrationStatus' => $student->registrationStatus,
             ],
@@ -96,6 +98,7 @@ class StudentPortalService
 
             return [
                 'loanID'       => $loan->loanID,
+                'uuid'         => $loan->uuid,
                 'status'       => $reported ? 'Reported' : $loan->status,
                 'checkoutDate' => $loan->checkoutDate,
                 'dueDate'      => $loan->dueDate,
@@ -219,7 +222,8 @@ class StudentPortalService
             'shelfLocation'   => $book->shelfLocation,
             'circulationType' => $book->areaOfLibrary,
             'totalCopies'     => (int) ($book->total_copies ?? 0),
-            'availableCopies' => (int) ($book->available_copies ?? 0),
+            // Copies held for an accepted reservation aren't up for grabs.
+            'availableCopies' => max(0, (int) ($book->available_copies ?? 0) - (int) ($book->held_copies ?? 0)),
             'queueLength'     => $queueLength,
         ];
     }
@@ -228,6 +232,7 @@ class StudentPortalService
     {
         return [
             'bookID'        => $book->bookID,
+            'uuid'          => $book->uuid,
             'title'         => $book->title,
             'coverImageURL' => $book->coverImageURL,
             'subject'       => $book->subject

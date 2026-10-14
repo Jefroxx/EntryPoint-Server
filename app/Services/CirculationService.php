@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Book;
 use App\Models\Loan;
 use App\Models\Penalty;
+use App\Models\PenaltyRule;
 use App\Models\SelfReturnReport;
 use App\Repositories\Contracts\BookCopyRepositoryInterface;
 use App\Repositories\Contracts\LoanPeriodRepositoryInterface;
@@ -31,6 +32,7 @@ class CirculationService
         private LoanPeriodRepositoryInterface $loanPeriods,
         private ReservationService $reservationService,
         private NotificationService $notifications,
+        private AchievementService $achievements,
     ) {
     }
 
@@ -95,7 +97,25 @@ class CirculationService
                 ]);
             }
 
+            // A student collecting a book they have an accepted reservation for is collecting that reservation,
+            // even if the librarian checked the book out without picking it; otherwise it would stay Accepted
+            // and keep holding a copy the student already has.
+            if (empty($validated['reservationID'])) {
+                $own = $this->reservations->acceptedForStudentAndBook($validated['studentID'], $copy->bookID);
+
+                if ($own) {
+                    $validated['reservationID'] = $own->reservationID;
+                }
+            }
+
             $reservation = null;
+            if (empty($validated['reservationID'])
+                && $this->bookCopies->availableCountForBook($copy->bookID) <= $this->reservations->acceptedCountForBook($copy->bookID)) {
+                throw ValidationException::withMessages([
+                    'copyID' => ['Every available copy of this book is held for an accepted reservation.'],
+                ]);
+            }
+
             if (! empty($validated['reservationID'])) {
                 $reservation = $this->reservations->findOrFail($validated['reservationID']);
 
@@ -140,6 +160,9 @@ class CirculationService
         });
 
         $this->loans->loadForResponse($loan);
+
+        // Borrowing counts toward achievements (books borrowed, genres, reserved books picked up).
+        $this->achievements->evaluateForStudent($loan->student);
 
         $this->notifications->send(
             $loan->studentID,
@@ -203,7 +226,13 @@ class CirculationService
         ];
     }
 
-    public function returnBook(Loan $loan): Loan
+    /**
+     * Everything the "Return this book?" window shows before anything changes: the loan, the book, the student,
+     * and the fine that returning the book right now would charge (worked out exactly as it is when it is returned).
+     *
+     * @return array<string, mixed>
+     */
+    public function returnPreview(Loan $loan, ?SelfReturnReport $report = null): array
     {
         if ($loan->status !== 'Active') {
             throw ValidationException::withMessages([
@@ -211,14 +240,190 @@ class CirculationService
             ]);
         }
 
-        DB::transaction(fn () => $this->markReturned($loan));
+        $loan->load(['student.user', 'copy.book.authors']);
+        $copy = $loan->copy;
+        $book = $copy->book;
+        $student = $loan->student;
+        $user = $student->user;
+
+        $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
+        $unitsLate = $rule ? $this->lateUnits($loan->dueDate, now(), $rule) : 0;
+
+        // An overdue book can already have its fine on record (the hourly job writes it), and the desk may have
+        // marked it paid in the Penalties tab: then the window can say so itself instead of asking.
+        $onRecord = $loan->penalties()->latest('computedAt')->first();
+
+        return [
+            // Set when the window is for a student's self-return report, which adds when they reported it.
+            'report' => $report ? [
+                'reportID'   => $report->reportID,
+                'reportedAt' => $report->reportedAt->toIso8601String(),
+            ] : null,
+            'loan' => [
+                'loanID'     => $loan->loanID,
+                'status'     => $loan->status,
+                'checkoutAt' => $loan->checkoutDate->toIso8601String(),
+                'dueAt'      => $loan->dueDate->toIso8601String(),
+                'overdue'    => $loan->dueDate->isPast(),
+            ],
+            'book' => [
+                'title'           => $book->title,
+                'authors'         => $book->authors->pluck('name')->values(),
+                'isbn'            => $book->isbn,
+                'callNumber'      => $book->classNumber,
+                'areaOfLibrary'   => $book->areaOfLibrary,
+                'accessionNumber' => $copy->accessionNumber,
+                'barcodeValue'    => $copy->barcodeValue,
+            ],
+            'student' => [
+                'name'            => $user->fullName,
+                'studentIDNumber' => $student->studentIDNumber,
+                'academicProgram' => $student->academicProgram,
+                'email'           => $user->email,
+                'phoneNumber'     => $user->phoneNumber,
+                // Fines from other loans that are still owed, so the desk sees the whole picture.
+                // (not counting this loan's own fine, which the fee box shows)
+                'unpaidFinesTotal' => max(0.0, $this->penalties->unpaidTotalForStudent($student->studentID)
+                    - ($onRecord && $onRecord->paymentStatus !== 'Paid' ? (float) $onRecord->amount : 0.0)),
+            ],
+            'fine' => [
+                // False when the collection has no fine rule: a late book is then not charged at all.
+                'hasRule'   => (bool) $rule,
+                'unitsLate' => $unitsLate,
+                // Days after the due time during which nothing is charged; the units above are counted after it.
+                'graceDays' => (int) ($rule?->gracePeriodDays ?? 0),
+                'rateUnit'  => $rule?->rateUnit,
+                'rate'      => $rule ? (float) $rule->rate : null,
+                'amount'    => $rule ? round($rule->rate * $unitsLate, 2) : 0.0,
+                // null when no fine has been written for this loan yet.
+                'onRecord'  => $onRecord ? [
+                    'amount'        => (float) $onRecord->amount,
+                    'paymentStatus' => $onRecord->paymentStatus,
+                    'settledAt'     => $onRecord->settledAt?->toIso8601String(),
+                ] : null,
+            ],
+        ];
+    }
+
+    /**
+     * Returns an active loan. `$finePaid` is the librarian saying the student has paid the late fee at the desk:
+     * the fine is then settled in the same step; otherwise it stays on record as unpaid.
+     */
+    public function returnBook(Loan $loan, bool $finePaid = false): Loan
+    {
+        // A book already handed over and waiting to be checked finishes as "in good condition".
+        if ($loan->status === 'Received') {
+            return $this->finishReturn($loan, 'good');
+        }
+
+        if ($loan->status !== 'Active') {
+            throw ValidationException::withMessages([
+                'loan' => ["Only an 'Active' loan can be returned."],
+            ]);
+        }
+
+        DB::transaction(function () use ($loan, $finePaid) {
+            $penalty = $this->markReturned($loan);
+
+            if ($finePaid && $penalty && $penalty->paymentStatus !== 'Paid') {
+                $this->penalties->update($penalty, ['paymentStatus' => 'Paid', 'settledAt' => now()]);
+            }
+        });
 
         $this->loans->loadForResponse($loan);
+
+        // Returning counts toward achievements (on-time returns, and the run of them).
+        $this->achievements->evaluateForStudent($loan->student);
 
         $this->notifications->send(
             $loan->studentID,
             "Your return of \"{$loan->copy->book->title}\" has been processed. Thank you!",
             'loan_returned'
+        );
+
+        return $loan;
+    }
+
+    /** The loan behind a borrowing receipt's barcode (L-000123), or null if the code isn't one. */
+    public function findByReceiptCode(string $code): ?Loan
+    {
+        if (! preg_match('/^L-(\d{1,9})$/i', trim($code), $m)) {
+            return null;
+        }
+
+        return $this->loans->find((int) $m[1]);
+    }
+
+    /**
+     * The student has handed the book over, so it is now in the librarian's hands, but it isn't back on the
+     * shelf until the librarian has checked it. The return time is fixed here (a late fine stops growing at the
+     * moment the book was handed over), the loan becomes "Received", and the copy stays off the shelf.
+     */
+    public function receiveBook(Loan $loan): Loan
+    {
+        if ($loan->status === 'Received') {
+            throw ValidationException::withMessages([
+                'loan' => ['This book was already received. Check it for damage to finish the return.'],
+            ]);
+        }
+
+        if ($loan->status !== 'Active') {
+            throw ValidationException::withMessages([
+                'loan' => ['This loan is already closed.'],
+            ]);
+        }
+
+        DB::transaction(function () use ($loan) {
+            $this->loans->update($loan, ['returnDate' => now(), 'status' => 'Received']);
+            $this->accruePenalty($loan);
+        });
+
+        $this->loans->loadForResponse($loan);
+
+        $this->notifications->send(
+            $loan->studentID,
+            "We've received \"{$loan->copy->book->title}\". A librarian will check its condition to finish your return.",
+            'loan_received'
+        );
+
+        return $loan;
+    }
+
+    /**
+     * After checking the received book: in good condition it goes back on the shelf (and the next person in the
+     * reservation queue is told), damaged it stays off the shelf marked as damaged.
+     *
+     * @param  'good'|'damaged'  $condition
+     */
+    public function finishReturn(Loan $loan, string $condition, ?string $note = null): Loan
+    {
+        if ($loan->status !== 'Received') {
+            throw ValidationException::withMessages([
+                'loan' => ['Only a book that has been received can be checked and finished.'],
+            ]);
+        }
+
+        DB::transaction(function () use ($loan, $condition) {
+            $this->loans->update($loan, ['status' => 'Returned']);
+            $this->bookCopies->update($loan->copy, ['status' => $condition === 'damaged' ? 'damaged' : 'available']);
+            $this->accruePenalty($loan);
+
+            if ($condition !== 'damaged') {
+                $this->reservationService->notifyNextInQueue($loan->copy->bookID);
+            }
+        });
+
+        $this->loans->loadForResponse($loan);
+
+        $this->achievements->evaluateForStudent($loan->student);
+
+        $title = $loan->copy->book->title;
+        $this->notifications->send(
+            $loan->studentID,
+            $condition === 'damaged'
+                ? "\"{$title}\" was returned with damage" . ($note ? ": {$note}" : '') . '. Please visit the library desk.'
+                : "Your return of \"{$title}\" has been checked. Thank you!",
+            $condition === 'damaged' ? 'loan_returned_damaged' : 'loan_returned'
         );
 
         return $loan;
@@ -295,7 +500,28 @@ class CirculationService
         return $dueSoonLoans->count();
     }
 
-    public function verifySelfReturn(SelfReturnReport $report, int $librarianID): SelfReturnReport
+    /**
+     * What the "Verify" / "Reject" window shows for a pending self-return report: the same loan, book, student and
+     * late-fee picture as returning the book at the desk, plus when the student reported it.
+     *
+     * @return array<string, mixed>
+     */
+    public function selfReturnPreview(SelfReturnReport $report): array
+    {
+        if ($report->verificationStatus !== 'Pending') {
+            throw ValidationException::withMessages([
+                'report' => ['This report has already been dealt with.'],
+            ]);
+        }
+
+        return $this->returnPreview($report->loan, $report);
+    }
+
+    /**
+     * Verifies a self-return: the book is returned. `$finePaid` is the librarian saying the student paid the late
+     * fee at the desk, so the fine is settled in the same step; otherwise it stays on record as unpaid.
+     */
+    public function verifySelfReturn(SelfReturnReport $report, int $librarianID, bool $finePaid = false): SelfReturnReport
     {
         if ($report->verificationStatus !== 'Pending') {
             throw ValidationException::withMessages([
@@ -303,15 +529,21 @@ class CirculationService
             ]);
         }
 
-        DB::transaction(function () use ($report, $librarianID) {
+        DB::transaction(function () use ($report, $librarianID, $finePaid) {
             $this->selfReturnReports->update($report, [
                 'verifiedByLibrarianID' => $librarianID,
                 'verificationStatus'    => 'Verified',
             ]);
-            $this->markReturned($report->loan);
+            $penalty = $this->markReturned($report->loan);
+
+            if ($finePaid && $penalty && $penalty->paymentStatus !== 'Paid') {
+                $this->penalties->update($penalty, ['paymentStatus' => 'Paid', 'settledAt' => now()]);
+            }
         });
 
         $this->selfReturnReports->loadForResponse($report);
+
+        $this->achievements->evaluateForStudent($report->loan->student);
 
         $this->notifications->send(
             $report->loan->studentID,
@@ -389,12 +621,14 @@ class CirculationService
      * (locking in the fine as of the exact return moment), and wakes up the
      * next Waiting reservation for the title if a copy just freed up.
      */
-    private function markReturned(Loan $loan): void
+    private function markReturned(Loan $loan): ?Penalty
     {
-        $this->loans->update($loan, ['returnDate' => now(), 'status' => 'Returned']);
+        $this->loans->update($loan, ['returnDate' => $loan->returnDate ?? now(), 'status' => 'Returned']);
         $this->bookCopies->update($loan->copy, ['status' => 'available']);
-        $this->accruePenalty($loan);
+        $penalty = $this->accruePenalty($loan);
         $this->reservationService->notifyNextInQueue($loan->copy->bookID);
+
+        return $penalty;
     }
 
     private function accruePenalty(Loan $loan): ?Penalty
@@ -407,7 +641,7 @@ class CirculationService
         }
 
         $endTime = $loan->returnDate ?? now();
-        $elapsedUnits = $this->elapsedUnits($loan->dueDate, $endTime, $rule->rateUnit);
+        $elapsedUnits = $this->lateUnits($loan->dueDate, $endTime, $rule);
 
         if ($elapsedUnits <= 0) {
             return null; // not actually overdue
@@ -422,6 +656,17 @@ class CirculationService
         $penalty->save();
 
         return $penalty;
+    }
+
+    /**
+     * How many units a fine is charged for: the lateness that is left once the rule's grace period (whole days after
+     * the due time) has passed. Within the grace period nothing is charged.
+     */
+    public function lateUnits(\DateTimeInterface $due, \DateTimeInterface $end, PenaltyRule $rule): int
+    {
+        $chargeFrom = Carbon::parse($due)->addDays((int) ($rule->gracePeriodDays ?? 0));
+
+        return $this->elapsedUnits($chargeFrom, $end, $rule->rateUnit);
     }
 
     public function elapsedUnits(\DateTimeInterface $due, \DateTimeInterface $end, string $unit): int

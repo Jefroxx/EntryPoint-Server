@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
+use App\Models\Book;
 use App\Models\Reservation;
 use App\Services\ReservationService;
 use Illuminate\Http\Request;
@@ -24,9 +25,15 @@ class ReservationController extends Controller
      * View the queue for a specific book — useful for a librarian to see
      * who's next in line before accepting anyone.
      */
-    public function queueForBook(int $bookID)
+    public function queueForBook(Book $book)
     {
-        return response()->json(['queue' => $this->reservationService->queueForBook($bookID)]);
+        return response()->json(['queue' => $this->reservationService->queueForBook($book->bookID)]);
+    }
+
+    /** Looks up an accepted reservation from the code on the student's pickup slip. */
+    public function lookup(string $code)
+    {
+        return response()->json(['reservation' => $this->reservationService->findByPickupCode($code)]);
     }
 
     public function accept(Reservation $reservation)

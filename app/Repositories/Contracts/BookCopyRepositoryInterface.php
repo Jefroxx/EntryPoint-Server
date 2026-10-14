@@ -24,6 +24,9 @@ interface BookCopyRepositoryInterface extends RepositoryInterface
 
     public function hasAvailableForBook(int $bookID): bool;
 
+    /** Copies on the shelf right now, including any held for an accepted reservation. */
+    public function availableCountForBook(int $bookID): int;
+
     public function generateUniqueBarcode(): string;
 
     /**

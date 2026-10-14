@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Achievement extends Model
 {
-    use HasFactory;
+    use HasFactory, UsesUuidRouteKey;
 
     protected $primaryKey = 'achievementID';
 
@@ -15,10 +16,9 @@ class Achievement extends Model
 
     protected $casts = ['criteriaJSON' => 'array'];
 
-    // criteriaJSON is evaluated as a simple {metric, threshold} rule against
-    // one of these Student columns — extend this list as new gamification
-    // metrics are added elsewhere in the app.
-    public const CRITERIA_METRICS = ['knowledgeScore', 'visitStreak'];
+    // criteriaJSON is a simple {metric, threshold} rule: it unlocks once the student's number for that metric
+    // reaches the threshold. What each metric is, and how it is measured, lives in AchievementMetrics.
+    public const CRITERIA_METRICS = \App\Services\AchievementMetrics::KEYS;
 
     public function students()
     {

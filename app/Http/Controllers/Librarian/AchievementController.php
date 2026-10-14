@@ -16,7 +16,11 @@ class AchievementController extends Controller
 
     public function index()
     {
-        return response()->json(['achievements' => $this->achievementService->listWithCounts()]);
+        return response()->json([
+            'achievements' => $this->achievementService->listWithCounts(),
+            // What a new achievement can be about, for the "Unlocks when" choice.
+            'metrics'      => $this->achievementService->metricCatalog(),
+        ]);
     }
 
     public function store(StoreAchievementRequest $request)

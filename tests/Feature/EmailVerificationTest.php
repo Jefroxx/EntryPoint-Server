@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\StudentApproved;
+use App\Mail\StudentRejected;
 use App\Mail\VerifyStudentEmail;
 use App\Models\Librarian;
 use App\Models\Student;
@@ -151,14 +152,26 @@ class EmailVerificationTest extends TestCase
         $this->register();
         $student = Student::first();
 
-        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->studentID}/approve")
+        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/approve")
             ->assertStatus(422)
             ->assertJsonPath('errors.student.0', "This student hasn't confirmed their email yet.");
 
         $this->get($this->mailedLink());
 
-        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->studentID}/approve")->assertOk();
+        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/approve")->assertOk();
         Mail::assertSent(StudentApproved::class, fn ($mail) => $mail->hasTo('ana@school.edu.ph'));
+    }
+
+    public function test_rejecting_a_student_emails_them(): void
+    {
+        $librarian = $this->librarian();
+        $this->register();
+        $student = Student::first();
+
+        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/reject")->assertOk();
+
+        Mail::assertSent(StudentRejected::class, fn ($mail) => $mail->hasTo('ana@school.edu.ph'));
+        Mail::assertNotSent(StudentApproved::class);
     }
 
     public function test_the_school_domain_is_enforced_when_configured(): void

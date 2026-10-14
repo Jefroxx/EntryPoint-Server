@@ -18,11 +18,29 @@ class SelfReturnReportController extends Controller
         return response()->json(['reports' => $this->circulation->pendingSelfReturnReports()]);
     }
 
+    /** The "Verify" / "Reject" window: the loan, book and student, and the late fee verifying it now would charge. */
+    public function preview(SelfReturnReport $report)
+    {
+        return response()->json(['preview' => $this->circulation->selfReturnPreview($report)]);
+    }
+
+    /** Verifies the report (the book is returned). `finePaid` says the student paid the late fee at the desk. */
     public function verify(Request $request, SelfReturnReport $report)
     {
-        $report = $this->circulation->verifySelfReturn($report, $request->user()->librarian->librarianID);
+        $data = $request->validate(['finePaid' => ['sometimes', 'boolean']]);
 
-        return response()->json(['message' => 'Self-return verified.', 'report' => $report]);
+        $report = $this->circulation->verifySelfReturn($report, $request->user()->librarian->librarianID, (bool) ($data['finePaid'] ?? false));
+        $penalty = $report->loan->penalties()->latest('computedAt')->first();
+
+        return response()->json([
+            'message' => match (true) {
+                ! $penalty                         => 'Self-return verified.',
+                $penalty->paymentStatus === 'Paid' => 'Self-return verified. The late fee was marked as paid.',
+                default                            => 'Self-return verified. The late fee is still unpaid.',
+            },
+            'report'  => $report,
+            'penalty' => $penalty?->only(['amount', 'paymentStatus']),
+        ]);
     }
 
     public function reject(Request $request, SelfReturnReport $report)

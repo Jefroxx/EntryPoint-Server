@@ -168,6 +168,7 @@ class DashboardService
             'checkoutDate' => $loan->checkoutDate->toDateString(),
             'dueDate'      => $loan->dueDate->toDateString(),
             'status'       => $this->loanStatusLabel($loan),
+            ...$this->loanDetails($loan),
         ]);
     }
 
@@ -177,13 +178,37 @@ class DashboardService
             'studentName' => $loan->student->user->fullName,
             'bookTitle'   => $loan->copy->book->title,
             'daysOverdue' => (int) $loan->dueDate->diffInDays(now()),
+            ...$this->loanDetails($loan),
         ]);
+    }
+
+    /**
+     * What the dashboard's "click a row" drawer shows beyond the two or three columns the row has:
+     * the loan itself, who has it, which copy, and the exact times.
+     *
+     * @return array<string, mixed>
+     */
+    private function loanDetails(Loan $loan): array
+    {
+        return [
+            'loanID'          => $loan->loanID,
+            'studentIDNumber' => $loan->student->studentIDNumber,
+            'academicProgram' => $loan->student->academicProgram,
+            'accessionNumber' => $loan->copy->accessionNumber,
+            'checkoutAt'      => $loan->checkoutDate->toIso8601String(),
+            'dueAt'           => $loan->dueDate->toIso8601String(),
+            'returnedAt'      => $loan->returnDate?->toIso8601String(),
+        ];
     }
 
     private function loanStatusLabel(Loan $loan): string
     {
         if ($loan->status === 'Returned') {
             return 'Returned';
+        }
+
+        if ($loan->status === 'Received') {
+            return 'Received';
         }
 
         if ($loan->dueDate->isPast()) {

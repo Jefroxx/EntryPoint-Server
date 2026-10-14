@@ -54,13 +54,55 @@ class LoanController extends Controller
      * to Student\LoanController::selfReturn(), which stages a report
      * for later librarian verification).
      */
-    public function returnBook(Loan $loan)
+    /** The student handed the book over: it is now in the librarian's hands, pending a check for damage. */
+    public function receive(Loan $loan)
     {
-        $loan = $this->circulation->returnBook($loan);
+        $loan = $this->circulation->receiveBook($loan);
 
         return response()->json([
-            'message' => 'Book returned successfully.',
+            'message' => 'Book received. Check it for damage to finish the return.',
             'loan'    => $loan,
+        ]);
+    }
+
+    /** After checking the received book: back on the shelf if it is fine, marked damaged if it isn't. */
+    public function finishReturn(Request $request, Loan $loan)
+    {
+        $data = $request->validate([
+            'condition' => ['required', 'in:good,damaged'],
+            'note'      => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $loan = $this->circulation->finishReturn($loan, $data['condition'], $data['note'] ?? null);
+
+        return response()->json([
+            'message' => $data['condition'] === 'damaged' ? 'Return finished. The copy is marked damaged.' : 'Return finished. The copy is back on the shelf.',
+            'loan'    => $loan,
+        ]);
+    }
+
+    /** The "Return this book?" window: the loan, book and student, and the fine returning it now would charge. */
+    public function returnPreview(Loan $loan)
+    {
+        return response()->json(['preview' => $this->circulation->returnPreview($loan)]);
+    }
+
+    /** Returns the book. `finePaid` says the student paid the late fee at the desk, so the fine is settled with it. */
+    public function returnBook(Request $request, Loan $loan)
+    {
+        $data = $request->validate(['finePaid' => ['sometimes', 'boolean']]);
+
+        $loan = $this->circulation->returnBook($loan, (bool) ($data['finePaid'] ?? false));
+        $penalty = $loan->penalties()->latest('computedAt')->first();
+
+        return response()->json([
+            'message' => match (true) {
+                ! $penalty                         => 'Book returned successfully.',
+                $penalty->paymentStatus === 'Paid' => 'Book returned. The late fee was marked as paid.',
+                default                            => 'Book returned. The late fee is still unpaid.',
+            },
+            'loan'    => $loan,
+            'penalty' => $penalty?->only(['amount', 'paymentStatus']),
         ]);
     }
 }

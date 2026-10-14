@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Mail\StudentApproved;
+use App\Mail\StudentRejected;
 use App\Models\Student;
 use App\Repositories\Contracts\StudentRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -19,17 +20,17 @@ class StudentApprovalService
     ) {
     }
 
-    public function index(?string $search, ?string $program, ?string $status, int $perPage): LengthAwarePaginator
+    public function index(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null): LengthAwarePaginator
     {
-        return $this->students->paginate($search, $program, $status, $perPage);
+        return $this->students->paginate($search, $program, $status, $perPage, $memberType);
     }
 
     /**
      * @return array{total: int, pending: int, approved: int, rejected: int}
      */
-    public function stats(): array
+    public function stats(?string $memberType = null): array
     {
-        return $this->students->countsByRegistrationStatus();
+        return $this->students->countsByRegistrationStatus($memberType);
     }
 
     public function approve(Student $student, int $librarianID): Student
@@ -83,6 +84,12 @@ class StudentApprovalService
             'Your registration was not approved. Please contact the library for details.',
             'registration_rejected'
         );
+
+        try {
+            Mail::to($student->user->email)->send(new StudentRejected($student));
+        } catch (Throwable $exception) {
+            Log::error("Rejection email failed for student {$student->studentID}", ['exception' => $exception]);
+        }
 
         return $student->fresh();
     }

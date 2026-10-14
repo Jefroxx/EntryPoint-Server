@@ -79,6 +79,20 @@ class EloquentReservationRepository extends BaseRepository implements Reservatio
         return Reservation::where('studentID', $studentID)->where('status', 'Accepted')->count();
     }
 
+    public function acceptedForStudentAndBook(int $studentID, int $bookID): ?Reservation
+    {
+        return Reservation::where('studentID', $studentID)
+            ->where('bookID', $bookID)
+            ->where('status', 'Accepted')
+            ->orderBy('reservedAt')
+            ->first();
+    }
+
+    public function acceptedCountForBook(int $bookID): int
+    {
+        return Reservation::where('bookID', $bookID)->where('status', 'Accepted')->count();
+    }
+
     public function waitingCountsByBook(array $bookIDs): array
     {
         if (! $bookIDs) {

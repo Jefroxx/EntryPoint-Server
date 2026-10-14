@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\UsesUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class MarketCartItem extends Model
 {
-    use HasFactory;
+    use HasFactory, UsesUuidRouteKey;
 
     protected $primaryKey = 'cartItemID';
 

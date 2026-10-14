@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Wishlist;
+use App\Repositories\Contracts\BookCopyRepositoryInterface;
+use App\Repositories\Contracts\ReservationRepositoryInterface;
 use App\Repositories\Contracts\WishlistRepositoryInterface;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
@@ -14,8 +16,11 @@ class WishlistService
 {
     private const MAX_CART_ITEMS = 3;
 
-    public function __construct(private WishlistRepositoryInterface $wishlists)
-    {
+    public function __construct(
+        private WishlistRepositoryInterface $wishlists,
+        private BookCopyRepositoryInterface $bookCopies,
+        private ReservationRepositoryInterface $reservations,
+    ) {
     }
 
     public function cartIndex(int $studentID): Collection
@@ -76,7 +81,21 @@ class WishlistService
 
     public function wishlistIndex(int $studentID): Collection
     {
-        return $this->wishlists->wishlistForStudent($studentID);
+        $rows = $this->wishlists->wishlistForStudent($studentID);
+
+        // What the cart needs to warn "no copy right now": copies free to promise (on the shelf and not held
+        // for an accepted reservation) and how many are already waiting in line.
+        $queues = $this->reservations->waitingCountsByBook($rows->pluck('bookID')->all());
+
+        return $rows->each(function (Wishlist $row) use ($queues) {
+            if (! $row->book) {
+                return;
+            }
+
+            $free = $this->bookCopies->availableCountForBook($row->bookID) - $this->reservations->acceptedCountForBook($row->bookID);
+            $row->book->setAttribute('availableCopies', max(0, $free));
+            $row->book->setAttribute('queueLength', $queues[$row->bookID] ?? 0);
+        });
     }
 
     public function addToWishlist(int $studentID, int $bookID): Wishlist
