@@ -14,7 +14,7 @@ class Penalty extends Model
 
     protected $fillable = [
         'uuid', 'loanID', 'penaltyTypeID', 'amount',
-        'computedAt', 'settledAt', 'paymentStatus',
+        'computedAt', 'settledAt', 'paymentStatus', 'receiptNumber',
     ];
 
     protected $casts = [

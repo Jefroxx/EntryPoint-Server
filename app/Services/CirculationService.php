@@ -23,6 +23,9 @@ use Illuminate\Validation\ValidationException;
 
 class CirculationService
 {
+    /** How long a student waits after a rejected self-return before they can report it again. */
+    public const SELF_RETURN_COOLDOWN_HOURS = 6;
+
     public function __construct(
         private LoanRepositoryInterface $loans,
         private BookCopyRepositoryInterface $bookCopies,
@@ -70,7 +73,7 @@ class CirculationService
         return $this->penalties->stats();
     }
 
-    public function settlePenalty(Penalty $penalty): Penalty
+    public function settlePenalty(Penalty $penalty, ?string $receiptNumber = null): Penalty
     {
         if ($penalty->paymentStatus === 'Paid') {
             throw ValidationException::withMessages([
@@ -81,6 +84,7 @@ class CirculationService
         $this->penalties->update($penalty, [
             'paymentStatus' => 'Paid',
             'settledAt'     => now(),
+            'receiptNumber' => $receiptNumber,
         ]);
 
         return $penalty->fresh(['loan.student.user', 'loan.copy.book', 'penaltyType']);
@@ -309,7 +313,7 @@ class CirculationService
      * Returns an active loan. `$finePaid` is the librarian saying the student has paid the late fee at the desk:
      * the fine is then settled in the same step; otherwise it stays on record as unpaid.
      */
-    public function returnBook(Loan $loan, bool $finePaid = false): Loan
+    public function returnBook(Loan $loan, bool $finePaid = false, ?string $receiptNumber = null): Loan
     {
         // A book already handed over and waiting to be checked finishes as "in good condition".
         if ($loan->status === 'Received') {
@@ -322,11 +326,11 @@ class CirculationService
             ]);
         }
 
-        DB::transaction(function () use ($loan, $finePaid) {
+        DB::transaction(function () use ($loan, $finePaid, $receiptNumber) {
             $penalty = $this->markReturned($loan);
 
             if ($finePaid && $penalty && $penalty->paymentStatus !== 'Paid') {
-                $this->penalties->update($penalty, ['paymentStatus' => 'Paid', 'settledAt' => now()]);
+                $this->penalties->update($penalty, ['paymentStatus' => 'Paid', 'settledAt' => now(), 'receiptNumber' => $receiptNumber]);
             }
         });
 
@@ -440,7 +444,7 @@ class CirculationService
         $loan->load(['student.user', 'copy.book']);
 
         $this->notifications->notifyAllLibrarians(
-            "{$loan->student->user->fullName} reported returning \"{$loan->copy->book->title}\" - please verify.",
+            "{$loan->student->user->fullName} returned \"{$loan->copy->book->title}\" - please verify.",
             'self_return_reported'
         );
 
@@ -521,7 +525,7 @@ class CirculationService
      * Verifies a self-return: the book is returned. `$finePaid` is the librarian saying the student paid the late
      * fee at the desk, so the fine is settled in the same step; otherwise it stays on record as unpaid.
      */
-    public function verifySelfReturn(SelfReturnReport $report, int $librarianID, bool $finePaid = false): SelfReturnReport
+    public function verifySelfReturn(SelfReturnReport $report, int $librarianID, bool $finePaid = false, ?string $receiptNumber = null): SelfReturnReport
     {
         if ($report->verificationStatus !== 'Pending') {
             throw ValidationException::withMessages([
@@ -529,7 +533,7 @@ class CirculationService
             ]);
         }
 
-        DB::transaction(function () use ($report, $librarianID, $finePaid) {
+        DB::transaction(function () use ($report, $librarianID, $finePaid, $receiptNumber) {
             $this->selfReturnReports->update($report, [
                 'verifiedByLibrarianID' => $librarianID,
                 'verificationStatus'    => 'Verified',
@@ -537,7 +541,7 @@ class CirculationService
             $penalty = $this->markReturned($report->loan);
 
             if ($finePaid && $penalty && $penalty->paymentStatus !== 'Paid') {
-                $this->penalties->update($penalty, ['paymentStatus' => 'Paid', 'settledAt' => now()]);
+                $this->penalties->update($penalty, ['paymentStatus' => 'Paid', 'settledAt' => now(), 'receiptNumber' => $receiptNumber]);
             }
         });
 
@@ -554,7 +558,7 @@ class CirculationService
         return $report;
     }
 
-    public function rejectSelfReturn(SelfReturnReport $report, int $librarianID): SelfReturnReport
+    public function rejectSelfReturn(SelfReturnReport $report, int $librarianID, string $reason): SelfReturnReport
     {
         if ($report->verificationStatus !== 'Pending') {
             throw ValidationException::withMessages([
@@ -565,17 +569,24 @@ class CirculationService
         $this->selfReturnReports->update($report, [
             'verifiedByLibrarianID' => $librarianID,
             'verificationStatus'    => 'Rejected',
+            'rejectionReason'       => $reason,
         ]);
 
         $this->selfReturnReports->loadForResponse($report);
 
         $this->notifications->send(
             $report->loan->studentID,
-            "Your self-return report for \"{$report->loan->copy->book->title}\" could not be verified. Please return the physical copy, or try reporting again after 6 hours.",
+            "Your self-return report for \"{$report->loan->copy->book->title}\" could not be verified. Reason: {$reason} Please return the physical copy, or try reporting again after 6 hours.",
             'self_return_rejected'
         );
 
         return $report;
+    }
+
+    /** When a rejected report can be sent again (counted from the moment it was rejected). */
+    public function selfReturnCooldownEnds(SelfReturnReport $report): Carbon
+    {
+        return $report->updated_at->copy()->addHours(self::SELF_RETURN_COOLDOWN_HOURS);
     }
 
     private function submitSelfReturn(Loan $loan): SelfReturnReport
@@ -593,7 +604,7 @@ class CirculationService
         }
 
         if ($existing && $existing->verificationStatus === 'Rejected') {
-            $cooldownEnds = $existing->updated_at->addHours(6);
+            $cooldownEnds = $this->selfReturnCooldownEnds($existing);
 
             if (now()->lessThan($cooldownEnds)) {
                 throw ValidationException::withMessages([
@@ -605,6 +616,7 @@ class CirculationService
                 'verifiedByLibrarianID' => null,
                 'reportedAt'            => now(),
                 'verificationStatus'    => 'Pending',
+                'rejectionReason'       => null,
             ])->fresh();
         }
 

@@ -27,9 +27,11 @@ class PenaltyController extends Controller
         return response()->json($this->circulation->penaltyStats());
     }
 
-    public function settle(Penalty $penalty)
+    public function settle(Request $request, Penalty $penalty)
     {
-        $penalty = $this->circulation->settlePenalty($penalty);
+        $data = $request->validate(['receiptNumber' => ['required', 'string', 'max:50']]);
+
+        $penalty = $this->circulation->settlePenalty($penalty, $data['receiptNumber']);
 
         return response()->json([
             'message' => 'Penalty settled.',

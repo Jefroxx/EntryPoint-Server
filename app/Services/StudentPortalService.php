@@ -56,6 +56,7 @@ class StudentPortalService
     {
         $user = $student->user;
         $activeReservations = $this->reservations->activeCountForStudent($student->studentID);
+        $activeLoans = $this->loans->activeCountForStudent($student->studentID);
 
         return [
             'profile' => [
@@ -77,11 +78,12 @@ class StudentPortalService
             'points'      => (int) $student->knowledgeScore,
             'visitStreak' => (int) $student->visitStreak,
             'stats'       => [
-                'activeLoans'        => $this->loans->activeCountForStudent($student->studentID),
+                'activeLoans'        => $activeLoans,
                 'overdueLoans'       => $this->loans->overdueCountForStudent($student->studentID),
                 'readyReservations'  => $this->reservations->readyCountForStudent($student->studentID),
                 'activeReservations' => $activeReservations,
-                'slotsLeft'          => max(ReservationService::MAX_ACTIVE_RESERVATIONS - $activeReservations, 0),
+                // The limit covers books the student holds now (loans) plus waiting or accepted reservations.
+                'slotsLeft'          => max(ReservationService::MAX_ACTIVE_RESERVATIONS - $activeLoans - $activeReservations, 0),
                 'unpaidFines'        => $this->penalties->unpaidTotalForStudent($student->studentID),
                 'wishlistCount'      => $this->wishlists->wishlistCountForStudent($student->studentID),
                 'cartCount'          => $this->wishlists->cartCountForStudent($student->studentID),
@@ -96,6 +98,11 @@ class StudentPortalService
                 && $loan->selfReturnReport
                 && $loan->selfReturnReport->verificationStatus === 'Pending';
 
+            // A rejected report: the student sees why, and when they can report again.
+            $rejected = $loan->status === 'Active'
+                && $loan->selfReturnReport
+                && $loan->selfReturnReport->verificationStatus === 'Rejected';
+
             return [
                 'loanID'       => $loan->loanID,
                 'uuid'         => $loan->uuid,
@@ -105,6 +112,8 @@ class StudentPortalService
                 'returnDate'   => $loan->returnDate,
                 // whole days from today to the due date; negative = overdue
                 'daysLeft'     => (int) now()->startOfDay()->diffInDays(Carbon::parse($loan->dueDate)->startOfDay(), false),
+                'rejectionReason'  => $rejected ? $loan->selfReturnReport->rejectionReason : null,
+                'canReportAgainAt' => $rejected ? $this->circulation->selfReturnCooldownEnds($loan->selfReturnReport)->toIso8601String() : null,
                 'book'         => $this->bookBrief($loan->copy->book),
             ];
         });

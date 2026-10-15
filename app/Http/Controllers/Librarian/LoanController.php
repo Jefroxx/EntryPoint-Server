@@ -90,9 +90,13 @@ class LoanController extends Controller
     /** Returns the book. `finePaid` says the student paid the late fee at the desk, so the fine is settled with it. */
     public function returnBook(Request $request, Loan $loan)
     {
-        $data = $request->validate(['finePaid' => ['sometimes', 'boolean']]);
+        $data = $request->validate([
+            'finePaid'      => ['sometimes', 'boolean'],
+            // The cashier's receipt number is required whenever the late fee is collected with the return.
+            'receiptNumber' => ['required_if:finePaid,true,1', 'nullable', 'string', 'max:50'],
+        ]);
 
-        $loan = $this->circulation->returnBook($loan, (bool) ($data['finePaid'] ?? false));
+        $loan = $this->circulation->returnBook($loan, (bool) ($data['finePaid'] ?? false), $data['receiptNumber'] ?? null);
         $penalty = $loan->penalties()->latest('computedAt')->first();
 
         return response()->json([
