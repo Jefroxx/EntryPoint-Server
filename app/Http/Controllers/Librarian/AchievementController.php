@@ -23,6 +23,12 @@ class AchievementController extends Controller
         ]);
     }
 
+    /** The students who unlocked it, and whether each one redeemed the reward. */
+    public function students(Achievement $achievement)
+    {
+        return response()->json(['students' => $this->achievementService->studentsFor($achievement)]);
+    }
+
     public function store(StoreAchievementRequest $request)
     {
         $achievement = $this->achievementService->create($request->validated());

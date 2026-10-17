@@ -176,6 +176,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/library/stats', [BookController::class, 'libraryStats']);
         Route::get('/copies', [BookController::class, 'copies']);
+        Route::get('/copies/lost-damaged', [BookController::class, 'lostAndDamaged']);
         Route::patch('/copies/{copy}', [BookController::class, 'updateCopy']);
         Route::post('/copies/{copy}/remove', [BookController::class, 'removeCopy']);
         Route::post('/books/{book}/copies', [BookController::class, 'addCopies']);
@@ -237,6 +238,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/resource-usage-logs/{usageLog}/end', [ResourceUsageLogController::class, 'end']);
 
         Route::get('/achievements', [LibrarianAchievementController::class, 'index']);
+        Route::get('/achievements/{achievement}/students', [LibrarianAchievementController::class, 'students']);
         Route::post('/achievements', [LibrarianAchievementController::class, 'store']);
         Route::patch('/achievements/{achievement}', [LibrarianAchievementController::class, 'update']);
         Route::delete('/achievements/{achievement}', [LibrarianAchievementController::class, 'destroy']);

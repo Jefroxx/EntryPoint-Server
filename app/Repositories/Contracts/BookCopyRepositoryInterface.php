@@ -35,4 +35,7 @@ interface BookCopyRepositoryInterface extends RepositoryInterface
      * matches the title, ISBN, call number or an author.
      */
     public function paginateCopyCatalog(?string $search, ?int $subjectID, ?string $status, ?string $area, int $perPage): LengthAwarePaginator;
+
+    /** Copies marked lost or damaged, most recently changed first, with their book and last borrower. */
+    public function lostOrDamaged(): Collection;
 }

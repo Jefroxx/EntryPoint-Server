@@ -19,10 +19,11 @@ interface PenaltyRepositoryInterface extends RepositoryInterface
 
     public function unpaidTotalForStudent(int $studentID): float;
 
+    /** `$status`: 'Unpaid', 'Paid', or 'longUnpaid' (unpaid long after the book came back). */
     public function paginate(?string $search, ?string $status, int $perPage): LengthAwarePaginator;
 
     /**
-     * @return array{unpaidCount: int, unpaidTotal: float, paidCount: int}
+     * @return array{unpaidCount: int, unpaidTotal: float, paidCount: int, longUnpaidCount: int, longUnpaidDays: int}
      */
     public function stats(): array;
 

@@ -57,4 +57,12 @@ class EloquentAchievementRepository extends BaseRepository implements Achievemen
     {
         $achievement->students()->attach($student->studentID, $pivotData);
     }
+
+    public function studentsWhoUnlocked(Achievement $achievement): Collection
+    {
+        return $achievement->students()
+            ->with('user')
+            ->orderByPivot('earnedAt', 'desc')
+            ->get();
+    }
 }

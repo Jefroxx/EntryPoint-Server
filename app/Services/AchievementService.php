@@ -36,6 +36,21 @@ class AchievementService
         ));
     }
 
+    /**
+     * Who unlocked this achievement and whether they redeemed its reward, for the librarian's details drawer.
+     */
+    public function studentsFor(Achievement $achievement): BaseCollection
+    {
+        return $this->achievements->studentsWhoUnlocked($achievement)->map(fn (Student $student) => [
+            'studentID'       => $student->studentID,
+            'name'            => $student->user ? "{$student->user->firstName} {$student->user->lastName}" : 'Unknown student',
+            'studentIDNumber' => $student->studentIDNumber,
+            'academicProgram' => $student->academicProgram,
+            'earnedAt'        => $student->pivot->earnedAt,
+            'redeemedAt'      => $student->pivot->redeemedAt,
+        ])->values();
+    }
+
     public function create(array $validated): Achievement
     {
         return DB::transaction(function () use ($validated) {

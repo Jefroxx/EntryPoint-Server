@@ -15,10 +15,16 @@ class PenaltyController extends Controller
 
     public function index(Request $request)
     {
+        $filters = $request->validate([
+            'search'  => ['nullable', 'string', 'max:255'],
+            'status'  => ['nullable', 'in:Unpaid,Paid,longUnpaid'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
         return response()->json($this->circulation->penaltiesIndex(
-            $request->query('search'),
-            $request->query('status'),
-            (int) ($request->query('perPage') ?? 15)
+            $filters['search'] ?? null,
+            $filters['status'] ?? null,
+            (int) ($filters['perPage'] ?? 15)
         ));
     }
 
