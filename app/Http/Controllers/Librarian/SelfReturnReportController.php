@@ -27,9 +27,13 @@ class SelfReturnReportController extends Controller
     /** Verifies the report (the book is returned). `finePaid` says the student paid the late fee at the desk. */
     public function verify(Request $request, SelfReturnReport $report)
     {
-        $data = $request->validate(['finePaid' => ['sometimes', 'boolean']]);
+        $data = $request->validate([
+            'finePaid'      => ['sometimes', 'boolean'],
+            // The cashier's receipt number is required whenever the late fee is collected with the return.
+            'receiptNumber' => ['required_if:finePaid,true,1', 'nullable', 'string', 'max:50'],
+        ]);
 
-        $report = $this->circulation->verifySelfReturn($report, $request->user()->librarian->librarianID, (bool) ($data['finePaid'] ?? false));
+        $report = $this->circulation->verifySelfReturn($report, $request->user()->librarian->librarianID, (bool) ($data['finePaid'] ?? false), $data['receiptNumber'] ?? null);
         $penalty = $report->loan->penalties()->latest('computedAt')->first();
 
         return response()->json([
@@ -45,7 +49,9 @@ class SelfReturnReportController extends Controller
 
     public function reject(Request $request, SelfReturnReport $report)
     {
-        $report = $this->circulation->rejectSelfReturn($report, $request->user()->librarian->librarianID);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:500']]);
+
+        $report = $this->circulation->rejectSelfReturn($report, $request->user()->librarian->librarianID, $data['reason']);
 
         return response()->json(['message' => 'Self-return report rejected.', 'report' => $report]);
     }

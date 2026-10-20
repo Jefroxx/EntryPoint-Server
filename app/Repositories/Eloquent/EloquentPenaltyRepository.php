@@ -7,6 +7,7 @@ use App\Models\PenaltyRule;
 use App\Models\PenaltyType;
 use App\Repositories\Contracts\PenaltyRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
@@ -54,14 +55,16 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
     public function paginate(?string $search, ?string $status, int $perPage): LengthAwarePaginator
     {
         return Penalty::with(['loan.student.user', 'loan.copy.book', 'penaltyType'])
-            ->when($search, fn ($query, $term) => $query->whereHas(
+            // Grouped, so the status filter below applies to both halves of the search.
+            ->when($search, fn ($query, $term) => $query->where(fn ($sq) => $sq->whereHas(
                 'loan.student.user',
                 fn ($uq) => $uq->where('firstName', 'like', "%{$term}%")->orWhere('lastName', 'like', "%{$term}%")
             )->orWhereHas(
                 'loan.copy.book',
                 fn ($bq) => $bq->where('title', 'like', "%{$term}%")
-            ))
-            ->when($status, fn ($query, $value) => $query->where('paymentStatus', $value))
+            )))
+            ->when($status === 'longUnpaid', fn ($query) => $this->longUnpaid($query))
+            ->when($status && $status !== 'longUnpaid', fn ($query) => $query->where('paymentStatus', $status))
             ->orderByDesc('computedAt')
             ->paginate($perPage);
     }
@@ -72,7 +75,17 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
             'unpaidCount' => Penalty::where('paymentStatus', 'Unpaid')->count(),
             'unpaidTotal' => (float) Penalty::where('paymentStatus', 'Unpaid')->sum('amount'),
             'paidCount'   => Penalty::where('paymentStatus', 'Paid')->count(),
+            'longUnpaidCount' => $this->longUnpaid(Penalty::query())->count(),
+            'longUnpaidDays'  => Penalty::LONG_UNPAID_DAYS,
         ];
+    }
+
+    /** Unpaid fines whose book came back more than Penalty::LONG_UNPAID_DAYS days ago. */
+    private function longUnpaid(Builder $query): Builder
+    {
+        return $query->where('paymentStatus', 'Unpaid')->whereHas('loan', fn ($lq) => $lq
+            ->where('status', 'Returned')
+            ->where('returnDate', '<=', now()->subDays(Penalty::LONG_UNPAID_DAYS)));
     }
 
     public function fineRuleForArea(string $area): ?PenaltyRule

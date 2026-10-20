@@ -133,6 +133,46 @@ class CatalogService
     }
 
     /**
+     * The Circulation "Lost and damaged" tab: every copy off the shelf as lost or damaged, with who had it last
+     * and when it was marked (the copy's last change).
+     */
+    public function lostAndDamaged(): array
+    {
+        $copies = $this->bookCopies->lostOrDamaged()->map(function (BookCopy $copy) {
+            $loan = $copy->latestLoan;
+            $user = $loan?->student?->user;
+
+            return [
+                'copyID'          => $copy->copyID,
+                'uuid'            => $copy->uuid,
+                'accessionNumber' => $copy->accessionNumber,
+                'status'          => $copy->status,
+                'markedAt'        => $copy->updated_at,
+                'book'            => [
+                    'bookID'     => $copy->book?->bookID,
+                    'uuid'       => $copy->book?->uuid,
+                    'title'      => $copy->book?->title ?? 'Removed book',
+                    'callNumber' => $copy->book?->classNumber,
+                ],
+                'lastLoan'        => $loan ? [
+                    'loanID'          => $loan->loanID,
+                    'returnDate'      => $loan->returnDate,
+                    'studentName'     => $user ? "{$user->firstName} {$user->lastName}" : null,
+                    'studentIDNumber' => $loan->student?->studentIDNumber,
+                ] : null,
+            ];
+        })->values();
+
+        return [
+            'copies' => $copies,
+            'stats'  => [
+                'lost'    => $copies->where('status', 'lost')->count(),
+                'damaged' => $copies->where('status', 'damaged')->count(),
+            ],
+        ];
+    }
+
+    /**
      * Changes one copy's status from the Book Catalog: back on the shelf, damaged, lost, or retired
      * (removed from the catalog; its accession number is not reused). A copy out on loan changes only
      * through check-in, so it can't be edited here.

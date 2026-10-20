@@ -14,6 +14,7 @@ class SelfReturnReport extends Model
 
     protected $fillable = [
         'uuid', 'loanID', 'verifiedByLibrarianID', 'reportedAt', 'verificationStatus',
+        'rejectionReason',
     ];
 
     protected $casts = ['reportedAt' => 'datetime'];

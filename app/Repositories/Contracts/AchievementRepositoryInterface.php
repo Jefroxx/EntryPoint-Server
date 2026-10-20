@@ -21,4 +21,7 @@ interface AchievementRepositoryInterface extends RepositoryInterface
     public function notYetUnlockedByStudent(Student $student): Collection;
 
     public function attachToStudent(Achievement $achievement, Student $student, array $pivotData): void;
+
+    /** Every student who unlocked it, newest first, with their user and the pivot dates. */
+    public function studentsWhoUnlocked(Achievement $achievement): Collection;
 }

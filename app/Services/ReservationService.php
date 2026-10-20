@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Book;
 use App\Models\Reservation;
 use App\Repositories\Contracts\BookCopyRepositoryInterface;
+use App\Repositories\Contracts\LoanRepositoryInterface;
 use App\Repositories\Contracts\ReservationRepositoryInterface;
 use App\Repositories\Contracts\WishlistRepositoryInterface;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -19,6 +20,7 @@ class ReservationService
 
     public function __construct(
         private ReservationRepositoryInterface $reservations,
+        private LoanRepositoryInterface $loans,
         private WishlistRepositoryInterface $wishlists,
         private BookCopyRepositoryInterface $bookCopies,
         private NotificationService $notifications,
@@ -129,7 +131,9 @@ class ReservationService
                 ]);
             }
 
-            $activeCount = $this->reservations->activeCountForStudent($studentID, lock: true);
+            // Books the student holds on loan use up slots too.
+            $activeCount = $this->reservations->activeCountForStudent($studentID, lock: true)
+                + $this->loans->activeCountForStudent($studentID);
 
             if ($activeCount + $cartItems->count() > self::MAX_ACTIVE_RESERVATIONS) {
                 $slotsLeft = max(self::MAX_ACTIVE_RESERVATIONS - $activeCount, 0);
