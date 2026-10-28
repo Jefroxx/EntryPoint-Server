@@ -188,7 +188,7 @@ class ReturnConfirmationTest extends TestCase
         $loan = $this->loan(now()->subDays(2)->subHours(12));
 
         $this->actingAs($this->librarian)
-            ->postJson("/api/librarian/loans/{$loan->uuid}/return", ['finePaid' => true])
+            ->postJson("/api/librarian/loans/{$loan->uuid}/return", ['finePaid' => true, 'receiptNumber' => 'OR-2026-00123'])
             ->assertOk()
             ->assertJsonPath('penalty.paymentStatus', 'Paid')
             ->assertJsonPath('penalty.amount', '15.00');
@@ -196,7 +196,20 @@ class ReturnConfirmationTest extends TestCase
         $this->assertSame('Returned', $loan->fresh()->status);
         $penalty = Penalty::where('loanID', $loan->loanID)->firstOrFail();
         $this->assertSame('Paid', $penalty->paymentStatus);
+        $this->assertSame('OR-2026-00123', $penalty->receiptNumber);
         $this->assertNotNull($penalty->settledAt);
+    }
+
+    public function test_collecting_the_fee_with_the_return_needs_the_cashiers_receipt_number(): void
+    {
+        $loan = $this->loan(now()->subDays(2)->subHours(12));
+
+        $this->actingAs($this->librarian)
+            ->postJson("/api/librarian/loans/{$loan->uuid}/return", ['finePaid' => true])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('receiptNumber');
+
+        $this->assertSame('Active', $loan->fresh()->status);
     }
 
     public function test_returning_without_the_fee_leaves_the_fine_unpaid(): void
@@ -226,7 +239,7 @@ class ReturnConfirmationTest extends TestCase
         $loan = $this->loan(now()->addDay());
 
         $this->actingAs($this->librarian)
-            ->postJson("/api/librarian/loans/{$loan->uuid}/return", ['finePaid' => true])
+            ->postJson("/api/librarian/loans/{$loan->uuid}/return", ['finePaid' => true, 'receiptNumber' => 'OR-1'])
             ->assertOk()
             ->assertJsonPath('penalty', null);
 

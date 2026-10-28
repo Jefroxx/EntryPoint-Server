@@ -91,14 +91,24 @@ class SelfReturnConfirmationTest extends TestCase
     {
         $report = $this->report(now()->subDays(2)->subHours(12));
 
-        $this->act('post', $report, 'verify', ['finePaid' => true])
+        $this->act('post', $report, 'verify', ['finePaid' => true, 'receiptNumber' => 'OR-2026-00456'])
             ->assertOk()
             ->assertJsonPath('penalty.paymentStatus', 'Paid');
 
         $this->assertSame('Verified', $report->fresh()->verificationStatus);
         $this->assertSame('Returned', $report->loan->fresh()->status);
         $this->assertSame('available', $this->copy->fresh()->status);
-        $this->assertSame('Paid', Penalty::where('loanID', $report->loanID)->firstOrFail()->paymentStatus);
+        $penalty = Penalty::where('loanID', $report->loanID)->firstOrFail();
+        $this->assertSame('Paid', $penalty->paymentStatus);
+        $this->assertSame('OR-2026-00456', $penalty->receiptNumber);
+    }
+
+    public function test_collecting_the_fee_when_verifying_needs_the_cashiers_receipt_number(): void
+    {
+        $report = $this->report(now()->subDays(2)->subHours(12));
+
+        $this->act('post', $report, 'verify', ['finePaid' => true])->assertUnprocessable()->assertJsonValidationErrors('receiptNumber');
+        $this->assertSame('Pending', $report->fresh()->verificationStatus);
     }
 
     public function test_verifying_without_the_fee_leaves_it_unpaid(): void
@@ -126,11 +136,20 @@ class SelfReturnConfirmationTest extends TestCase
     {
         $report = $this->report(now()->subDays(3));
 
-        $this->act('post', $report, 'reject')->assertOk();
+        $this->act('post', $report, 'reject', ['reason' => 'Book not at the shelf'])->assertOk();
 
         $this->assertSame('Rejected', $report->fresh()->verificationStatus);
+        $this->assertSame('Book not at the shelf', $report->fresh()->rejectionReason);
         $this->assertSame('Active', $report->loan->fresh()->status);
         $this->assertSame(0, Penalty::where('loanID', $report->loanID)->count());
+    }
+
+    public function test_rejecting_needs_a_reason_the_student_will_see(): void
+    {
+        $report = $this->report(now()->subDays(3));
+
+        $this->act('post', $report, 'reject')->assertUnprocessable()->assertJsonValidationErrors('reason');
+        $this->assertSame('Pending', $report->fresh()->verificationStatus);
     }
 
     public function test_finePaid_must_be_a_yes_or_no(): void
