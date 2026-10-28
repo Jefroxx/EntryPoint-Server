@@ -15,17 +15,25 @@ interface PenaltyRepositoryInterface extends RepositoryInterface
 
     public function unpaidCount(): int;
 
+    /** Unpaid lost/damaged penalties on any loan of these copies (each with its loan), at most one per copy. */
+    public function openForCopies(array $copyIDs): Collection;
+
+    public function openForCopy(int $copyID): ?Penalty;
+
     public function forStudentWithBooks(int $studentID): Collection;
 
     public function unpaidTotalForStudent(int $studentID): float;
 
-    /** `$status`: 'Unpaid', 'Paid', or 'longUnpaid' (unpaid long after the book came back). */
-    public function paginate(?string $search, ?string $status, int $perPage): LengthAwarePaginator;
+    /**
+     * `$status`: 'Unpaid', 'Paid', 'Replaced', or 'longUnpaid' (unpaid long after the book came back).
+     * `$kind`: 'copy' (a lost or damaged book), 'late' (a late fee), or null for both.
+     */
+    public function paginate(?string $search, ?string $status, int $perPage, ?string $kind = null): LengthAwarePaginator;
 
     /**
-     * @return array{unpaidCount: int, unpaidTotal: float, paidCount: int, longUnpaidCount: int, longUnpaidDays: int}
+     * @return array{unpaidCount: int, unpaidTotal: float, paidCount: int, replacedCount: int, longUnpaidCount: int, longUnpaidDays: int}
      */
-    public function stats(): array;
+    public function stats(?string $kind = null): array;
 
     public function fineRuleForArea(string $area): ?PenaltyRule;
 

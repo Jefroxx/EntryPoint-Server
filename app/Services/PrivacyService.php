@@ -110,10 +110,9 @@ class PrivacyService
                 ->where('loans.studentID', $id)->orderBy('loans.loanID')
                 ->get(['books.title as book', 'book_copies.accessionNumber', 'loans.checkoutDate', 'loans.dueDate', 'loans.returnDate', 'loans.status']),
             'fines' => DB::table('penalties')
-                ->join('loans', 'loans.loanID', '=', 'penalties.loanID')
-                ->join('book_copies', 'book_copies.copyID', '=', 'loans.copyID')
+                ->join('book_copies', 'book_copies.copyID', '=', 'penalties.copyID')
                 ->join('books', 'books.bookID', '=', 'book_copies.bookID')
-                ->where('loans.studentID', $id)->orderBy('penalties.penaltyID')
+                ->where('penalties.studentID', $id)->orderBy('penalties.penaltyID')
                 ->get(['books.title as book', 'penalties.amount', 'penalties.paymentStatus', 'penalties.computedAt', 'penalties.settledAt']),
             'reservations' => DB::table('reservations')
                 ->join('books', 'books.bookID', '=', 'reservations.bookID')
@@ -166,8 +165,8 @@ class PrivacyService
             $reasons[] = $n . ' book' . ($n === 1 ? ' is' : 's are') . ' still out or waiting to be checked.';
         }
 
-        $unpaid = DB::table('penalties')->join('loans', 'loans.loanID', '=', 'penalties.loanID')
-            ->where('loans.studentID', $id)->where('penalties.paymentStatus', 'Unpaid')->count();
+        $unpaid = DB::table('penalties')
+            ->where('penalties.studentID', $id)->where('penalties.paymentStatus', 'Unpaid')->count();
         if ($unpaid > 0) {
             $reasons[] = $unpaid . ' fine' . ($unpaid === 1 ? ' is' : 's are') . ' still unpaid.';
         }

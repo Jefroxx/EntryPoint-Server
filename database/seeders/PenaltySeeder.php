@@ -28,5 +28,10 @@ class PenaltySeeder extends Seeder
                 'gracePeriodDays' => $rule['gracePeriodDays'],
             ]);
         }
+
+        // Lost and damaged books are charged as the book's price, so these types have no fine rule.
+        foreach (['lost', 'damaged'] as $category) {
+            PenaltyType::firstOrCreate(['category' => $category], ['uuid' => Str::uuid()]);
+        }
     }
 }

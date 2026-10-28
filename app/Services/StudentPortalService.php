@@ -125,21 +125,26 @@ class StudentPortalService
     public function penalties(Student $student): array
     {
         $rows = $this->penalties->forStudentWithBooks($student->studentID)->map(function (Penalty $penalty) {
+            // A late fee always has its loan; a lost or damaged book may not (lost inside the library).
             $loan = $penalty->loan;
-            $book = $loan->copy->book;
-            $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
+            $book = $penalty->copy->book;
+            // 'overdue' for a late return; 'lost' or 'damaged' when the student owes for the book itself, which has
+            // no rate or days late (they pay the amount or replace the book).
+            $kind = $penalty->isForCopy() ? $penalty->penaltyType->category : 'overdue';
+            $rule = $kind === 'overdue' ? $this->penalties->ruleForArea($book->areaOfLibrary) : null;
             $unit = $rule?->rateUnit === 'hour' ? 'hour' : 'day';
 
             return [
                 'penaltyID'     => $penalty->penaltyID,
+                'kind'          => $kind,
                 'amount'        => (float) $penalty->amount,
                 'paymentStatus' => $penalty->paymentStatus,
                 'computedAt'    => $penalty->computedAt,
                 'settledAt'     => $penalty->settledAt,
-                'loanReturned'  => $loan->status === 'Returned',
+                'loanReturned'  => ! $loan || $loan->status === 'Returned',
                 'rate'          => $rule ? (float) $rule->rate : null,
                 'rateUnit'      => $unit,
-                'unitsLate'     => $this->circulation->elapsedUnits($loan->dueDate, $loan->returnDate ?? now(), $unit),
+                'unitsLate'     => $kind === 'overdue' && $loan ? $this->circulation->elapsedUnits($loan->dueDate, $loan->returnDate ?? now(), $unit) : 0,
                 'book'          => $this->bookBrief($book),
             ];
         });

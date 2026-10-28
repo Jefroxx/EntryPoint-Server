@@ -36,6 +36,7 @@ class CirculationService
         private ReservationService $reservationService,
         private NotificationService $notifications,
         private AchievementService $achievements,
+        private CopyPenaltyService $copyPenalties,
     ) {
     }
 
@@ -52,11 +53,12 @@ class CirculationService
         return $this->loans->stats();
     }
 
-    public function penaltiesIndex(?string $search, ?string $status, int $perPage): LengthAwarePaginator
+    /** `$kind`: 'copy' for the Lost & Damaged tab, 'late' for the Penalties tab, null for both. */
+    public function penaltiesIndex(?string $search, ?string $status, int $perPage, ?string $kind = null): LengthAwarePaginator
     {
         // penaltyType -> penalty_type: matches the frontend's naming, kept
         // out of the model layer since it's purely a response-shape concern.
-        return $this->penalties->paginate($search, $status, $perPage)->through(function (Penalty $penalty) {
+        return $this->penalties->paginate($search, $status, $perPage, $kind)->through(function (Penalty $penalty) {
             $array = $penalty->toArray();
             $array['penalty_type'] = $penalty->penaltyType;
             unset($array['penaltyType']);
@@ -66,28 +68,33 @@ class CirculationService
     }
 
     /**
-     * @return array{unpaidCount: int, unpaidTotal: float, paidCount: int}
+     * @return array{unpaidCount: int, unpaidTotal: float, paidCount: int, replacedCount: int, longUnpaidCount: int, longUnpaidDays: int}
      */
-    public function penaltyStats(): array
+    public function penaltyStats(?string $kind = null): array
     {
-        return $this->penalties->stats();
+        return $this->penalties->stats($kind);
     }
 
     public function settlePenalty(Penalty $penalty, ?string $receiptNumber = null): Penalty
     {
-        if ($penalty->paymentStatus === 'Paid') {
+        if ($penalty->paymentStatus !== 'Unpaid') {
             throw ValidationException::withMessages([
-                'penalty' => ['This penalty is already paid.'],
+                'penalty' => ['This penalty is already ' . strtolower($penalty->paymentStatus) . '.'],
             ]);
         }
 
-        $this->penalties->update($penalty, [
-            'paymentStatus' => 'Paid',
-            'settledAt'     => now(),
-            'receiptNumber' => $receiptNumber,
-        ]);
+        DB::transaction(function () use ($penalty, $receiptNumber) {
+            $this->penalties->update($penalty, [
+                'paymentStatus' => 'Paid',
+                'settledAt'     => now(),
+                'receiptNumber' => $receiptNumber,
+            ]);
 
-        return $penalty->fresh(['loan.student.user', 'loan.copy.book', 'penaltyType']);
+            // Paying for a lost or damaged book ends that copy's life in the catalog.
+            $this->copyPenalties->retireAfterPayment($penalty);
+        });
+
+        return $penalty->fresh(Penalty::listingRelations());
     }
 
     public function checkout(array $validated, int $actingLibrarianID): Loan
@@ -661,6 +668,8 @@ class CirculationService
 
         $penalty = $this->penalties->firstOrNewForLoan($loan->loanID);
         $penalty->uuid ??= (string) Str::uuid();
+        $penalty->studentID = $loan->studentID;
+        $penalty->copyID = $loan->copyID;
         $penalty->penaltyTypeID = $rule->penaltyTypeID;
         $penalty->amount = round($rule->rate * $elapsedUnits, 2);
         $penalty->computedAt = now();

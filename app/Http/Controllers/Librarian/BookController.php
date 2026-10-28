@@ -56,12 +56,6 @@ class BookController extends Controller
         ));
     }
 
-    /** The Circulation "Lost and damaged" tab. */
-    public function lostAndDamaged()
-    {
-        return response()->json($this->catalog->lostAndDamaged());
-    }
-
     public function updateCopy(UpdateBookCopyRequest $request, BookCopy $copy)
     {
         $copy = $this->catalog->updateCopyStatus($copy, $request->validated('status'));

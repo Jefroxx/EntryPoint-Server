@@ -87,14 +87,6 @@ class EloquentBookCopyRepository extends BaseRepository implements BookCopyRepos
             ->paginate($perPage);
     }
 
-    public function lostOrDamaged(): Collection
-    {
-        return BookCopy::whereIn('status', ['lost', 'damaged'])
-            ->with(['book' => fn ($query) => $query->withTrashed(), 'latestLoan.student.user'])
-            ->orderByDesc('updated_at')
-            ->get();
-    }
-
     public function generateUniqueBarcode(): string
     {
         do {

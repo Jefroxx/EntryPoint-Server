@@ -176,7 +176,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/library/stats', [BookController::class, 'libraryStats']);
         Route::get('/copies', [BookController::class, 'copies']);
-        Route::get('/copies/lost-damaged', [BookController::class, 'lostAndDamaged']);
         Route::patch('/copies/{copy}', [BookController::class, 'updateCopy']);
         Route::post('/copies/{copy}/remove', [BookController::class, 'removeCopy']);
         Route::post('/books/{book}/copies', [BookController::class, 'addCopies']);
@@ -213,7 +212,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/penalties', [PenaltyController::class, 'index']);
         Route::get('/penalties/stats', [PenaltyController::class, 'stats']);
+        Route::post('/penalties', [PenaltyController::class, 'store']);
         Route::post('/penalties/{penalty}/settle', [PenaltyController::class, 'settle']);
+        Route::post('/penalties/{penalty}/replace', [PenaltyController::class, 'replace']);
+        Route::post('/penalties/{penalty}/cancel', [PenaltyController::class, 'cancel']);
 
         Route::get('/self-return-reports', [SelfReturnReportController::class, 'index']);
         Route::get('/self-return-reports/{report}/preview', [SelfReturnReportController::class, 'preview']);

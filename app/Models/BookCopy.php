@@ -48,10 +48,4 @@ class BookCopy extends Model
     {
         return $this->belongsTo(Book::class, 'bookID', 'bookID');
     }
-
-    /** The most recent loan of this copy: who had it last (the Lost and damaged tab). */
-    public function latestLoan()
-    {
-        return $this->hasOne(Loan::class, 'copyID', 'copyID')->latestOfMany('checkoutDate');
-    }
 }

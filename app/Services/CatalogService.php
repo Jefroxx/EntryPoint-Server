@@ -11,6 +11,7 @@ use App\Repositories\Contracts\BookCopyRepositoryInterface;
 use App\Repositories\Contracts\BookRepositoryInterface;
 use App\Repositories\Contracts\BookSubjectRepositoryInterface;
 use App\Repositories\Contracts\LoanRepositoryInterface;
+use App\Repositories\Contracts\PenaltyRepositoryInterface;
 use App\Repositories\Contracts\ReservationRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -54,6 +55,7 @@ class CatalogService
         private LibraryClassificationService $classification,
         private StockLogService $stockLog,
         private ReservationRepositoryInterface $reservations,
+        private PenaltyRepositoryInterface $penalties,
     ) {
     }
 
@@ -133,46 +135,6 @@ class CatalogService
     }
 
     /**
-     * The Circulation "Lost and damaged" tab: every copy off the shelf as lost or damaged, with who had it last
-     * and when it was marked (the copy's last change).
-     */
-    public function lostAndDamaged(): array
-    {
-        $copies = $this->bookCopies->lostOrDamaged()->map(function (BookCopy $copy) {
-            $loan = $copy->latestLoan;
-            $user = $loan?->student?->user;
-
-            return [
-                'copyID'          => $copy->copyID,
-                'uuid'            => $copy->uuid,
-                'accessionNumber' => $copy->accessionNumber,
-                'status'          => $copy->status,
-                'markedAt'        => $copy->updated_at,
-                'book'            => [
-                    'bookID'     => $copy->book?->bookID,
-                    'uuid'       => $copy->book?->uuid,
-                    'title'      => $copy->book?->title ?? 'Removed book',
-                    'callNumber' => $copy->book?->classNumber,
-                ],
-                'lastLoan'        => $loan ? [
-                    'loanID'          => $loan->loanID,
-                    'returnDate'      => $loan->returnDate,
-                    'studentName'     => $user ? "{$user->firstName} {$user->lastName}" : null,
-                    'studentIDNumber' => $loan->student?->studentIDNumber,
-                ] : null,
-            ];
-        })->values();
-
-        return [
-            'copies' => $copies,
-            'stats'  => [
-                'lost'    => $copies->where('status', 'lost')->count(),
-                'damaged' => $copies->where('status', 'damaged')->count(),
-            ],
-        ];
-    }
-
-    /**
      * Changes one copy's status from the Book Catalog: back on the shelf, damaged, lost, or retired
      * (removed from the catalog; its accession number is not reused). A copy out on loan changes only
      * through check-in, so it can't be edited here.
@@ -191,11 +153,25 @@ class CatalogService
             ]);
         }
 
+        // A copy with an unpaid penalty stays as it is until the student pays or replaces it. The one way out is
+        // finding or repairing it, which cancels the penalty (the student no longer owes for a book that is back).
+        $open = $this->penalties->openForCopy($copy->copyID);
+
+        if ($open && $status !== 'available') {
+            throw ValidationException::withMessages([
+                'status' => ["Accession no. {$copy->accessionNumber} has an unpaid penalty. Settle it first, or mark the copy found or repaired to cancel it."],
+            ]);
+        }
+
         if ($status === 'retired') {
             return $this->retireCopy($copy, 'Removed');
         }
 
-        return $this->bookCopies->update($copy, ['status' => $status]);
+        return DB::transaction(function () use ($copy, $status, $open) {
+            $open?->delete();
+
+            return $this->bookCopies->update($copy, ['status' => $status]);
+        });
     }
 
     /**
@@ -239,6 +215,12 @@ class CatalogService
             if ($copy->status === 'retired') {
                 throw ValidationException::withMessages([
                     'status' => ["Accession no. {$copy->accessionNumber} has already been removed from the catalog."],
+                ]);
+            }
+
+            if ($this->penalties->openForCopy($copy->copyID)) {
+                throw ValidationException::withMessages([
+                    'status' => ["Accession no. {$copy->accessionNumber} has an unpaid penalty. Settle it first."],
                 ]);
             }
 
@@ -418,6 +400,8 @@ class CatalogService
                 'accessionNumber' => $copy->accessionNumber,
                 'barcodeValue'    => $copy->barcodeValue,
                 'status'          => $copy->status,
+                // This copy's own cost (null if not recorded): where a lost/damaged penalty starts from.
+                'cost'            => $copy->cost,
             ])->values(),
             'heldCopies' => $book->reservations()->where('status', 'Accepted')->count(),
             'loans'     => $this->loans->countsForBook($book->bookID),
