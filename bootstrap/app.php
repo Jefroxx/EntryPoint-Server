@@ -15,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // There is no web login page to send a signed-out API caller to (the Nuxt app owns sign-in), so don't try.
         $middleware->redirectGuestsTo(fn (\Illuminate\Http\Request $request) => $request->is('api/*') ? null : '/login');
 
+        // Behind the Nuxt proxy / Cloudflare tunnel, so trust X-Forwarded-* for https URLs.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'librarian'        => \App\Http\Middleware\EnsureUserIsLibrarian::class,
             'student'          => \App\Http\Middleware\EnsureUserIsStudent::class,

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Librarian;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAttendanceScanRequest;
+use App\Http\Requests\StoreVisitorLogRequest;
+use App\Models\AttendanceLog;
 use App\Services\AttendanceService;
 use Illuminate\Http\Request;
 
@@ -26,6 +28,24 @@ class AttendanceLogController extends Controller
     public function stats()
     {
         return response()->json($this->attendanceService->stats());
+    }
+
+    public function storeVisitor(StoreVisitorLogRequest $request)
+    {
+        $data = $request->validated();
+
+        return response()->json([
+            'message' => 'Visitor checked in.',
+            'log'     => $this->attendanceService->logVisitor(trim($data['name']), trim($data['purpose'])),
+        ], 201);
+    }
+
+    public function checkOutVisitor(AttendanceLog $log)
+    {
+        return response()->json([
+            'message' => 'Visitor checked out.',
+            'log'     => $this->attendanceService->checkOutVisitor($log),
+        ]);
     }
 
     public function store(StoreAttendanceScanRequest $request)

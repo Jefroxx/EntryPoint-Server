@@ -230,7 +230,8 @@ class StudentPortalService
     private function catalogRow(Book $book, int $queueLength): array
     {
         return $this->bookBrief($book) + [
-            'callNumber'      => $book->classNumber,
+            // Null while the Dewey number is unchecked; the app shows "Call number pending".
+            'callNumber'      => $book->publicCallNumber(),
             'isbn'            => $book->isbn,
             'publicationYear' => $book->publicationYear,
             'shelfLocation'   => $book->shelfLocation,
@@ -249,6 +250,7 @@ class StudentPortalService
             'uuid'          => $book->uuid,
             'title'         => $book->title,
             'coverImageURL' => $book->coverImageURL,
+            'isNewArrival'  => (bool) $book->isNewArrival,
             'subject'       => $book->subject
                 ? ['subjectID' => $book->subject->subjectID, 'name' => $book->subject->name]
                 : null,

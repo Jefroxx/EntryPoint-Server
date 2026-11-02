@@ -135,6 +135,32 @@ class AttendanceService
         return $result;
     }
 
+    /** A walk-in with no account: the librarian types the name and the purpose of the visit. */
+    public function logVisitor(string $name, string $purpose): AttendanceLog
+    {
+        return $this->attendanceLogs->create([
+            'uuid'           => Str::uuid(),
+            'studentID'      => null,
+            'visitorName'    => $name,
+            'visitorPurpose' => $purpose,
+            'entryTime'      => now(),
+        ]);
+    }
+
+    /** Closes a visitor's open visit by hand (they have no card to scan on the way out). */
+    public function checkOutVisitor(AttendanceLog $log): AttendanceLog
+    {
+        if ($log->studentID !== null) {
+            throw ValidationException::withMessages(['log' => ['Students check out by scanning their ID.']]);
+        }
+
+        if ($log->exitTime) {
+            throw ValidationException::withMessages(['log' => ['This visitor is already checked out.']]);
+        }
+
+        return $this->attendanceLogs->update($log, ['exitTime' => now()]);
+    }
+
     /**
      * Closes a visit that was never scanned out, at the configured closing time (or N hours after
      * entry, see config/attendance.php) instead of "now", so the recorded stay stays believable.

@@ -56,6 +56,7 @@ class CatalogService
         private StockLogService $stockLog,
         private ReservationRepositoryInterface $reservations,
         private PenaltyRepositoryInterface $penalties,
+        private NotificationService $notifications,
     ) {
     }
 
@@ -87,6 +88,7 @@ class CatalogService
             'title'         => $book->title,
             'isbn'          => $book->isbn,
             'callNumber'    => $book->classNumber,
+            'deweyStatus'   => $book->deweyStatus,
             'coverImageURL' => $book->coverImageURL,
             'subject'       => $book->subject ? [
                 'subjectID' => $book->subject->subjectID,
@@ -125,9 +127,10 @@ class CatalogService
             'book'            => [
                 ...$copy->book->only([
                     'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
-                    'publisher', 'sourceOfFund', 'cost', 'shelfLocation', 'coverImageURL',
+                    'publisher', 'sourceOfFund', 'cost', 'remarks', 'shelfLocation', 'coverImageURL',
                 ]),
-                'callNumber' => $copy->book->classNumber,
+                'callNumber'  => $copy->book->classNumber,
+                'deweyStatus' => $copy->book->deweyStatus,
                 'subject'    => $copy->book->subject?->only(['subjectID', 'name']),
                 'authors'    => $copy->book->authors->pluck('name')->values(),
             ],
@@ -286,7 +289,15 @@ class CatalogService
 
             // Prefer the live Dewey class for this specific edition; fall
             // back to the subject's keyword-derived classification code.
-            $deweyClass = $lookup['deweyClass'] ?? $this->classificationCode($subject);
+            // Order of trust: a number the librarian typed, then one found by ISBN, and only as a last resort
+            // the guess from the category name (which is flagged so someone checks it).
+            if (! empty($validated['deweyNumber'])) {
+                [$deweyClass, $deweySource, $deweyStatus] = [$validated['deweyNumber'], 'manual', 'ok'];
+            } elseif (! empty($lookup['deweyClass'])) {
+                [$deweyClass, $deweySource, $deweyStatus] = [$lookup['deweyClass'], $lookup['source'] ?? 'library_of_congress', 'ok'];
+            } else {
+                [$deweyClass, $deweySource, $deweyStatus] = [$this->classificationCode($subject), 'guessed', 'needs_review'];
+            }
 
             // Auto-generate the class number from the Dewey class + the
             // primary author's cutter number, unless the librarian typed
@@ -302,6 +313,9 @@ class CatalogService
                 'areaOfLibrary'   => $validated['areaOfLibrary'] ?? 'circulation',
                 'title'           => $validated['title'],
                 'classNumber'     => $classNumber,
+                'deweyNumber'     => $deweyClass,
+                'deweySource'     => $deweySource,
+                'deweyStatus'     => $deweyStatus,
                 'isbn'            => $validated['isbn'] ?? null,
                 'publicationYear' => $validated['publicationYear'] ?? null,
                 'volume'          => $validated['volume'] ?? null,
@@ -313,6 +327,9 @@ class CatalogService
                 'remarks'         => $validated['remarks'] ?? null,
                 'coverImageURL'   => $validated['coverImageURL'] ?? null,
                 'shelfLocation'   => $validated['shelfLocation'] ?? null,
+                // Only a ticked box makes it a new arrival; old books are catalogued too.
+                'isNewArrival'    => (bool) ($validated['isNewArrival'] ?? false),
+                'newArrivalAt'    => ($validated['isNewArrival'] ?? false) ? now() : null,
             ]);
 
             foreach ($authorEntries as $entry) {
@@ -329,7 +346,99 @@ class CatalogService
             return $book;
         });
 
+        // Tell everyone about it once the book is safely saved.
+        if ($book->isNewArrival) {
+            $this->notifications->notifyAllStudents("New arrival: \"{$book->title}\" is now in the library.", 'new_arrival');
+        }
+
         return $this->books->loadCatalogRelations($book);
+    }
+
+    /**
+     * Sets a book's Dewey number and rebuilds its call number from it, keeping the author's Cutter. Marks the number
+     * as checked (`ok`), because it came from a catalogue or from a person, never from the keyword guess.
+     */
+    public function applyDewey(Book $book, string $dewey, string $source): Book
+    {
+        $update = ['deweyNumber' => $dewey, 'deweySource' => $source, 'deweyStatus' => 'ok'];
+
+        $primary = $book->authors()->first();
+        if ($primary) {
+            $base = "{$dewey} {$this->cutterNumber($primary)}";
+            // Another book may already hold that exact call number: a/b/c is added, as when a book is first catalogued.
+            $update['classNumber'] = $this->uniqueSuffixed(
+                $base,
+                fn (string $candidate) => $candidate !== $book->classNumber && $this->books->classNumberExists($candidate)
+            );
+        }
+
+        $book->update($update);
+
+        return $book->fresh();
+    }
+
+    /**
+     * Looks the book's ISBN up in the Library of Congress catalogue (then Open Library) and, if a Dewey number
+     * turns up, applies it. Nothing changes when there is no ISBN or no number is found.
+     *
+     * @return array{found: bool, reason?: string, book?: Book}
+     */
+    public function lookupDewey(Book $book): array
+    {
+        if (empty($book->isbn)) {
+            return ['found' => false, 'reason' => 'This book has no ISBN to look up.'];
+        }
+
+        $result = $this->classification->lookupByIsbn($book->isbn);
+
+        if (! $result || empty($result['deweyClass'])) {
+            return ['found' => false, 'reason' => 'No Dewey number was found for this ISBN.'];
+        }
+
+        return ['found' => true, 'book' => $this->applyDewey($book, $result['deweyClass'], $result['source'] ?? 'library_of_congress')];
+    }
+
+    /**
+     * For the book form: what the catalogues know about an ISBN, before the book exists. Nothing is saved.
+     *
+     * @return array{found: bool, deweyNumber?: string, source?: string, cutter?: ?string, year?: ?int}
+     */
+    public function lookupDeweyByIsbn(string $isbn): array
+    {
+        $result = $this->classification->lookupByIsbn($isbn);
+
+        if (! $result || empty($result['deweyClass'])) {
+            return ['found' => false];
+        }
+
+        return [
+            'found'       => true,
+            'deweyNumber' => $result['deweyClass'],
+            'source'      => $result['source'] ?? 'library_of_congress',
+            'cutter'      => $result['cutterCandidates'][0] ?? null,
+            'year'        => $result['publishYear'] ?? null,
+        ];
+    }
+
+    /** The "check these numbers" list: every book whose Dewey number nobody has confirmed yet. */
+    public function deweyReview(?string $search, int $perPage): array
+    {
+        $page = $this->books->paginateDeweyReview($search, $perPage);
+
+        return [
+            'books' => $page->through(fn (Book $book) => [
+                'bookID'      => $book->bookID,
+                'uuid'        => $book->uuid,
+                'title'       => $book->title,
+                'isbn'        => $book->isbn,
+                'authors'     => $book->authors->pluck('name')->values(),
+                'subject'     => $book->subject?->name,
+                'classNumber' => $book->classNumber,
+                'deweyNumber' => $book->deweyNumber,
+                'deweySource' => $book->deweySource,
+            ]),
+            'needsReview' => $this->books->deweyReviewCount(),
+        ];
     }
 
     public function updateBook(Book $book, array $validated): Book
@@ -369,6 +478,15 @@ class CatalogService
             return $book;
         });
 
+        // A Dewey number typed in the edit form is a person's say-so: it is marked checked and the call number follows it
+        // (unless the same save also sets the call number by hand).
+        $callNumberTyped = ! empty($validated['classNumber']) || ! empty($validated['callNumber']);
+        if (! empty($validated['deweyNumber']) && $validated['deweyNumber'] !== $book->deweyNumber && ! $callNumberTyped) {
+            $book = $this->applyDewey($book->fresh(), $validated['deweyNumber'], 'manual');
+        } elseif (! empty($validated['deweyNumber'])) {
+            $book->update(['deweyNumber' => $validated['deweyNumber'], 'deweySource' => 'manual', 'deweyStatus' => 'ok']);
+        }
+
         return $this->books->loadCatalogRelations($book->fresh());
     }
 
@@ -383,9 +501,11 @@ class CatalogService
         return [
             ...$book->only([
                 'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
-                'publisher', 'sourceOfFund', 'cost', 'remarks', 'coverImageURL', 'shelfLocation',
+                'publisher', 'sourceOfFund', 'cost', 'remarks', 'coverImageURL', 'shelfLocation', 'isNewArrival',
+                'deweyNumber', 'deweySource', 'deweyStatus',
             ]),
             'callNumber' => $book->classNumber,
+            'spineLabel' => $book->spineLabel(),
             // `pages` further down is the page photos, so the number of pages is sent under its own name.
             'pageCount'  => $book->pages,
             'subject'    => $book->subject?->only(['subjectID', 'name']),

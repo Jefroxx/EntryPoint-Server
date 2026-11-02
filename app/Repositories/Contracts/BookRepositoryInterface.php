@@ -26,4 +26,9 @@ interface BookRepositoryInterface extends RepositoryInterface
     public function paginateForStudent(?string $search, ?int $subjectID, bool $availableOnly, int $perPage): LengthAwarePaginator;
 
     public function loadForStudent(Book $book): Book;
+
+    /** Books whose Dewey number has not been checked yet (guessed, or from before real lookups), newest first. */
+    public function paginateDeweyReview(?string $search, int $perPage): LengthAwarePaginator;
+
+    public function deweyReviewCount(): int;
 }

@@ -37,6 +37,45 @@ class BookController extends Controller
         ));
     }
 
+    /** The "check these Dewey numbers" list: books nobody has confirmed a number for yet. */
+    public function deweyReview(Request $request)
+    {
+        $filters = $request->validate([
+            'search'  => ['nullable', 'string', 'max:255'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return response()->json($this->catalog->deweyReview($filters['search'] ?? null, (int) ($filters['perPage'] ?? 15)));
+    }
+
+    /** For the book form's "Look up" button: what the catalogues say about an ISBN. Saves nothing. */
+    public function lookupIsbnDewey(Request $request)
+    {
+        $data = $request->validate(['isbn' => ['required', 'string', 'max:20']]);
+
+        return response()->json($this->catalog->lookupDeweyByIsbn($data['isbn']));
+    }
+
+    /** Looks the book's ISBN up and, if a Dewey number is found, applies it. */
+    public function lookupDewey(Book $book)
+    {
+        $result = $this->catalog->lookupDewey($book);
+
+        return response()->json($result['found']
+            ? ['found' => true, 'message' => "Dewey number set to {$result['book']->deweyNumber}.", 'deweyNumber' => $result['book']->deweyNumber, 'classNumber' => $result['book']->classNumber, 'deweySource' => $result['book']->deweySource]
+            : ['found' => false, 'message' => $result['reason']]);
+    }
+
+    /** A librarian typed the right number in: it is used as is, and counted as checked. */
+    public function setDewey(Request $request, Book $book)
+    {
+        $data = $request->validate(['deweyNumber' => ['required', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/']]);
+
+        $book = $this->catalog->applyDewey($book, $data['deweyNumber'], 'manual');
+
+        return response()->json(['message' => "Dewey number set to {$book->deweyNumber}.", 'deweyNumber' => $book->deweyNumber, 'classNumber' => $book->classNumber, 'deweySource' => $book->deweySource]);
+    }
+
     public function copies(Request $request)
     {
         $filters = $request->validate([

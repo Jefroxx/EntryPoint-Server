@@ -19,6 +19,8 @@ class StoreBookRequest extends FormRequest
             // subject's Dewey classification + the primary author's cutter
             // number (optionally refined by a live ISBN lookup).
             'classNumber'    => ['nullable', 'string', 'max:100'],
+            // The Dewey number alone ("005.1"). Left out, it is looked up by ISBN.
+            'deweyNumber'    => ['nullable', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/'],
             // Alias for classNumber (the Nuxt client's naming).
             'callNumber'     => ['nullable', 'string', 'max:100'],
             'areaOfLibrary' => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
@@ -37,8 +39,10 @@ class StoreBookRequest extends FormRequest
             'sourceOfFund'   => ['required', 'string', 'max:255'],
             'cost'           => ['required', 'numeric', 'min:0'],
             'remarks'        => ['nullable', 'string', 'max:1000'],
+            // Ticked only for books that really just arrived (old books get catalogued too).
+            'isNewArrival'   => ['nullable', 'boolean'],
 
-            'subjectID'      => ['nullable', 'integer', 'exists:book_subjects,subjectID', 'required_without:subjectName'],
+            'subjectID'     => ['nullable', 'integer', 'exists:book_subjects,subjectID', 'required_without:subjectName'],
             'subjectName'    => ['nullable', 'string', 'max:255', 'required_without:subjectID'],
 
             'authors'                 => ['required', 'array', 'min:1'],

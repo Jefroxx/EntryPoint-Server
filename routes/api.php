@@ -166,6 +166,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/attendance-logs', [AttendanceLogController::class, 'index']);
         Route::get('/attendance-logs/stats', [AttendanceLogController::class, 'stats']);
         Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store'])->middleware('throttle:120,1');
+        // Walk-in visitors without an account: typed name + purpose, checked out by hand.
+        Route::post('/attendance-logs/visitor', [AttendanceLogController::class, 'storeVisitor']);
+        Route::post('/attendance-logs/{log}/visitor-checkout', [AttendanceLogController::class, 'checkOutVisitor']);
         // The universal scanner: the code says whether it's a student ID, a receipt, a slip or a facility.
         Route::post('/scan', [ScanController::class, 'store'])->middleware('throttle:120,1');
 
@@ -182,6 +185,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/stock-logs', [BookController::class, 'stockLogs']);
 
         Route::post('/books', [BookController::class, 'store']);
+        // Before /books/{book}, so "dewey-review" isn't taken for a book.
+        Route::get('/books/dewey-review', [BookController::class, 'deweyReview']);
+        Route::post('/dewey/lookup', [BookController::class, 'lookupIsbnDewey'])->middleware('throttle:60,1');
+        Route::post('/books/{book}/dewey/lookup', [BookController::class, 'lookupDewey'])->middleware('throttle:60,1');
+        Route::put('/books/{book}/dewey', [BookController::class, 'setDewey']);
         Route::get('/books/{book}', [BookController::class, 'show']);
         Route::patch('/books/{book}', [BookController::class, 'update']);
         Route::delete('/books/{book}', [BookController::class, 'destroy']);

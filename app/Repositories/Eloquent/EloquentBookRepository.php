@@ -28,6 +28,26 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
         return Book::count();
     }
 
+    public function paginateDeweyReview(?string $search, int $perPage): LengthAwarePaginator
+    {
+        return Book::with(['authors', 'subject'])
+            ->where('deweyStatus', 'needs_review')
+            ->when($search, function ($query, $term) {
+                $query->where(function ($inner) use ($term) {
+                    $inner->where('title', 'like', "%{$term}%")
+                        ->orWhere('isbn', 'like', "%{$term}%")
+                        ->orWhere('classNumber', 'like', "%{$term}%");
+                });
+            })
+            ->orderBy('title')
+            ->paginate($perPage);
+    }
+
+    public function deweyReviewCount(): int
+    {
+        return Book::where('deweyStatus', 'needs_review')->count();
+    }
+
     public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
     {
         // "Free" means on the shelf and not held for an accepted reservation.

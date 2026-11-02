@@ -87,7 +87,7 @@ class EmailVerificationTest extends TestCase
         $this->librarian();
         $this->register();
 
-        $this->get($this->mailedLink())->assertRedirect(self::PORTAL . '/login?verified=1');
+        $this->get($this->mailedLink())->assertRedirect('/login?verified=1');
 
         $this->assertNotNull(User::where('email', 'ana@school.edu.ph')->first()->emailVerifiedAt);
         $this->assertSame(1, SystemNotification::where('type', 'new_registration')->count());
@@ -106,7 +106,7 @@ class EmailVerificationTest extends TestCase
         $link = $this->mailedLink();
 
         $this->get($link);
-        $this->get($link)->assertRedirect(self::PORTAL . '/login?verified=already');
+        $this->get($link)->assertRedirect('/login?verified=already');
 
         $this->assertSame(1, SystemNotification::where('type', 'new_registration')->count());
     }
@@ -119,7 +119,7 @@ class EmailVerificationTest extends TestCase
         // Swap in another account's uuid: the signature no longer matches.
         $link = preg_replace('#/email/verify/[^/]+/#', "/email/verify/{$other->uuid}/", $this->mailedLink());
 
-        $this->get($link)->assertRedirect(self::PORTAL . '/login?verified=invalid');
+        $this->get($link)->assertRedirect('/login?verified=invalid');
         $this->assertNull($other->fresh()->emailVerifiedAt);
     }
 
@@ -130,7 +130,7 @@ class EmailVerificationTest extends TestCase
 
         $this->travel(config('portal.verify_link_minutes') + 1)->minutes();
 
-        $this->get($link)->assertRedirect(self::PORTAL . '/login?verified=expired');
+        $this->get($link)->assertRedirect('/login?verified=expired');
         $this->assertNull(User::where('email', 'ana@school.edu.ph')->first()->emailVerifiedAt);
     }
 
@@ -183,6 +183,42 @@ class EmailVerificationTest extends TestCase
             ->assertJsonPath('errors.email.0', 'Use your school email (ending in @school.edu.ph).');
 
         $this->register('ana@school.edu.ph')->assertCreated();
+    }
+
+    private function registerFrom(string $origin): void
+    {
+        $this->withHeaders(['Origin' => $origin])->postJson('/api/register', [
+            'firstName' => 'Ana', 'lastName' => 'Reyes', 'email' => 'ana@school.edu.ph',
+            'password' => 'password123', 'password_confirmation' => 'password123', 'studentIDNumber' => '2021-12345',
+        ])->assertCreated();
+    }
+
+    public function test_the_link_points_at_the_site_the_student_registered_from(): void
+    {
+        // A quick tunnel's address changes on every restart; nothing in .env should have to follow it.
+        $this->registerFrom('https://random-words.trycloudflare.com');
+
+        $link = $this->mailedLink();
+        $this->assertStringStartsWith('https://random-words.trycloudflare.com/api/email/verify/', $link);
+
+        // And that link still works, whatever host the request reaches Laravel on.
+        $this->get($link)->assertRedirect('/login?verified=1');
+    }
+
+    public function test_an_untrusted_origin_cannot_steer_the_link_elsewhere(): void
+    {
+        $this->registerFrom('https://evil.example.com');
+
+        $this->assertStringStartsWith(self::PORTAL . '/api/email/verify/', $this->mailedLink());
+    }
+
+    public function test_a_host_added_to_the_allow_list_is_trusted(): void
+    {
+        config(['portal.allowed_hosts' => ['.entrypoint.ph']]);
+
+        $this->registerFrom('https://library.entrypoint.ph');
+
+        $this->assertStringStartsWith('https://library.entrypoint.ph/api/email/verify/', $this->mailedLink());
     }
 
     public function test_the_verification_email_renders_with_the_link(): void

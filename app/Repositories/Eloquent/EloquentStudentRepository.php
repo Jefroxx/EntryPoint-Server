@@ -47,6 +47,11 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
         return Student::where('registrationStatus', 'approved')->count();
     }
 
+    public function approvedIDs(): array
+    {
+        return Student::where('registrationStatus', 'approved')->pluck('studentID')->map(fn ($id) => (int) $id)->all();
+    }
+
     public function readyForReviewCount(): int
     {
         return Student::where('registrationStatus', 'pending')

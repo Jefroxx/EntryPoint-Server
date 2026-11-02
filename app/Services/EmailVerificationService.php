@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\VerifyStudentEmail;
 use App\Models\User;
+use App\Support\PortalUrl;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -80,10 +81,14 @@ class EmailVerificationService
 
     private function linkFor(User $user): string
     {
-        return URL::temporarySignedRoute(
+        // The signature covers the path only (absolute: false), so it stays valid whatever host the request
+        // reaches Laravel on (behind the Nuxt proxy, a tunnel or the real domain). The address in front of
+        // it is the site the student is on, via /api, which the web server forwards to Laravel.
+        return PortalUrl::current() . URL::temporarySignedRoute(
             'verification.verify',
             now()->addMinutes(config('portal.verify_link_minutes')),
             ['uuid' => $user->uuid, 'hash' => $this->hashFor($user)],
+            absolute: false,
         );
     }
 

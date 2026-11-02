@@ -223,7 +223,8 @@ class CirculationService
                 ...$book->only([
                     'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages', 'publisher',
                 ]),
-                'callNumber'      => $book->classNumber,
+                // The slip goes to the student, so an unchecked (guessed) number is left off it.
+                'callNumber'      => $book->publicCallNumber(),
                 'subject'         => $book->subject?->name,
                 'authors'         => $book->authors->pluck('name')->values(),
                 'accessionNumber' => $loan->copy->accessionNumber,

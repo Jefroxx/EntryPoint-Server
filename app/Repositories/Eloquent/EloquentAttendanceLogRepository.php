@@ -28,11 +28,13 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
     public function paginate(?string $search, ?string $date, bool $activeOnly, int $perPage): LengthAwarePaginator
     {
         return AttendanceLog::with('student.user')
-            ->when($search, fn ($query, $term) => $query->whereHas(
-                'student',
-                fn ($sq) => $sq->where('studentIDNumber', 'like', "%{$term}%")
-                    ->orWhereHas('user', fn ($uq) => $uq->where('firstName', 'like', "%{$term}%")
-                        ->orWhere('lastName', 'like', "%{$term}%"))
+            ->when($search, fn ($query, $term) => $query->where(
+                fn ($q) => $q->whereHas(
+                    'student',
+                    fn ($sq) => $sq->where('studentIDNumber', 'like', "%{$term}%")
+                        ->orWhereHas('user', fn ($uq) => $uq->where('firstName', 'like', "%{$term}%")
+                            ->orWhere('lastName', 'like', "%{$term}%"))
+                )->orWhere('visitorName', 'like', "%{$term}%")
             ))
             ->when($date, fn ($query, $value) => $query->whereDate('entryTime', $value))
             ->when($activeOnly, fn ($query) => $query->whereNull('exitTime'))
@@ -117,7 +119,9 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
 
     public function visitDaysBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection
     {
+        // Walk-in visitors have no account, so they aren't part of the per-student visit numbers.
         return AttendanceLog::whereBetween('entryTime', [$start, $end])
+            ->whereNotNull('studentID')
             ->selectRaw('studentID, DATE(entryTime) as day')
             ->toBase()
             ->get()

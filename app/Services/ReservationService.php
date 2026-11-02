@@ -67,11 +67,22 @@ class ReservationService
     {
         $reservations = $this->reservations->listWithFilters($status);
 
+        // How many copies of each book are free to promise, and how many exist; looked up once per book, not per row.
+        $stock = [];
+
         // Lets the librarian UI grey out "Accept" up front, with the reason, instead of failing on click.
-        return $reservations->each(fn (Reservation $r) => $r->setAttribute(
-            'acceptBlock',
-            $r->status === 'Waiting' ? $this->acceptBlock($r) : null,
-        ));
+        return $reservations->each(function (Reservation $r) use (&$stock) {
+            $r->setAttribute('acceptBlock', $r->status === 'Waiting' ? $this->acceptBlock($r) : null);
+
+            $stock[$r->bookID] ??= [
+                'free'  => max($this->unheldCopyCount($r->bookID), 0),
+                'total' => $this->bookCopies->countActiveForBook($r->bookID),
+            ];
+            // An author's name is a computed field and isn't sent with the author, so the names go out as plain text.
+            $r->book?->setAttribute('authorNames', $r->book->authors->pluck('name')->values()->all());
+            $r->setAttribute('copiesFree', $stock[$r->bookID]['free']);
+            $r->setAttribute('copiesTotal', $stock[$r->bookID]['total']);
+        });
     }
 
     /**
