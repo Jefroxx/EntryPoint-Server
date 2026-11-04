@@ -69,7 +69,7 @@ class AuditLogService
     private function describe(Model $model): ?string
     {
         return match (true) {
-            $model instanceof Student => trim(($model->user?->fullName ?? 'Unknown') . " ({$model->studentIDNumber})"),
+            $model instanceof Student => trim(($model->user?->fullName ?? 'Unknown') . " ({$model->memberIDNumber})"),
             $model instanceof BookCopy => 'Accession no. ' . $model->accessionNumber . ($model->book?->title ? ' · ' . $model->book->title : ''),
             $model instanceof Loan => 'Loan #' . $model->getKey() . ($model->copy?->book?->title ? ' · ' . $model->copy->book->title : ''),
             isset($model->title) => (string) $model->title,

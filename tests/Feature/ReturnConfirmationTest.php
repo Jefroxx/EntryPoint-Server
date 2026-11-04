@@ -38,11 +38,11 @@ class ReturnConfirmationTest extends TestCase
         $this->librarian = User::factory()->create(['userType' => 'librarian']);
         Librarian::create(['librarianID' => $this->librarian->userID, 'uuid' => Str::uuid(), 'role' => 'librarian']);
 
-        $type = PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
+        $type = PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
         PenaltyRule::where('penaltyTypeID', $type->penaltyTypeID)->delete();
         PenaltyRule::create(['uuid' => Str::uuid(), 'penaltyTypeID' => $type->penaltyTypeID, 'rate' => 5, 'rateUnit' => 'day', 'gracePeriodDays' => 0]);
 
-        $this->student = Student::factory()->create(['registrationStatus' => 'approved', 'studentIDNumber' => '02-2024-001', 'academicProgram' => 'BSIT']);
+        $this->student = Student::factory()->create(['registrationStatus' => 'approved', 'memberIDNumber' => '02-2024-001', 'academicProgram' => 'BSIT']);
         $this->book = Book::factory()->create(['title' => 'Noli Me Tangere', 'areaOfLibrary' => 'circulation']);
         $this->book->authors()->attach(Author::factory()->create(['name' => 'Jose Rizal'])->authorID, ['uuid' => Str::uuid(), 'role' => null]);
         $this->copy = BookCopy::factory()->create(['bookID' => $this->book->bookID, 'status' => 'borrowed']);
@@ -78,7 +78,7 @@ class ReturnConfirmationTest extends TestCase
             ->assertJsonPath('preview.book.authors.0', 'Jose Rizal')
             ->assertJsonPath('preview.book.accessionNumber', $this->copy->accessionNumber)
             ->assertJsonPath('preview.student.name', $this->student->user->fullName)
-            ->assertJsonPath('preview.student.studentIDNumber', '02-2024-001')
+            ->assertJsonPath('preview.student.memberIDNumber', '02-2024-001')
             ->assertJsonPath('preview.student.academicProgram', 'BSIT')
             ->assertJsonPath('preview.fine.amount', 0)
             ->assertJsonPath('preview.fine.unitsLate', 0);
@@ -112,7 +112,7 @@ class ReturnConfirmationTest extends TestCase
     public function test_the_preview_includes_what_the_student_already_owes(): void
     {
         $earlier = $this->loan(now()->subDays(20), 'Returned', BookCopy::factory()->create(['bookID' => $this->book->bookID]));
-        $type = PenaltyType::where('category', 'circulation')->firstOrFail();
+        $type = PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', 'circulation')->firstOrFail();
         Penalty::create(['uuid' => Str::uuid(), 'loanID' => $earlier->loanID, 'penaltyTypeID' => $type->penaltyTypeID, 'amount' => 40, 'computedAt' => now(), 'paymentStatus' => 'Unpaid']);
 
         $this->preview($this->loan(now()->addDay()))->assertOk()->assertJsonPath('preview.student.unpaidFinesTotal', 40);
@@ -120,7 +120,7 @@ class ReturnConfirmationTest extends TestCase
 
     private function fineOnRecord(Loan $loan, string $status, float $amount = 15): Penalty
     {
-        $type = PenaltyType::where('category', 'circulation')->firstOrFail();
+        $type = PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', 'circulation')->firstOrFail();
 
         return Penalty::create([
             'uuid' => Str::uuid(), 'loanID' => $loan->loanID, 'penaltyTypeID' => $type->penaltyTypeID, 'amount' => $amount,

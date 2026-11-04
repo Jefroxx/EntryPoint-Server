@@ -35,7 +35,7 @@
       },
       "body": {
         "contentType": "application/json",
-        "body": "{\n  \"firstName\": \"Hoppscotch\",\n  \"lastName\": \"Tester\",\n  \"email\": \"hopp_<<stamp>>@davao.sti.edu.ph\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"studentIDNumber\": \"HOPP-<<stamp>>\"\n}"
+        "body": "{\n  \"firstName\": \"Hoppscotch\",\n  \"lastName\": \"Tester\",\n  \"email\": \"hopp_<<stamp>>@davao.sti.edu.ph\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"memberIDNumber\": \"HOPP-<<stamp>>\"\n}"
       },
       "preRequestScript": "pw.env.set(\"stamp\", Date.now().toString());",
       "testScript": "\npw.test(\"Registration submitted (201)\", () => pw.expect(pw.response.status).toBe(201));\npw.env.set(\"studentID\", String(pw.response.body.student.studentID));\npw.env.set(\"studentEmail\", pw.response.body.student.user.email);\n",

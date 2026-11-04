@@ -45,7 +45,7 @@ Input:
     "email": "test_student_1@davao.sti.edu.ph",
     "password": "password123",
     "password_confirmation": "password123",
-    "studentIDNumber": "S-0001"
+    "memberIDNumber": "S-0001"
   }
   Optional fields: middleInitial, phoneNumber, birthDate, address, academicProgram
 Expect: 201, registrationStatus "pending", barcodeValue is null

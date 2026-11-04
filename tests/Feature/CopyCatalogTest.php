@@ -49,7 +49,7 @@ class CopyCatalogTest extends TestCase
 
     public function test_a_number_searches_accession_numbers_exactly(): void
     {
-        $book = Book::factory()->create(['title' => 'Book 1', 'classNumber' => 'QA76.1', 'isbn' => null]);
+        $book = Book::factory()->create(['title' => 'Book 1', 'deweyNumber' => '005.1', 'cutter' => 'Q76', 'isbn' => null]);
         BookCopy::factory()->count(12)->create(['bookID' => $book->bookID]);
 
         $this->actingAs($this->librarian())

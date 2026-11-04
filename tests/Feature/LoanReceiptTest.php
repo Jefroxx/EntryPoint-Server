@@ -31,14 +31,14 @@ class LoanReceiptTest extends TestCase
         Librarian::create(['librarianID' => $this->librarian->userID, 'uuid' => Str::uuid(), 'role' => 'librarian']);
 
         LoanPeriod::updateOrCreate(['area' => 'circulation'], ['loanable' => true, 'periodValue' => 3, 'periodUnit' => 'days']);
-        $type = PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
+        $type = PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
         PenaltyRule::where('penaltyTypeID', $type->penaltyTypeID)->delete();
         PenaltyRule::create(['uuid' => Str::uuid(), 'penaltyTypeID' => $type->penaltyTypeID, 'rate' => 5, 'rateUnit' => 'day', 'gracePeriodDays' => 0]);
     }
 
     public function test_checkout_returns_a_receipt_with_the_book_due_date_and_fine(): void
     {
-        $student = Student::factory()->create(['registrationStatus' => 'approved', 'studentIDNumber' => '02-2024-001']);
+        $student = Student::factory()->create(['registrationStatus' => 'approved', 'memberIDNumber' => '02-2024-001']);
         $book = Book::factory()->create(['title' => 'Noli Me Tangere', 'publisher' => 'Anvil', 'edition' => '2nd', 'areaOfLibrary' => 'circulation']);
         $copy = BookCopy::factory()->create(['bookID' => $book->bookID]);
 
@@ -50,7 +50,7 @@ class LoanReceiptTest extends TestCase
             ->json('receipt');
 
         $this->assertMatchesRegularExpression('/^L-\d{6}$/', $receipt['receiptNumber']);
-        $this->assertSame('02-2024-001', $receipt['student']['studentIDNumber']);
+        $this->assertSame('02-2024-001', $receipt['student']['memberIDNumber']);
         $this->assertSame('Noli Me Tangere', $receipt['book']['title']);
         $this->assertSame('Anvil', $receipt['book']['publisher']);
         $this->assertSame('2nd', $receipt['book']['edition']);

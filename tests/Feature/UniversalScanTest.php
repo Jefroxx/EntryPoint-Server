@@ -106,7 +106,13 @@ class UniversalScanTest extends TestCase
 
         $this->scan($label)->assertOk()->assertJsonPath('type', 'facility')->assertJsonPath('resource.name', 'Study room 1');
 
-        // The student ID that follows (with the facility armed) starts the session instead of attendance.
+        // A session is for a student who is in the library: one who has not logged in is turned away.
+        $this->scan('STI-TESTCODE01', $room->resID)->assertUnprocessable();
+        $this->assertSame('Available', $room->fresh()->status);
+
+        // Once they are logged in (a plain ID scan is attendance), the student ID that follows
+        // (with the facility armed) starts the session instead of attendance.
+        $this->scan('STI-TESTCODE01')->assertOk()->assertJsonPath('action', 'check_in');
         $this->scan('STI-TESTCODE01', $room->resID)->assertOk()->assertJsonPath('type', 'facility_started');
         $this->assertSame('In Use', $room->fresh()->status);
 

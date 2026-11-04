@@ -173,7 +173,7 @@ class AdminAccountsTest extends TestCase
             ->assertJsonPath('account.memberType', 'faculty')
             ->assertJsonPath('account.employeeIDNumber', 'EMP-2019-014');
 
-        $student = Student::where('studentIDNumber', 'EMP-2019-014')->firstOrFail();
+        $student = Student::where('memberIDNumber', 'EMP-2019-014')->firstOrFail();
         $this->assertSame('approved', $student->registrationStatus);
         $this->assertSame('Information Technology', $student->department);
         $this->assertNotEmpty($student->barcodeValue);
@@ -186,7 +186,7 @@ class AdminAccountsTest extends TestCase
 
     public function test_members_need_a_unique_employee_id_and_only_faculty_or_staff_types(): void
     {
-        Student::factory()->faculty()->approved()->create(['studentIDNumber' => 'EMP-1']);
+        Student::factory()->faculty()->approved()->create(['memberIDNumber' => 'EMP-1']);
 
         $this->actingAs($this->admin)->postJson('/api/admin/members', $this->newMember(['employeeIDNumber' => 'EMP-1']))->assertJsonValidationErrors('employeeIDNumber');
         $this->actingAs($this->admin)->postJson('/api/admin/members', $this->newMember(['memberType' => 'student']))->assertJsonValidationErrors('memberType');
@@ -205,7 +205,7 @@ class AdminAccountsTest extends TestCase
         $only = $this->actingAs($this->admin)->getJson('/api/admin/members?type=staff')->json('data');
         $this->assertSame([(string) $staff->uuid], array_column($only, 'uuid'));
 
-        $found = $this->actingAs($this->admin)->getJson('/api/admin/members?search=' . urlencode($faculty->studentIDNumber))->json('data');
+        $found = $this->actingAs($this->admin)->getJson('/api/admin/members?search=' . urlencode($faculty->memberIDNumber))->json('data');
         $this->assertSame([(string) $faculty->uuid], array_column($found, 'uuid'));
     }
 
@@ -272,7 +272,7 @@ class AdminAccountsTest extends TestCase
         $this->assertSame('Maria Y. Santos', $entry->actorName);
         $this->assertSame('librarian', $entry->actorRole);
         $this->assertSame('student.approved', $entry->action);
-        $this->assertSame("Approved a student: Baby Littel ({$student->studentIDNumber})", $entry->summary);
+        $this->assertSame("Approved a student: Baby Littel ({$student->memberIDNumber})", $entry->summary);
     }
 
     public function test_refused_requests_and_reads_leave_no_entry(): void

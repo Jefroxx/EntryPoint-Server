@@ -22,7 +22,7 @@ class StoreMemberRequest extends FormRequest
             'email'            => ['required', 'email', 'max:120', 'unique:users,email'],
             'phoneNumber'      => ['nullable', 'string', 'max:20'],
             'memberType'       => ['required', Rule::in(['faculty', 'staff'])],
-            'employeeIDNumber' => ['required', 'string', 'max:40', 'unique:students,studentIDNumber'],
+            'employeeIDNumber' => ['required', 'string', 'max:40', 'unique:students,memberIDNumber'],
             'department'       => ['required', 'string', 'max:80'],
         ];
     }

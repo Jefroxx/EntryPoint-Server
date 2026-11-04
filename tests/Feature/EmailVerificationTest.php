@@ -36,7 +36,7 @@ class EmailVerificationTest extends TestCase
             'email'                 => $email,
             'password'              => 'password123',
             'password_confirmation' => 'password123',
-            'studentIDNumber'       => '2021-' . random_int(10000, 99999),
+            'memberIDNumber'       => '2021-' . random_int(10000, 99999),
         ]);
     }
 
@@ -189,7 +189,7 @@ class EmailVerificationTest extends TestCase
     {
         $this->withHeaders(['Origin' => $origin])->postJson('/api/register', [
             'firstName' => 'Ana', 'lastName' => 'Reyes', 'email' => 'ana@school.edu.ph',
-            'password' => 'password123', 'password_confirmation' => 'password123', 'studentIDNumber' => '2021-12345',
+            'password' => 'password123', 'password_confirmation' => 'password123', 'memberIDNumber' => '2021-12345',
         ])->assertCreated();
     }
 

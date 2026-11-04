@@ -36,7 +36,7 @@ class CopyPenaltyService
      */
     public function issue(string $kind, float $amount, ?Loan $loan, ?int $studentID, ?BookCopy $copy): Penalty
     {
-        if (! in_array($kind, Penalty::COPY_CATEGORIES, true)) {
+        if (! in_array($kind, Penalty::COPY_KINDS, true)) {
             throw ValidationException::withMessages(['type' => ['A penalty is for a book that is lost or damaged.']]);
         }
 
@@ -87,7 +87,7 @@ class CopyPenaltyService
                 'loanID'        => $loan?->loanID,
                 'studentID'     => $studentID,
                 'copyID'        => $copy->copyID,
-                'penaltyTypeID' => PenaltyType::where('category', $kind)->firstOrFail()->penaltyTypeID,
+                'penaltyTypeID' => PenaltyType::where('kind', $kind)->firstOrFail()->penaltyTypeID,
                 'amount'        => round($amount, 2),
                 'computedAt'    => now(),
                 'paymentStatus' => 'Unpaid',
@@ -121,10 +121,10 @@ class CopyPenaltyService
 
             $new = $this->catalog->addCopies($book, 1, [
                 'sourceOfFund' => 'Replacement by student',
-                'remarks'      => "Replaces accession no. {$old->accessionNumber} ({$penalty->penaltyType->category}).",
+                'remarks'      => "Replaces accession no. {$old->accessionNumber} ({$penalty->penaltyType->kind}).",
             ])->first();
 
-            $this->catalog->removeCopy($old, ucfirst($penalty->penaltyType->category), "Replaced by accession no. {$new->accessionNumber}.");
+            $this->catalog->removeCopy($old, ucfirst($penalty->penaltyType->kind), "Replaced by accession no. {$new->accessionNumber}.");
 
             return $new;
         });
@@ -150,7 +150,7 @@ class CopyPenaltyService
         DB::transaction(function () use ($penalty, $copy) {
             $penalty->delete();
 
-            if (in_array($copy->status, Penalty::COPY_CATEGORIES, true)) {
+            if (in_array($copy->status, Penalty::COPY_KINDS, true)) {
                 $this->bookCopies->update($copy, ['status' => 'available']);
             }
         });
@@ -164,7 +164,7 @@ class CopyPenaltyService
         $penalty->loadMissing('penaltyType', 'copy');
 
         if ($penalty->isForCopy() && $penalty->copy && $penalty->copy->status !== 'retired') {
-            $this->catalog->removeCopy($penalty->copy, ucfirst($penalty->penaltyType->category), 'Paid by the student.');
+            $this->catalog->removeCopy($penalty->copy, ucfirst($penalty->penaltyType->kind), 'Paid by the student.');
         }
     }
 

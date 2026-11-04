@@ -6,6 +6,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Repositories\Contracts\StudentRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -13,6 +14,9 @@ use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
+    /** Cache key for a sign-in that was ended because the account signed in somewhere else (see bootstrap/app.php). */
+    public const REPLACED_TOKEN_PREFIX = 'token-replaced:';
+
     public function __construct(
         private UserRepositoryInterface $users,
         private StudentRepositoryInterface $students,
@@ -39,7 +43,7 @@ class AuthService
             return $this->students->create([
                 'studentID'          => $user->userID,
                 'uuid'               => Str::uuid(),
-                'studentIDNumber'    => $validated['studentIDNumber'],
+                'memberIDNumber'    => $validated['memberIDNumber'],
                 'barcodeValue'       => null,
                 'academicProgram'    => $validated['academicProgram'] ?? null,
                 'registrationStatus' => 'pending',
@@ -135,6 +139,16 @@ class AuthService
      */
     private function issueToken(User $user, string $relation): array
     {
+        // A student account is open in one place at a time: signing in again (another browser, another device) signs
+        // the earlier one out. Their ids are remembered for a day, so that earlier session can be told why it ended.
+        // Librarians are not limited this way: they sign in on a phone to scan while the desk stays signed in.
+        if ($relation === 'student') {
+            foreach ($user->tokens()->pluck('id') as $id) {
+                Cache::put(self::REPLACED_TOKEN_PREFIX.$id, true, now()->addDay());
+            }
+            $user->tokens()->delete();
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return [
@@ -146,5 +160,10 @@ class AuthService
     public function logout(User $user): void
     {
         $user->currentAccessToken()->delete();
+
+        // A librarian who signs out of the desk takes their paired phones with them.
+        if ($user->userType === 'librarian') {
+            app(PhoneScannerService::class)->disconnect($user);
+        }
     }
 }

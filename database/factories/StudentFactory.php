@@ -27,7 +27,7 @@ class StudentFactory extends Factory
                 'userType'      => 'student',
             ]),
             'uuid'                   => Str::uuid(),
-            'studentIDNumber'        => $this->faker->unique()->numerify('##-####-###'),
+            'memberIDNumber'        => $this->faker->unique()->numerify('##-####-###'),
             'memberType'             => 'student',
             'department'             => null,
             'barcodeValue'           => null,

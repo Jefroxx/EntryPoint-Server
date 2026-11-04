@@ -3,6 +3,8 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PhoneScannerController;
+use App\Http\Controllers\Librarian\PhoneScannerController as DeskPhoneScannerController;
 use App\Http\Controllers\Librarian\AchievementController as LibrarianAchievementController;
 use App\Http\Controllers\Librarian\AttendanceLogController;
 use App\Http\Controllers\Librarian\BookController;
@@ -46,13 +48,26 @@ Route::get('/email/verify/{uuid}/{hash}', [EmailVerificationController::class, '
     ->middleware('throttle:12,1')->name('verification.verify');
 Route::post('/email/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:3,1');
 
-// Protected
-Route::middleware('auth:sanctum')->group(function () {
+// A librarian's phone used as the desk's camera. The QR's one-time code is swapped here for a limited token (public,
+// slowed down so the code can't be guessed); the token may then send barcodes and do nothing else.
+Route::post('/phone-scanner/claim', [PhoneScannerController::class, 'claim'])->middleware('throttle:10,1');
+Route::middleware(['auth:sanctum', 'abilities:scan-relay'])->prefix('phone-scanner')->group(function () {
+    Route::get('/ping', [PhoneScannerController::class, 'ping'])->middleware('throttle:30,1');
+    Route::post('/scan', [PhoneScannerController::class, 'scan'])->middleware('throttle:120,1');
+    Route::delete('/', [PhoneScannerController::class, 'leave']);
+});
+
+// Protected (full sign-ins only: `full.token` turns away the phone's limited token)
+Route::middleware(['auth:sanctum', 'full.token'])->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
 
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // A featherweight "am I still signed in?": the student app asks every few seconds, so an account that was signed in
+    // somewhere else finds out almost at once (a dead token answers 401, see bootstrap/app.php).
+    Route::get('/session', fn () => response()->json(['ok' => true]));
 
     Route::get('/books', [BookController::class, 'index']);
 
@@ -77,6 +92,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // `subjects` must stay above `{book}` or it would be read as a book id.
         Route::get('/catalog', [PortalController::class, 'catalog']);
         Route::get('/catalog/subjects', [PortalController::class, 'subjects']);
+        Route::get('/recommendations', [PortalController::class, 'recommendations']);
         Route::get('/catalog/{book}', [PortalController::class, 'catalogShow']);
 
         Route::get('/wishlist', [WishlistController::class, 'index']);
@@ -152,6 +168,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(['librarian', 'staff.permission', 'audit'])->prefix('librarian')->group(function () {
         // The signed-in staff account's role and permissions.
         Route::get('/me', [\App\Http\Controllers\Librarian\MeController::class, 'show']);
+
+        // Use a phone as the desk's camera: a one-time code for the QR, the barcodes the phone sent, and disconnect.
+        Route::post('/phone-pairing', [DeskPhoneScannerController::class, 'pair']);
+        Route::get('/phone-scans', [DeskPhoneScannerController::class, 'scans']);
+        Route::delete('/phone-pairing', [DeskPhoneScannerController::class, 'disconnect']);
         Route::get('/announcements', [\App\Http\Controllers\AnnouncementFeedController::class, 'staff']);
 
         Route::get('/dashboard/today', [DashboardController::class, 'today']);
@@ -167,6 +188,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/attendance-logs/stats', [AttendanceLogController::class, 'stats']);
         Route::post('/attendance-logs/scan', [AttendanceLogController::class, 'store'])->middleware('throttle:120,1');
         // Walk-in visitors without an account: typed name + purpose, checked out by hand.
+        // End of day / ending the scan station: everyone still inside is logged out.
+        Route::post('/attendance-logs/close-all', [AttendanceLogController::class, 'closeAll']);
         Route::post('/attendance-logs/visitor', [AttendanceLogController::class, 'storeVisitor']);
         Route::post('/attendance-logs/{log}/visitor-checkout', [AttendanceLogController::class, 'checkOutVisitor']);
         // The universal scanner: the code says whether it's a student ID, a receipt, a slip or a facility.
@@ -179,6 +202,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/library/stats', [BookController::class, 'libraryStats']);
         Route::get('/copies', [BookController::class, 'copies']);
+        // The checkout desk scans a book's barcode to find the copy being lent.
+        Route::get('/copies/lookup', [BookController::class, 'lookupCopy'])->middleware('throttle:120,1');
+        // Barcode labels for printing, one or many at a time. POST, because hundreds of uuids don't fit in a URL.
+        Route::post('/copies/labels', [BookController::class, 'copyLabels']);
         Route::patch('/copies/{copy}', [BookController::class, 'updateCopy']);
         Route::post('/copies/{copy}/remove', [BookController::class, 'removeCopy']);
         Route::post('/books/{book}/copies', [BookController::class, 'addCopies']);
@@ -190,6 +217,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/dewey/lookup', [BookController::class, 'lookupIsbnDewey'])->middleware('throttle:60,1');
         Route::post('/books/{book}/dewey/lookup', [BookController::class, 'lookupDewey'])->middleware('throttle:60,1');
         Route::put('/books/{book}/dewey', [BookController::class, 'setDewey']);
+        Route::get('/books/{book}/removal-summary', [BookController::class, 'removalSummary']);
         Route::get('/books/{book}', [BookController::class, 'show']);
         Route::patch('/books/{book}', [BookController::class, 'update']);
         Route::delete('/books/{book}', [BookController::class, 'destroy']);

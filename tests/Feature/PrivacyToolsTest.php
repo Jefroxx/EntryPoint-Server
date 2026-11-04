@@ -35,7 +35,7 @@ class PrivacyToolsTest extends TestCase
         $this->admin = User::factory()->create(['userType' => 'librarian']);
         Librarian::create(['librarianID' => $this->admin->userID, 'uuid' => Str::uuid(), 'role' => 'admin']);
 
-        $this->member = Student::factory()->approved()->create(['studentIDNumber' => '02-2024-777', 'academicProgram' => 'BS Nursing']);
+        $this->member = Student::factory()->approved()->create(['memberIDNumber' => '02-2024-777', 'academicProgram' => 'BS Nursing']);
         $this->member->user->update([
             'firstName' => 'Mia', 'middleInitial' => null, 'lastName' => 'Cruz', 'email' => 'mia.cruz@davao.sti.edu.ph',
             'phoneNumber' => '09171234567', 'address' => 'Davao City', 'birthDate' => '2004-03-04',
@@ -55,7 +55,7 @@ class PrivacyToolsTest extends TestCase
 
     private function fine(Loan $loan, string $status): Penalty
     {
-        $type = PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
+        $type = PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
 
         return Penalty::create([
             'uuid' => Str::uuid(), 'loanID' => $loan->loanID, 'penaltyTypeID' => $type->penaltyTypeID, 'amount' => 10,
@@ -158,7 +158,7 @@ class PrivacyToolsTest extends TestCase
         $this->assertNull($user->address);
         $this->assertNull($user->birthDate);
         $this->assertNotNull($user->disabledAt);
-        $this->assertSame("REMOVED-{$ref}", $student->studentIDNumber);
+        $this->assertSame("REMOVED-{$ref}", $student->memberIDNumber);
         $this->assertNull($student->barcodeValue);
         $this->assertNull($student->academicProgram);
         $this->assertSame(0, DB::table('personal_access_tokens')->where('tokenable_id', $user->userID)->count());

@@ -192,7 +192,7 @@ class DashboardService
     {
         return [
             'loanID'          => $loan->loanID,
-            'studentIDNumber' => $loan->student->studentIDNumber,
+            'memberIDNumber' => $loan->student->memberIDNumber,
             'academicProgram' => $loan->student->academicProgram,
             'accessionNumber' => $loan->copy->accessionNumber,
             'checkoutAt'      => $loan->checkoutDate->toIso8601String(),

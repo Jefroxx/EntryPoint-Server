@@ -18,7 +18,7 @@ class PenaltySeeder extends Seeder
         ];
 
         foreach ($rules as $category => $rule) {
-            $type = PenaltyType::create(['uuid' => Str::uuid(), 'category' => $category]);
+            $type = PenaltyType::create(['uuid' => Str::uuid(), 'kind' => 'overdue', 'areaOfLibrary' => $category]);
 
             PenaltyRule::create([
                 'uuid'            => Str::uuid(),
@@ -31,7 +31,7 @@ class PenaltySeeder extends Seeder
 
         // Lost and damaged books are charged as the book's price, so these types have no fine rule.
         foreach (['lost', 'damaged'] as $category) {
-            PenaltyType::firstOrCreate(['category' => $category], ['uuid' => Str::uuid()]);
+            PenaltyType::firstOrCreate(['kind' => $category], ['uuid' => Str::uuid()]);
         }
     }
 }

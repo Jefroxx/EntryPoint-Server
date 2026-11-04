@@ -19,3 +19,6 @@ Schedule::command('loans:notify-due-soon')->hourly();
 // Nightly: close visits a student never scanned out of, at closing time, so the next
 // day's first scan is a check-in and yesterday's stay stays believable.
 Schedule::command('attendance:close-stale')->dailyAt('00:10');
+
+// Nightly: delete sign-in tokens that have expired (they last 14 days), so the table doesn't grow forever.
+Schedule::command('sanctum:prune-expired --hours=24')->dailyAt('00:20');

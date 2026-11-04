@@ -20,12 +20,11 @@ class Book extends Model
         'subjectID',
         'areaOfLibrary',
         'title',
-        'classNumber',
         'isbn',
         'publicationYear',
         'volume',
         'edition',
-        'pages',
+        'pageCount',
         'publisher',
         'sourceOfFund',
         'cost',
@@ -35,6 +34,7 @@ class Book extends Model
         'isNewArrival',
         'newArrivalAt',
         'deweyNumber',
+        'cutter',
         'deweySource',
         'deweyStatus',
     ];
@@ -44,13 +44,26 @@ class Book extends Model
         'newArrivalAt' => 'datetime',
     ];
 
+    protected $appends = ['callNumber'];
+
+    /**
+     * The call number as it is written on the shelf: the Dewey number and the Cutter, e.g. "005.13 C67". It is not
+     * stored; it is always worked out from `deweyNumber` and `cutter`, so the two can't disagree.
+     */
+    public function getCallNumberAttribute(): ?string
+    {
+        $call = trim("{$this->deweyNumber} {$this->cutter}");
+
+        return $call === '' ? null : $call;
+    }
+
     /**
      * The call number students may see: only once a catalogue or a librarian has confirmed the Dewey number.
      * A guessed one is flagged "needs review" and stays off the shelf label and the student app until then.
      */
     public function publicCallNumber(): ?string
     {
-        return $this->deweyStatus === 'ok' ? $this->classNumber : null;
+        return $this->deweyStatus === 'ok' ? $this->callNumber : null;
     }
 
     /**
@@ -64,13 +77,10 @@ class Book extends Model
     {
         $ok = $this->deweyStatus === 'ok' && $this->deweyNumber;
 
-        // classNumber is "<dewey> <cutter>[work letter]"; whatever follows the Dewey number is the Cutter line.
-        $cutter = $ok ? trim(substr((string) $this->classNumber, strlen((string) $this->deweyNumber))) : '';
-
         return [
             'area'    => \Illuminate\Support\Str::headline((string) ($this->areaOfLibrary ?: 'circulation')),
             'dewey'   => $ok ? $this->deweyNumber : null,
-            'cutter'  => $cutter !== '' ? $cutter : null,
+            'cutter'  => $ok && $this->cutter ? $this->cutter : null,
             'year'    => $this->publicationYear ? (int) $this->publicationYear : null,
             'pending' => ! $ok,
         ];
@@ -81,7 +91,7 @@ class Book extends Model
         return $this->belongsTo(BookSubject::class, 'subjectID', 'subjectID');
     }
 
-    public function pages()
+    public function pagePhotos()
     {
         return $this->hasMany(BookPage::class, 'bookID', 'bookID');
     }

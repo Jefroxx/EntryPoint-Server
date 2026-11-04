@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Author;
 use App\Models\Book;
+use App\Models\BookSubject;
 use App\Models\Loan;
 use App\Models\Penalty;
 use App\Models\PointRedemption;
@@ -68,7 +69,7 @@ class StudentPortalService
                 'phoneNumber'        => $user->phoneNumber,
                 'address'            => $user->address,
                 'birthDate'          => $user->birthDate ? Carbon::parse($user->birthDate)->toDateString() : null,
-                'studentIDNumber'    => $student->studentIDNumber,
+                'memberIDNumber'    => $student->memberIDNumber,
                 'academicProgram'    => $student->academicProgram,
                 'memberType'         => $student->memberType,
                 'department'         => $student->department,
@@ -130,7 +131,7 @@ class StudentPortalService
             $book = $penalty->copy->book;
             // 'overdue' for a late return; 'lost' or 'damaged' when the student owes for the book itself, which has
             // no rate or days late (they pay the amount or replace the book).
-            $kind = $penalty->isForCopy() ? $penalty->penaltyType->category : 'overdue';
+            $kind = $penalty->isForCopy() ? $penalty->penaltyType->kind : 'overdue';
             $rule = $kind === 'overdue' ? $this->penalties->ruleForArea($book->areaOfLibrary) : null;
             $unit = $rule?->rateUnit === 'hour' ? 'hour' : 'day';
 
@@ -195,11 +196,77 @@ class StudentPortalService
             isset($filters['subjectID']) ? (int) $filters['subjectID'] : null,
             (bool) ($filters['availableOnly'] ?? false),
             (int) ($filters['perPage'] ?? 24),
+            (bool) ($filters['newArrivalsOnly'] ?? false),
         );
 
         $queues = $this->reservations->waitingCountsByBook($paginator->getCollection()->pluck('bookID')->all());
 
         return $paginator->through(fn (Book $book) => $this->catalogRow($book, $queues[$book->bookID] ?? 0));
+    }
+
+    /**
+     * "Recommended for you": books on the shelf now, ranked by (1) how much the student has borrowed in that subject,
+     * across ALL their loans (returned ones too), then (2) how often everyone borrows the book, then A to Z. Books
+     * they have already borrowed are left out. Any room left is filled with the most-borrowed books of any subject.
+     *
+     * @return array{books: BaseCollection, subjects: array<int, string>, loanCount: int}
+     */
+    public function recommendations(Student $student, int $limit = 10): array
+    {
+        $history = Loan::where('loans.studentID', $student->studentID)
+            ->join('book_copies', 'book_copies.copyID', '=', 'loans.copyID')
+            ->join('books', 'books.bookID', '=', 'book_copies.bookID')
+            ->get(['books.bookID', 'books.subjectID']);
+
+        $borrowed = $history->pluck('bookID')->unique()->all();
+        // subjectID => how many loans the student has had in it, biggest first
+        $weights = $history->whereNotNull('subjectID')->countBy('subjectID')->sortDesc();
+
+        // bookID => how many times anyone has borrowed it
+        $popularity = Loan::join('book_copies', 'book_copies.copyID', '=', 'loans.copyID')
+            ->selectRaw('book_copies.bookID as bookID, count(*) as total')
+            ->groupBy('book_copies.bookID')->pluck('total', 'bookID');
+
+        $onShelf = fn () => Book::with(['subject', 'authors'])
+            ->withCount([
+                'copies as total_copies'      => fn ($q) => $q->where('status', '!=', 'retired'),
+                'copies as available_copies'  => fn ($q) => $q->where('status', 'available'),
+                'reservations as held_copies' => fn ($q) => $q->where('status', 'Accepted'),
+            ])
+            ->whereNotIn('bookID', $borrowed)
+            // The same "something is really free" rule as the catalog's Available filter.
+            ->whereRaw("(select count(*) from book_copies where book_copies.bookID = books.bookID and book_copies.status = 'available')
+                > (select count(*) from reservations where reservations.bookID = books.bookID and reservations.status = 'Accepted')");
+
+        $picked = collect();
+        if ($weights->isNotEmpty()) {
+            $picked = $onShelf()->whereIn('subjectID', $weights->keys()->all())->get()
+                ->sort(fn (Book $a, Book $b) => ($weights[$b->subjectID] <=> $weights[$a->subjectID])
+                    ?: (($popularity[$b->bookID] ?? 0) <=> ($popularity[$a->bookID] ?? 0))
+                    ?: strcmp($a->title, $b->title))
+                ->take($limit)->values();
+        }
+        $bySubject = $picked->count();
+
+        if ($picked->count() < $limit) {
+            $filler = $onShelf()->whereNotIn('bookID', $picked->pluck('bookID')->all())->get()
+                ->sort(fn (Book $a, Book $b) => (($popularity[$b->bookID] ?? 0) <=> ($popularity[$a->bookID] ?? 0))
+                    ?: strcmp($a->title, $b->title))
+                ->take($limit - $picked->count());
+            $picked = $picked->concat($filler)->values();
+        }
+
+        $names = $bySubject
+            ? BookSubject::whereIn('subjectID', $weights->keys()->take(2)->all())->pluck('name', 'subjectID')
+            : collect();
+        $queues = $this->reservations->waitingCountsByBook($picked->pluck('bookID')->all());
+
+        return [
+            'books'     => $picked->map(fn (Book $b) => $this->catalogRow($b, $queues[$b->bookID] ?? 0))->values(),
+            // The student's top subjects (up to two), in order, only when they drove the picks.
+            'subjects'  => $weights->keys()->take(2)->map(fn ($id) => $names[$id] ?? null)->filter()->values()->all(),
+            'loanCount' => $history->count(),
+        ];
     }
 
     public function catalogBook(Book $book): array
@@ -226,7 +293,7 @@ class StudentPortalService
     }
 
     // The student app still speaks `callNumber` / `circulationType`; the
-    // catalog columns are now `classNumber` / `areaOfLibrary`.
+    // catalog columns are now `deweyNumber` + `cutter` / `areaOfLibrary`.
     private function catalogRow(Book $book, int $queueLength): array
     {
         return $this->bookBrief($book) + [

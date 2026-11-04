@@ -107,7 +107,7 @@ class MemberImportService
         Student::create([
             'studentID'          => $user->userID,
             'uuid'               => Str::uuid(),
-            'studentIDNumber'    => $data['idNumber'],
+            'memberIDNumber'    => $data['idNumber'],
             'memberType'         => $data['type'],
             // A student has a program; faculty and staff have a department.
             'academicProgram'    => $data['type'] === 'student' ? $data['programOrDepartment'] : null,
@@ -148,7 +148,7 @@ class MemberImportService
     {
         $validator = Validator::make($data, [
             'type'                => ['required', 'in:student,faculty,staff'],
-            'idNumber'            => ['required', 'string', 'max:40', 'unique:students,studentIDNumber'],
+            'idNumber'            => ['required', 'string', 'max:40', 'unique:students,memberIDNumber'],
             'firstName'           => ['required', 'string', 'max:60'],
             'middleInitial'       => ['nullable', 'string', 'max:1'],
             'lastName'            => ['required', 'string', 'max:60'],

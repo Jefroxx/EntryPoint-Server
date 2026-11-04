@@ -29,7 +29,7 @@ class StudentRegistrationRequest extends FormRequest
             'phoneNumber'     => ['nullable', 'string', 'max:20'],
             'birthDate'       => ['nullable', 'date'],
             'address'         => ['nullable', 'string', 'max:255'],
-            'studentIDNumber' => ['required', 'string', 'max:50', 'unique:students,studentIDNumber'],
+            'memberIDNumber' => ['required', 'string', 'max:50', 'unique:students,memberIDNumber'],
             'academicProgram' => ['nullable', 'string', 'max:50'],
         ];
     }

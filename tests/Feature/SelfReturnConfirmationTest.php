@@ -38,11 +38,11 @@ class SelfReturnConfirmationTest extends TestCase
         $this->librarian = User::factory()->create(['userType' => 'librarian']);
         Librarian::create(['librarianID' => $this->librarian->userID, 'uuid' => Str::uuid(), 'role' => 'librarian']);
 
-        $type = PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
+        $type = PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
         PenaltyRule::where('penaltyTypeID', $type->penaltyTypeID)->delete();
         PenaltyRule::create(['uuid' => Str::uuid(), 'penaltyTypeID' => $type->penaltyTypeID, 'rate' => 5, 'rateUnit' => 'day', 'gracePeriodDays' => 0]);
 
-        $this->student = Student::factory()->create(['registrationStatus' => 'approved', 'studentIDNumber' => '02-2024-009']);
+        $this->student = Student::factory()->create(['registrationStatus' => 'approved', 'memberIDNumber' => '02-2024-009']);
         $book = Book::factory()->create(['title' => 'Noli Me Tangere', 'areaOfLibrary' => 'circulation']);
         $book->authors()->attach(Author::factory()->create(['name' => 'Jose Rizal'])->authorID, ['uuid' => Str::uuid(), 'role' => null]);
         $this->copy = BookCopy::factory()->create(['bookID' => $book->bookID, 'status' => 'borrowed']);
@@ -73,7 +73,7 @@ class SelfReturnConfirmationTest extends TestCase
             ->assertJsonPath('preview.loan.overdue', true)
             ->assertJsonPath('preview.book.title', 'Noli Me Tangere')
             ->assertJsonPath('preview.book.authors.0', 'Jose Rizal')
-            ->assertJsonPath('preview.student.studentIDNumber', '02-2024-009')
+            ->assertJsonPath('preview.student.memberIDNumber', '02-2024-009')
             ->assertJsonPath('preview.fine.unitsLate', 3)
             ->assertJsonPath('preview.fine.amount', 15)
             ->assertJsonPath('preview.fine.onRecord', null);
@@ -124,7 +124,7 @@ class SelfReturnConfirmationTest extends TestCase
     public function test_verifying_a_book_whose_fine_was_already_paid_keeps_it_paid(): void
     {
         $report = $this->report(now()->subDays(2)->subHours(12));
-        $type = PenaltyType::where('category', 'circulation')->firstOrFail();
+        $type = PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', 'circulation')->firstOrFail();
         Penalty::create(['uuid' => Str::uuid(), 'loanID' => $report->loanID, 'penaltyTypeID' => $type->penaltyTypeID, 'amount' => 15, 'computedAt' => now(), 'paymentStatus' => 'Paid', 'settledAt' => now()]);
 
         $this->act('get', $report, 'preview')->assertJsonPath('preview.fine.onRecord.paymentStatus', 'Paid');

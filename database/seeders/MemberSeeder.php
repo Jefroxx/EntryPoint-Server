@@ -43,7 +43,7 @@ class MemberSeeder extends Seeder
                 ['studentID' => $user->userID],
                 [
                     'uuid'               => Str::uuid(),
-                    'studentIDNumber'    => $employeeID,
+                    'memberIDNumber'    => $employeeID,
                     'memberType'         => $type,
                     'department'         => $department,
                     'barcodeValue'       => 'STI-' . strtoupper(Str::random(10)),

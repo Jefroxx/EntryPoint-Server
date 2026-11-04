@@ -71,7 +71,7 @@ class ScanService
                 'bookTitle'       => $loan->copy->book->title,
                 'accessionNumber' => $loan->copy->accessionNumber,
                 'studentName'     => $loan->student->user->fullName,
-                'studentIDNumber' => $loan->student->studentIDNumber,
+                'memberIDNumber' => $loan->student->memberIDNumber,
                 'dueDate'         => $loan->dueDate?->toIso8601String(),
                 'returnDate'      => $loan->returnDate?->toIso8601String(),
                 'wasLate'         => $loan->dueDate && $loan->returnDate && $loan->returnDate->greaterThan($loan->dueDate),
@@ -94,7 +94,7 @@ class ScanService
                 'studentID'       => $reservation->studentID,
                 'bookID'          => $reservation->bookID,
                 'studentName'     => $reservation->student->user->fullName,
-                'studentIDNumber' => $reservation->student->studentIDNumber,
+                'memberIDNumber' => $reservation->student->memberIDNumber,
                 'bookTitle'       => $reservation->book->title,
             ],
         ];
@@ -156,7 +156,7 @@ class ScanService
             'student'  => [
                 'name'            => $student->user->fullName,
                 'program'         => $student->academicProgram,
-                'studentIDNumber' => $student->studentIDNumber,
+                'memberIDNumber' => $student->memberIDNumber,
             ],
         ];
     }
@@ -175,11 +175,12 @@ class ScanService
             'student'         => [
                 'name'            => $student->user->fullName,
                 'program'         => $student->academicProgram,
-                'studentIDNumber' => $student->studentIDNumber,
+                'memberIDNumber' => $student->memberIDNumber,
                 'visitStreak'     => $student->visitStreak,
             ],
             'durationMinutes' => $result['durationMinutes'],
             'autoClosed'      => $result['autoClosed'],
+            'endedSession'    => $result['endedSession'] ?? null,
         ];
     }
 

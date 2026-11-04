@@ -87,7 +87,7 @@ class LostDamagedPenaltyTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('penalty.amount', '300.00')
             ->assertJsonPath('penalty.paymentStatus', 'Unpaid')
-            ->assertJsonPath('penalty.penalty_type.category', 'damaged')
+            ->assertJsonPath('penalty.penalty_type.kind', 'damaged')
             ->assertJsonPath('penalty.loanID', $loan->loanID)
             ->assertJsonPath('penalty.student.studentID', $this->student->studentID)
             ->assertJsonPath('penalty.copy.copyID', $copy->copyID);
@@ -191,7 +191,7 @@ class LostDamagedPenaltyTest extends TestCase
         $late = Penalty::create([
             'uuid' => Str::uuid(), 'loanID' => $loan->loanID, 'studentID' => $loan->studentID, 'copyID' => $loan->copyID, 'amount' => 50,
             'computedAt' => now(), 'paymentStatus' => 'Unpaid',
-            'penaltyTypeID' => PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid()])->penaltyTypeID,
+            'penaltyTypeID' => PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid()])->penaltyTypeID,
         ]);
 
         $copyRows = $this->getJson('/api/librarian/penalties?kind=copy')->assertOk()->assertJsonPath('total', 1)->json('data');
@@ -279,7 +279,7 @@ class LostDamagedPenaltyTest extends TestCase
         $fine = Penalty::create([
             'uuid' => Str::uuid(), 'loanID' => $loan->loanID, 'studentID' => $loan->studentID, 'copyID' => $loan->copyID, 'amount' => 50,
             'computedAt' => now(), 'paymentStatus' => 'Unpaid',
-            'penaltyTypeID' => PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid()])->penaltyTypeID,
+            'penaltyTypeID' => PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid()])->penaltyTypeID,
         ]);
 
         $this->actingAs($this->librarian)->postJson("/api/librarian/penalties/{$fine->uuid}/replace")->assertUnprocessable();
@@ -333,7 +333,7 @@ class LostDamagedPenaltyTest extends TestCase
 
     public function test_a_late_fee_records_its_student_and_copy_and_ignores_a_lost_book_penalty(): void
     {
-        $type = PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid()]);
+        $type = PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid()]);
         PenaltyRule::where('penaltyTypeID', $type->penaltyTypeID)->delete();
         PenaltyRule::create(['uuid' => Str::uuid(), 'penaltyTypeID' => $type->penaltyTypeID, 'rate' => 5, 'rateUnit' => 'day', 'gracePeriodDays' => 0]);
 

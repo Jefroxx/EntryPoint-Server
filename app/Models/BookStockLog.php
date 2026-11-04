@@ -21,7 +21,7 @@ class BookStockLog extends Model
         'librarianName',
     ];
 
-    public const ACTIONS = ['added', 'removed'];
+    public const ACTIONS = ['added', 'removed', 'edited'];
 
     /** Why a copy leaves the catalog. */
     public const REMOVE_REASONS = ['Lost', 'Damaged', 'Withdrawn', 'Donated', 'Other'];

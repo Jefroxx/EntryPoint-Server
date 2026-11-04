@@ -48,7 +48,7 @@ class PrivacyService
                 ->where('users.firstName', 'like', "%{$term}%")
                 ->orWhere('users.lastName', 'like', "%{$term}%")
                 ->orWhere('users.email', 'like', "%{$term}%")
-                ->orWhere('students.studentIDNumber', 'like', "%{$term}%"))
+                ->orWhere('students.memberIDNumber', 'like', "%{$term}%"))
             ->orderBy('users.firstName')
             ->limit(10)
             ->get('students.*')
@@ -64,7 +64,7 @@ class PrivacyService
             'uuid'         => $student->uuid,
             'name'         => $user->fullName,
             'email'        => $user->email,
-            'idNumber'     => $student->studentIDNumber,
+            'idNumber'     => $student->memberIDNumber,
             'memberType'   => $student->memberType,
             'detail'       => $student->academicProgram ?? $student->department,
             'isDisabled'   => $user->isDisabled(),
@@ -96,7 +96,7 @@ class PrivacyService
                 'address'       => $user->address,
                 'birthDate'     => $user->birthDate?->toDateString(),
                 'memberType'    => $student->memberType,
-                'idNumber'      => $student->studentIDNumber,
+                'idNumber'      => $student->memberIDNumber,
                 'program'       => $student->academicProgram,
                 'department'    => $student->department,
                 'registration'  => $student->registrationStatus,
@@ -191,7 +191,7 @@ class PrivacyService
 
         $user = $student->user;
         $name = $user->fullName;
-        $idNumber = $student->studentIDNumber;
+        $idNumber = $student->memberIDNumber;
         $ref = self::ref($student);
 
         DB::transaction(function () use ($student, $user, $ref, $name, $idNumber) {
@@ -212,7 +212,7 @@ class PrivacyService
             ]);
 
             $student->update([
-                'studentIDNumber' => "REMOVED-{$ref}",
+                'memberIDNumber' => "REMOVED-{$ref}",
                 'barcodeValue'    => null,
                 'academicProgram' => null,
                 'department'      => null,

@@ -99,7 +99,8 @@ class AchievementMetricsTest extends TestCase
     public function test_days_visited_counts_each_calendar_day_once(): void
     {
         foreach (['2026-10-01 09:00:00', '2026-10-01 15:30:00', '2026-10-02 10:00:00', '2026-10-05 08:00:00'] as $entry) {
-            AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'entryTime' => $entry]);
+            // (each visit ends before the next: a student can only be inside once at a time)
+            AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'entryTime' => $entry, 'exitTime' => \Illuminate\Support\Carbon::parse($entry)->addHour()]);
         }
 
         $this->assertSame(3, $this->value('daysVisited'));
@@ -117,9 +118,9 @@ class AchievementMetricsTest extends TestCase
 
     public function test_reserved_books_picked_up_counts_only_fulfilled_reservations(): void
     {
-        $book = Book::factory()->create();
+        // (a student can hold only one open reservation per book, so each one is for a different book)
         foreach (['Fulfilled', 'Fulfilled', 'Accepted', 'Waiting', 'Rejected'] as $status) {
-            Reservation::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'bookID' => $book->bookID, 'status' => $status, 'reservedAt' => now()]);
+            Reservation::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'bookID' => Book::factory()->create()->bookID, 'status' => $status, 'reservedAt' => now()]);
         }
 
         $this->assertSame(2, $this->value('reservationsPickedUp'));

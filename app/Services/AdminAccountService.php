@@ -156,7 +156,7 @@ class AdminAccountService
                 ->where('users.firstName', 'like', "%{$search}%")
                 ->orWhere('users.lastName', 'like', "%{$search}%")
                 ->orWhere('users.email', 'like', "%{$search}%")
-                ->orWhere('students.studentIDNumber', 'like', "%{$search}%")
+                ->orWhere('students.memberIDNumber', 'like', "%{$search}%")
                 ->orWhere('students.department', 'like', "%{$search}%")))
             ->orderBy('users.firstName')
             ->paginate($perPage, ['students.*'])
@@ -185,7 +185,7 @@ class AdminAccountService
             return Student::create([
                 'studentID'          => $user->userID,
                 'uuid'               => Str::uuid(),
-                'studentIDNumber'    => $data['employeeIDNumber'],
+                'memberIDNumber'    => $data['employeeIDNumber'],
                 'memberType'         => $data['memberType'],
                 'department'         => $data['department'],
                 'barcodeValue'       => 'STI-' . strtoupper(Str::random(10)),
@@ -204,7 +204,7 @@ class AdminAccountService
         DB::transaction(function () use ($student, $data) {
             $student->user->update(collect($data)->only(['firstName', 'middleInitial', 'lastName', 'email', 'phoneNumber'])->all());
             $student->update(collect($data)->only(['memberType', 'department'])->all()
-                + (isset($data['employeeIDNumber']) ? ['studentIDNumber' => $data['employeeIDNumber']] : []));
+                + (isset($data['employeeIDNumber']) ? ['memberIDNumber' => $data['employeeIDNumber']] : []));
         });
 
         $this->audit->record($actor, 'account.updated', "Updated the account of {$student->user->fullName}");
@@ -225,7 +225,7 @@ class AdminAccountService
             'email'            => $user->email,
             'phoneNumber'      => $user->phoneNumber,
             'memberType'       => $student->memberType,
-            'employeeIDNumber' => $student->studentIDNumber,
+            'employeeIDNumber' => $student->memberIDNumber,
             'department'       => $student->department,
             'barcodeValue'     => $student->barcodeValue,
             'isDisabled'       => $user->isDisabled(),

@@ -40,7 +40,7 @@ class NewArrivalTest extends TestCase
             'publisher'       => 'Random House',
             'edition'         => '1st ed.',
             'volume'          => 'N/A',
-            'pages'           => 365,
+            'pageCount'       => 365,
             'sourceOfFund'    => 'Donation',
             'cost'            => 0,
         ], $overrides));

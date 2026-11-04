@@ -50,6 +50,11 @@ class PortalController extends Controller
         return response()->json($this->portalService->catalog($request->validated()));
     }
 
+    public function recommendations(Request $request)
+    {
+        return response()->json($this->portalService->recommendations($request->user()->student));
+    }
+
     public function catalogShow(Book $book)
     {
         return response()->json(['book' => $this->portalService->catalogBook($book)]);

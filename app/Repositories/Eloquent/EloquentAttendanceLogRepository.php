@@ -31,7 +31,7 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
             ->when($search, fn ($query, $term) => $query->where(
                 fn ($q) => $q->whereHas(
                     'student',
-                    fn ($sq) => $sq->where('studentIDNumber', 'like', "%{$term}%")
+                    fn ($sq) => $sq->where('memberIDNumber', 'like', "%{$term}%")
                         ->orWhereHas('user', fn ($uq) => $uq->where('firstName', 'like', "%{$term}%")
                             ->orWhere('lastName', 'like', "%{$term}%"))
                 )->orWhere('visitorName', 'like', "%{$term}%")
@@ -70,6 +70,22 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
         return $average ? round((float) $average, 1) : 0.0;
     }
 
+    public function dayStats(string $date): array
+    {
+        $day = fn () => AttendanceLog::whereDate('entryTime', $date);
+
+        $average = $day()->whereNotNull('exitTime')
+            ->select(DB::raw('AVG(TIMESTAMPDIFF(MINUTE, entryTime, exitTime)) as avgMinutes'))
+            ->value('avgMinutes');
+
+        return [
+            'visits'         => $day()->count(),
+            'students'       => $day()->whereNotNull('studentID')->distinct()->count('studentID'),
+            'visitors'       => $day()->whereNull('studentID')->count(),
+            'averageMinutes' => $average ? round((float) $average, 1) : 0.0,
+        ];
+    }
+
     public function openLogForStudent(int $studentID): ?AttendanceLog
     {
         return AttendanceLog::where('studentID', $studentID)
@@ -83,6 +99,11 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
         return AttendanceLog::where('studentID', $studentID)
             ->latest('entryTime')
             ->first();
+    }
+
+    public function openLogs(): Collection
+    {
+        return AttendanceLog::whereNull('exitTime')->orderBy('entryTime')->get();
     }
 
     public function staleOpenLogs(): Collection

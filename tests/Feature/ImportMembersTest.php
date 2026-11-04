@@ -70,7 +70,7 @@ class ImportMembersTest extends TestCase
         $this->assertCount(1, $result->json('skipped'));
         $this->assertSame(4, $result->json('skipped.0.row'));
 
-        $faculty = Student::where('studentIDNumber', 'EMP-001')->firstOrFail();
+        $faculty = Student::where('memberIDNumber', 'EMP-001')->firstOrFail();
         $this->assertSame('faculty', $faculty->memberType);
         $this->assertSame('Information Technology', $faculty->department);
         $this->assertNull($faculty->academicProgram);
@@ -78,7 +78,7 @@ class ImportMembersTest extends TestCase
         $this->assertTrue($faculty->user->mustChangePassword);
 
         // A student gets a program, not a department, and counts as a student.
-        $student = Student::where('studentIDNumber', '02-2024-100')->firstOrFail();
+        $student = Student::where('memberIDNumber', '02-2024-100')->firstOrFail();
         $this->assertSame('student', $student->memberType);
         $this->assertSame('BS Nursing', $student->academicProgram);
         $this->assertNull($student->department);
@@ -95,7 +95,7 @@ class ImportMembersTest extends TestCase
     public function test_duplicates_inside_the_file_and_against_existing_accounts_are_skipped(): void
     {
         User::factory()->create(['email' => 'taken@davao.sti.edu.ph']);
-        Student::factory()->faculty()->approved()->create(['studentIDNumber' => 'EMP-TAKEN']);
+        Student::factory()->faculty()->approved()->create(['memberIDNumber' => 'EMP-TAKEN']);
 
         $rows = [
             $this->row(),

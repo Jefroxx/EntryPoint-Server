@@ -6,6 +6,7 @@ use App\Models\Student;
 use App\Repositories\Contracts\StudentRepositoryInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class EloquentStudentRepository extends BaseRepository implements StudentRepositoryInterface
@@ -17,9 +18,14 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
 
     public function creditPoints(Student $student, int $delta): Student
     {
-        $student->update(['knowledgeScore' => $student->knowledgeScore + $delta]);
+        // Added in the database, not from the number this request happened to read: two requests that credit points
+        // at the same moment (a loan returned while a reward is redeemed) would otherwise overwrite each other.
+        // Never below zero, whatever the delta.
+        Student::whereKey($student->getKey())->update([
+            'knowledgeScore' => DB::raw('GREATEST(CAST(`knowledgeScore` AS SIGNED) + ' . (int) $delta . ', 0)'),
+        ]);
 
-        return $student;
+        return $student->refresh();
     }
 
     public function findByBarcode(string $barcode): ?Student
@@ -29,7 +35,7 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
 
     public function findForScan(string $code, bool $lock = false): ?Student
     {
-        $query = Student::where(fn ($where) => $where->where('barcodeValue', $code)->orWhere('studentIDNumber', $code));
+        $query = Student::where(fn ($where) => $where->where('barcodeValue', $code)->orWhere('memberIDNumber', $code));
 
         return ($lock ? $query->lockForUpdate() : $query)->first();
     }
@@ -89,7 +95,9 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
         return Student::with('user')
             ->when($memberType, fn ($query, $value) => $this->ofMemberType($query, $value))
             ->when($search, fn ($query, $term) => $query->where(function ($q) use ($term) {
-                $q->where('studentIDNumber', 'like', "%{$term}%")
+                // The ID card's barcode (what the checkout desk scans) matches exactly.
+                $q->where('memberIDNumber', 'like', "%{$term}%")
+                    ->orWhere('barcodeValue', $term)
                     ->orWhereHas('user', fn ($uq) => $uq->where('firstName', 'like', "%{$term}%")
                         ->orWhere('lastName', 'like', "%{$term}%")
                         ->orWhere('email', 'like', "%{$term}%"));

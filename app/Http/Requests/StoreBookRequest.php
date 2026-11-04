@@ -15,14 +15,8 @@ class StoreBookRequest extends FormRequest
     {
         return [
             'title'          => ['required', 'string', 'max:255'],
-            // Nullable: if omitted, BookController auto-generates it from the
-            // subject's Dewey classification + the primary author's cutter
-            // number (optionally refined by a live ISBN lookup).
-            'classNumber'    => ['nullable', 'string', 'max:100'],
             // The Dewey number alone ("005.1"). Left out, it is looked up by ISBN.
             'deweyNumber'    => ['nullable', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/'],
-            // Alias for classNumber (the Nuxt client's naming).
-            'callNumber'     => ['nullable', 'string', 'max:100'],
             'areaOfLibrary' => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
@@ -34,7 +28,7 @@ class StoreBookRequest extends FormRequest
             'publicationYear'  => ['required', 'integer', 'min:1000', 'max:9999'],
             'volume'         => ['required', 'string', 'max:50'],
             'edition'        => ['required', 'string', 'max:50'],
-            'pages'          => ['required', 'integer', 'min:1'],
+            'pageCount'      => ['required', 'integer', 'min:1'],
             'publisher'      => ['required', 'string', 'max:255'],
             'sourceOfFund'   => ['required', 'string', 'max:255'],
             'cost'           => ['required', 'numeric', 'min:0'],

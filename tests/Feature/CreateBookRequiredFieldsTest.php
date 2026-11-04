@@ -41,7 +41,7 @@ class CreateBookRequiredFieldsTest extends TestCase
             'publisher'       => 'John Murray',
             'edition'         => '1st ed.',
             'volume'          => 'N/A',
-            'pages'           => 502,
+            'pageCount'       => 502,
             'sourceOfFund'    => 'Library budget',
             'cost'            => 450,
         ], $overrides);
@@ -91,7 +91,7 @@ class CreateBookRequiredFieldsTest extends TestCase
 
     public static function requiredFields(): array
     {
-        return array_map(fn (string $f) => [$f], ['isbn', 'publicationYear', 'publisher', 'edition', 'volume', 'pages', 'sourceOfFund', 'cost']);
+        return array_map(fn (string $f) => [$f], ['isbn', 'publicationYear', 'publisher', 'edition', 'volume', 'pageCount', 'sourceOfFund', 'cost']);
     }
 
     public function test_a_donated_book_can_cost_zero_but_not_less(): void
@@ -106,7 +106,7 @@ class CreateBookRequiredFieldsTest extends TestCase
     {
         return Book::factory()->create([
             'isbn' => '9780140432053', 'publicationYear' => 1859, 'publisher' => 'John Murray', 'edition' => '1st ed.',
-            'volume' => 'N/A', 'pages' => 502, 'sourceOfFund' => 'Library budget', 'cost' => 450,
+            'volume' => 'N/A', 'pageCount' => 502, 'sourceOfFund' => 'Library budget', 'cost' => 450,
         ]);
     }
 

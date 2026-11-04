@@ -78,7 +78,7 @@ class CatalogService
     /**
      * Catalog listing for the client's Library page. Field names are
      * remapped to match the frontend's contract (`callNumber` instead of
-     * the internal `classNumber`), independent of the storage schema.
+     * worked out from `deweyNumber` + `cutter`), independent of the storage schema.
      */
     public function catalogIndex(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
     {
@@ -87,7 +87,7 @@ class CatalogService
             'uuid'          => $book->uuid,
             'title'         => $book->title,
             'isbn'          => $book->isbn,
-            'callNumber'    => $book->classNumber,
+            'callNumber'    => $book->callNumber,
             'deweyStatus'   => $book->deweyStatus,
             'coverImageURL' => $book->coverImageURL,
             'subject'       => $book->subject ? [
@@ -126,10 +126,10 @@ class CatalogService
             'remarks'         => $copy->remarks,
             'book'            => [
                 ...$copy->book->only([
-                    'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
+                    'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pageCount',
                     'publisher', 'sourceOfFund', 'cost', 'remarks', 'shelfLocation', 'coverImageURL',
                 ]),
-                'callNumber'  => $copy->book->classNumber,
+                'callNumber'  => $copy->book->callNumber,
                 'deweyStatus' => $copy->book->deweyStatus,
                 'subject'    => $copy->book->subject?->only(['subjectID', 'name']),
                 'authors'    => $copy->book->authors->pluck('name')->values(),
@@ -175,6 +175,142 @@ class CatalogService
 
             return $this->bookCopies->update($copy, ['status' => $status]);
         });
+    }
+
+    /** The most labels one print will gather; more than this and the librarian is told to narrow it down. */
+    public const MAX_LABELS = 500;
+
+    /**
+     * What a barcode label for each copy needs: the code that gets scanned, the accession number, and enough of the
+     * book to tell it apart on the shelf. Chosen by copy uuids, by one book, or by the Book Catalog's own filters.
+     *
+     * Every criterion narrows the set, so "this book's copies numbered 1-20" works; `accessions` is a list of
+     * ['from' => n, 'to' => m] ranges. `total` is the number found, capped just past the limit (so "501" means "more
+     * than 500").
+     *
+     * @param  array{copies?: array<int, string>, book?: string, search?: ?string, subjectID?: ?int, status?: ?string, area?: ?string, accessions?: array<int, array{from: int, to: int}>}  $selection
+     * @return array{labels: array<int, array<string, mixed>>, total: int, truncated: bool}
+     */
+    public function copyLabels(array $selection): array
+    {
+        $copies = $this->bookCopies->forLabels($selection, self::MAX_LABELS + 1);
+        $total = $copies->count();
+
+        $labels = $copies->take(self::MAX_LABELS)->map(fn (BookCopy $copy) => [
+            'uuid'            => $copy->uuid,
+            'accessionNumber' => $copy->accessionNumber,
+            'barcodeValue'    => $copy->barcodeValue,
+            'title'           => $copy->book->title,
+            'authors'         => $copy->book->authors->pluck('name')->values(),
+            // Only a checked number goes on a label; a guess from the category would put the book in the wrong place.
+            'callNumber'      => $copy->book->publicCallNumber(),
+            'area'            => Str::headline((string) ($copy->book->areaOfLibrary ?: 'circulation')),
+            'year'            => $copy->book->publicationYear,
+        ])->values()->all();
+
+        return ['labels' => $labels, 'total' => $total, 'truncated' => $total > self::MAX_LABELS];
+    }
+
+    /**
+     * The checkout desk's first step: the librarian scans the book, and this says which copy it is and whether it
+     * can go out. A copy that can't (on loan, damaged, lost) is still returned, with the reason in `lendable`.
+     *
+     * @return array<string, mixed>
+     */
+    public function findCopyByScanCode(string $code): array
+    {
+        $copy = $this->bookCopies->findByScanCode($code);
+
+        if (! $copy) {
+            throw ValidationException::withMessages(['code' => ['No copy in the catalog has that barcode.']]);
+        }
+
+        $lendable = match ($copy->status) {
+            'available' => null,
+            'borrowed'  => 'This copy is already out on loan.',
+            'damaged'   => 'This copy is marked damaged and cannot be lent.',
+            'lost'      => 'This copy is marked lost and cannot be lent.',
+            default     => 'This copy cannot be lent right now.',
+        };
+
+        // A shelf copy may still be spoken for: every available copy of the title is held for accepted reservations.
+        if ($copy->status === 'available'
+            && $this->bookCopies->availableCountForBook($copy->bookID) <= $this->reservations->acceptedCountForBook($copy->bookID)) {
+            $lendable = 'Every available copy of this book is held for an accepted reservation.';
+        }
+
+        return [
+            'copyID'          => $copy->copyID,
+            'uuid'            => $copy->uuid,
+            'accessionNumber' => $copy->accessionNumber,
+            'barcodeValue'    => $copy->barcodeValue,
+            'status'          => $copy->status,
+            'lendable'        => $lendable,
+            'book'            => [
+                'bookID'        => $copy->book->bookID,
+                'uuid'          => $copy->book->uuid,
+                'title'         => $copy->book->title,
+                'coverImageURL' => $copy->book->coverImageURL,
+                'authors'       => $copy->book->authors->pluck('name')->values(),
+            ],
+        ];
+    }
+
+    /**
+     * Corrects one copy's own record: where it came from, what it cost, its remarks. Unlike the status this is
+     * allowed while the copy is out on loan (it changes nothing about the loan), but not once it has been removed.
+     *
+     * @param  array{sourceOfFund?: string, cost?: float|int|string, remarks?: string|null}  $details
+     */
+    public function updateCopyDetails(BookCopy $copy, array $details): BookCopy
+    {
+        if ($copy->status === 'retired') {
+            throw ValidationException::withMessages([
+                'status' => ["Accession no. {$copy->accessionNumber} has already been removed from the catalog."],
+            ]);
+        }
+
+        if (array_key_exists('sourceOfFund', $details)) {
+            $details['sourceOfFund'] = trim($details['sourceOfFund']);
+        }
+        if (array_key_exists('remarks', $details)) {
+            $details['remarks'] = trim((string) $details['remarks']) !== '' ? trim($details['remarks']) : null;
+        }
+
+        return DB::transaction(function () use ($copy, $details) {
+            $copy->loadMissing('book');
+
+            // Only what actually changed is saved and logged ("Cost: ₱350.00 → ₱400.00").
+            $changes = [];
+            foreach ($details as $field => $value) {
+                $before = $copy->{$field};
+                $same = $field === 'cost' ? (float) $before === (float) $value : (string) $before === (string) $value;
+                if ($same) {
+                    unset($details[$field]);
+                    continue;
+                }
+
+                $changes[] = match ($field) {
+                    'cost'         => 'Cost: '.$this->peso($before).' → '.$this->peso($value),
+                    'sourceOfFund' => 'Source of fund: '.($before ?: '—').' → '.($value ?: '—'),
+                    'remarks'      => 'Remarks: '.($before ?: '—').' → '.($value ?: '—'),
+                };
+            }
+
+            if (! $details) {
+                return $copy;
+            }
+
+            $updated = $this->bookCopies->update($copy, $details);
+            $this->stockLog->edited($copy->book, $updated, implode('; ', $changes));
+
+            return $updated;
+        });
+    }
+
+    private function peso(mixed $amount): string
+    {
+        return $amount === null || $amount === '' ? '—' : '₱'.number_format((float) $amount, 2);
     }
 
     /**
@@ -299,28 +435,24 @@ class CatalogService
                 [$deweyClass, $deweySource, $deweyStatus] = [$this->classificationCode($subject), 'guessed', 'needs_review'];
             }
 
-            // Auto-generate the class number from the Dewey class + the
-            // primary author's cutter number, unless the librarian typed
-            // one in explicitly. `callNumber` is accepted as an alias for
-            // `classNumber` (the Nuxt client's naming).
-            $classNumber = $validated['classNumber']
-                ?? $validated['callNumber']
-                ?? $this->generateUniqueClassNumber($deweyClass, $primaryAuthor->cutterNumber);
+            // The call number is the Dewey class + the primary author's Cutter. Only the Cutter is stored (with a/b/c
+            // on the end if another book already holds that exact pair); the call number is worked out from the two.
+            $cutter = $this->uniqueCutter($deweyClass, $primaryAuthor->cutterNumber);
 
             $book = $this->books->create([
                 'uuid'            => Str::uuid(),
                 'subjectID'       => $subject->subjectID,
                 'areaOfLibrary'   => $validated['areaOfLibrary'] ?? 'circulation',
                 'title'           => $validated['title'],
-                'classNumber'     => $classNumber,
                 'deweyNumber'     => $deweyClass,
+                'cutter'          => $cutter,
                 'deweySource'     => $deweySource,
                 'deweyStatus'     => $deweyStatus,
                 'isbn'            => $validated['isbn'] ?? null,
                 'publicationYear' => $validated['publicationYear'] ?? null,
                 'volume'          => $validated['volume'] ?? null,
                 'edition'         => $validated['edition'] ?? null,
-                'pages'           => $validated['pages'] ?? null,
+                'pageCount'       => $validated['pageCount'] ?? null,
                 'publisher'       => $validated['publisher'] ?? null,
                 'sourceOfFund'    => $validated['sourceOfFund'] ?? null,
                 'cost'            => $validated['cost'] ?? null,
@@ -364,12 +496,8 @@ class CatalogService
 
         $primary = $book->authors()->first();
         if ($primary) {
-            $base = "{$dewey} {$this->cutterNumber($primary)}";
             // Another book may already hold that exact call number: a/b/c is added, as when a book is first catalogued.
-            $update['classNumber'] = $this->uniqueSuffixed(
-                $base,
-                fn (string $candidate) => $candidate !== $book->classNumber && $this->books->classNumberExists($candidate)
-            );
+            $update['cutter'] = $this->uniqueCutter($dewey, $this->cutterNumber($primary), $book->bookID);
         }
 
         $book->update($update);
@@ -433,7 +561,7 @@ class CatalogService
                 'isbn'        => $book->isbn,
                 'authors'     => $book->authors->pluck('name')->values(),
                 'subject'     => $book->subject?->name,
-                'classNumber' => $book->classNumber,
+                'callNumber' => $book->callNumber,
                 'deweyNumber' => $book->deweyNumber,
                 'deweySource' => $book->deweySource,
             ]),
@@ -451,16 +579,20 @@ class CatalogService
                 $book->subjectID = $subject->subjectID;
             }
 
-            // `callNumber` is accepted as an alias for `classNumber`.
-            if (! empty($validated['callNumber']) && empty($validated['classNumber'])) {
-                $validated['classNumber'] = $validated['callNumber'];
-            }
-
             $book->fill(collect($validated)->only([
-                'title', 'classNumber', 'areaOfLibrary', 'isbn', 'publicationYear', 'volume', 'edition',
-                'pages', 'publisher', 'sourceOfFund', 'cost', 'remarks',
+                'title', 'areaOfLibrary', 'isbn', 'publicationYear', 'volume', 'edition',
+                'pageCount', 'publisher', 'sourceOfFund', 'cost', 'remarks',
                 'coverImageURL', 'shelfLocation',
             ])->toArray());
+
+            // The new-arrival mark: turning it on starts its clock (newest first on the student Home); it is kept as it
+            // was when the flag didn't change, so editing a book never moves it up or down the list. Students are not
+            // notified again here: that happens once, when the book is first added.
+            if (array_key_exists('isNewArrival', $validated) && (bool) $validated['isNewArrival'] !== (bool) $book->isNewArrival) {
+                $book->isNewArrival = (bool) $validated['isNewArrival'];
+                $book->newArrivalAt = $book->isNewArrival ? now() : null;
+            }
+
             $book->save();
 
             if (array_key_exists('authors', $validated)) {
@@ -478,10 +610,8 @@ class CatalogService
             return $book;
         });
 
-        // A Dewey number typed in the edit form is a person's say-so: it is marked checked and the call number follows it
-        // (unless the same save also sets the call number by hand).
-        $callNumberTyped = ! empty($validated['classNumber']) || ! empty($validated['callNumber']);
-        if (! empty($validated['deweyNumber']) && $validated['deweyNumber'] !== $book->deweyNumber && ! $callNumberTyped) {
+        // A Dewey number typed in the edit form is a person's say-so: it is marked checked and the call number follows it.
+        if (! empty($validated['deweyNumber']) && $validated['deweyNumber'] !== $book->deweyNumber) {
             $book = $this->applyDewey($book->fresh(), $validated['deweyNumber'], 'manual');
         } elseif (! empty($validated['deweyNumber'])) {
             $book->update(['deweyNumber' => $validated['deweyNumber'], 'deweySource' => 'manual', 'deweyStatus' => 'ok']);
@@ -500,14 +630,13 @@ class CatalogService
 
         return [
             ...$book->only([
-                'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages',
+                'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pageCount',
                 'publisher', 'sourceOfFund', 'cost', 'remarks', 'coverImageURL', 'shelfLocation', 'isNewArrival',
                 'deweyNumber', 'deweySource', 'deweyStatus',
             ]),
-            'callNumber' => $book->classNumber,
+            'callNumber' => $book->callNumber,
             'spineLabel' => $book->spineLabel(),
             // `pages` further down is the page photos, so the number of pages is sent under its own name.
-            'pageCount'  => $book->pages,
             'subject'    => $book->subject?->only(['subjectID', 'name']),
             'authors'    => $book->authors->map(fn (Author $author) => [
                 'authorID' => $author->authorID,
@@ -534,6 +663,89 @@ class CatalogService
      * Books are soft-deleted, so loan, fine and reservation history that points at them survives.
      * Its copies are retired too, so they stop counting towards the shelf stats and can't be checked out.
      */
+    /**
+     * Everything that hangs off a book, gathered for the "Remove this book" window so the librarian sees exactly
+     * what is tied to it before it goes: its copies, loans, fines, reservations, wishlists, page photos and log.
+     * Read-only; `blockers` lists what stops the removal (a copy that is still out on loan).
+     *
+     * @return array<string, mixed>
+     */
+    public function removalSummary(Book $book): array
+    {
+        $book->loadMissing(['authors', 'subject']);
+        $person = fn ($student) => [
+            'name'      => $student?->user?->fullName ?? 'Unknown student',
+            'studentID' => $student?->memberIDNumber,
+        ];
+
+        $copies = $book->copies()->where('status', '!=', 'retired')->orderBy('accessionNumber')->get();
+        $copyIDs = $book->copies()->pluck('copyID');
+
+        $loans = \App\Models\Loan::with(['student.user', 'copy'])->whereIn('copyID', $copyIDs)->orderByDesc('checkoutDate')->get();
+        $activeLoans = $loans->where('status', 'Active')->values();
+
+        $reservations = \App\Models\Reservation::with('student.user')->where('bookID', $book->bookID)->get();
+        $openReservations = $reservations->whereIn('status', ['Waiting', 'Accepted'])->values();
+
+        $penalties = \App\Models\Penalty::whereIn('copyID', $copyIDs)->get();
+        $unpaid = $penalties->where('paymentStatus', 'Unpaid');
+
+        $blockers = [];
+        if ($activeLoans->isNotEmpty()) {
+            $n = $activeLoans->count();
+            $blockers[] = "{$n} ".Str::plural('copy', $n).' of this book '.($n === 1 ? 'is' : 'are').' still borrowed. Check '.($n === 1 ? 'it' : 'them').' in first.';
+        }
+
+        return [
+            'book' => [
+                'uuid'          => $book->uuid,
+                'title'         => $book->title,
+                'isbn'          => $book->isbn,
+                'callNumber'    => $book->callNumber,
+                'areaOfLibrary' => $book->areaOfLibrary,
+                'subject'       => $book->subject?->name,
+                'authors'       => $book->authors->pluck('name')->values(),
+                'coverImageURL' => $book->coverImageURL,
+            ],
+            'copies' => [
+                'items' => $copies->map(fn ($c) => [
+                    'accessionNumber' => $c->accessionNumber,
+                    'barcodeValue'    => $c->barcodeValue,
+                    'status'          => $c->status,
+                    'cost'            => $c->cost,
+                    'sourceOfFund'    => $c->sourceOfFund,
+                ])->values(),
+                'alreadyRemoved' => $book->copies()->where('status', 'retired')->count(),
+            ],
+            'loans' => [
+                'total'    => $loans->count(),
+                'returned' => $loans->where('status', '!=', 'Active')->count(),
+                'active'   => $activeLoans->map(fn ($l) => [
+                    ...$person($l->student),
+                    'accessionNumber' => $l->copy?->accessionNumber,
+                    'dueDate'         => $l->dueDate?->toIso8601String(),
+                ])->values(),
+            ],
+            'penalties' => [
+                'total'        => $penalties->count(),
+                'unpaidCount'  => $unpaid->count(),
+                'unpaidAmount' => (float) $unpaid->sum('amount'),
+            ],
+            'reservations' => [
+                'total' => $reservations->count(),
+                'open'  => $openReservations->map(fn ($r) => [
+                    ...$person($r->student),
+                    'status'     => $r->status,
+                    'pickupCode' => $r->pickupCode,
+                ])->values(),
+            ],
+            'wishlists'     => \App\Models\Wishlist::where('bookID', $book->bookID)->count(),
+            'pagePhotos'    => $book->pagePhotos()->count(),
+            'stockLogCount' => \App\Models\BookStockLog::where('bookID', $book->bookID)->count(),
+            'blockers'      => $blockers,
+        ];
+    }
+
     public function deleteBook(Book $book): void
     {
         $activeLoans = $this->bookCopies->countByStatusForBook($book->bookID, 'borrowed');
@@ -545,14 +757,26 @@ class CatalogService
             ]);
         }
 
-        DB::transaction(function () use ($book) {
+        // Students still waiting on the book (or with a copy set aside for pickup) can't be served any more: their
+        // reservations are declined, and each is told why.
+        $cancelled = \App\Models\Reservation::where('bookID', $book->bookID)->whereIn('status', ['Waiting', 'Accepted'])->get();
+
+        DB::transaction(function () use ($book, $cancelled) {
             foreach ($book->copies()->where('status', '!=', 'retired')->get() as $copy) {
                 $copy->update(['status' => 'retired']);
                 $this->stockLog->removed($book, $copy, 'Book removed', 'The whole book was removed from the catalog.');
             }
 
+            $cancelled->each(fn ($reservation) => $this->reservations->update($reservation, ['status' => 'Rejected']));
+
             $this->books->delete($book);
         });
+
+        $cancelled->each(fn ($reservation) => $this->notifications->send(
+            $reservation->studentID,
+            "Your reservation for \"{$book->title}\" was cancelled because the library removed this book from its catalog.",
+            'reservation_rejected'
+        ));
     }
 
     /**
@@ -633,15 +857,14 @@ class CatalogService
     }
 
     /**
-     * Builds a class number like "005.13 C67". Falls back through
-     * a/b/c... suffixes if that exact classification + cutter combination
-     * is already in use.
+     * The Cutter part of a call number like "005.13 C67". Falls back through a/b/c... suffixes if that exact
+     * Dewey number + Cutter pair is already used by another book (a deleted book keeps its number reserved).
      */
-    private function generateUniqueClassNumber(string $classificationCode, string $cutterNumber): string
+    private function uniqueCutter(string $dewey, string $cutterNumber, ?int $exceptBookID = null): string
     {
         return $this->uniqueSuffixed(
-            "{$classificationCode} {$cutterNumber}",
-            fn (string $candidate) => $this->books->classNumberExists($candidate)
+            $cutterNumber,
+            fn (string $candidate) => $this->books->callNumberExists($dewey, $candidate, $exceptBookID)
         );
     }
 

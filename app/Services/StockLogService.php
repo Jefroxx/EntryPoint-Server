@@ -24,6 +24,12 @@ class StockLogService
         return $this->record($book, $copy, 'removed', $reason, $note);
     }
 
+    /** A correction to one copy's own record (cost, source of fund, remarks); the note says what changed. */
+    public function edited(Book $book, BookCopy $copy, string $note): BookStockLog
+    {
+        return $this->record($book, $copy, 'edited', 'Edited details', $note);
+    }
+
     public function paginate(?string $search, ?string $action, ?int $bookID, int $perPage): LengthAwarePaginator
     {
         return BookStockLog::query()

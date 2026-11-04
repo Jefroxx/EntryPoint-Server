@@ -19,6 +19,7 @@ class AttendanceService
         private StudentRepositoryInterface $students,
         private NotificationService $notifications,
         private AchievementService $achievements,
+        private ResourceService $resources,
     ) {
     }
 
@@ -33,14 +34,27 @@ class AttendanceService
     }
 
     /**
-     * @return array{currentlyInLibrary: int, totalVisitsToday: int, averageMinutesToday: float}
+     * The live numbers (who is in the library now, today's visits) plus `day`: the same picture for any one date
+     * (Y-m-d, today when none is given), so the Attendance page can browse the log day by day.
+     *
+     * @return array{currentlyInLibrary: int, totalVisitsToday: int, averageMinutesToday: float, date: string, day: array}
      */
-    public function stats(): array
+    public function stats(?string $date = null): array
     {
+        $date = $date ?: today()->toDateString();
+        $open = $this->attendanceLogs->openLogs();
+
         return [
+            // Who is inside right now, so "End session" can say how many it is about to log out.
+            'inside'              => [
+                'students' => $open->whereNotNull('studentID')->count(),
+                'visitors' => $open->whereNull('studentID')->count(),
+            ],
             'currentlyInLibrary'  => $this->attendanceLogs->currentlyInLibraryCount(),
             'totalVisitsToday'    => $this->attendanceLogs->totalVisitsToday(),
             'averageMinutesToday' => $this->attendanceLogs->averageMinutesToday(),
+            'date'                => $date,
+            'day'                 => $this->attendanceLogs->dayStats($date),
         ];
     }
 
@@ -124,6 +138,15 @@ class AttendanceService
         $isCheckIn = $result['action'] === 'check_in';
         $log = $result['log'];
 
+        // Leaving the library also ends a computer or room session the student still has open.
+        $result['endedSession'] = null;
+        if (! $isCheckIn && ($ended = $this->resources->endSessionForStudent($result['student']->studentID))) {
+            $result['endedSession'] = [
+                'name'    => $ended->resource->name,
+                'minutes' => (int) $ended->startTime->diffInMinutes($ended->endTime),
+            ];
+        }
+
         $this->notifications->send(
             $result['student']->studentID,
             $isCheckIn
@@ -180,6 +203,51 @@ class AttendanceService
         $this->attendanceLogs->update($log, ['exitTime' => $exit]);
 
         return ['logID' => $log->logID, 'exitTime' => $exit->toIso8601String()];
+    }
+
+    /**
+     * Ending the scan station: everyone still inside is logged out (students and walk-in visitors), and any
+     * computer or room session a student still has is ended with it. A visit left over from an earlier day is closed
+     * the way the nightly clean-up does (at the closing time of the day it started); today's closes now.
+     *
+     * @return array{students: int, visitors: int, sessionsEnded: int}
+     */
+    public function closeAllOpenVisits(): array
+    {
+        $counts = ['students' => 0, 'visitors' => 0, 'sessionsEnded' => 0];
+
+        foreach ($this->attendanceLogs->openLogs() as $log) {
+            $today = $log->entryTime->isToday();
+
+            if ($today) {
+                $this->attendanceLogs->update($log, ['exitTime' => now()]);
+            } else {
+                $this->closeStale($log);
+            }
+
+            if ($log->studentID === null) {
+                $counts['visitors']++;
+                continue;
+            }
+
+            $counts['students']++;
+
+            // Told, like a student who scans out, but why: nobody scanned. (A visit left from an earlier day is
+            // just tidied up; a message about it now would only confuse.)
+            if ($today) {
+                $this->notifications->send(
+                    $log->studentID,
+                    "You've been checked out of the library at ".now()->format('g:i A').' because the library closed for the day.',
+                    'attendance_check_out'
+                );
+            }
+
+            if ($this->resources->endSessionForStudent($log->studentID)) {
+                $counts['sessionsEnded']++;
+            }
+        }
+
+        return $counts;
     }
 
     /** Nightly clean-up (attendance:close-stale): closes every visit still open from an earlier day. */
