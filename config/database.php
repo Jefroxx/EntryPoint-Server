@@ -59,9 +59,12 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // A hosted database (for example Aiven) needs an encrypted connection: give MYSQL_ATTR_SSL_CA the path of
+            // its certificate. DB_SSL_VERIFY=false skips checking the certificate, if the host's one cannot be used.
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_VERIFY_SERVER_CERT : PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT) => env('DB_SSL_VERIFY') === null ? null : filter_var(env('DB_SSL_VERIFY'), FILTER_VALIDATE_BOOLEAN),
+            ], fn ($value) => $value !== null && $value !== '') : [],
         ],
 
         'mariadb' => [

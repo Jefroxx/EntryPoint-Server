@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\UsesUuidRouteKey;
+use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -27,6 +28,6 @@ class MarketItem extends Model
     /** Built from the request's own address, so the link works whatever APP_URL says. */
     public function getPhotoURLAttribute(): ?string
     {
-        return $this->photoPath ? asset('storage/' . $this->photoPath) : null;
+        return $this->photoPath ? Uploads::url($this->photoPath) : null;
     }
 }
