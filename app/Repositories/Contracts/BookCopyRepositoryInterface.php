@@ -16,6 +16,16 @@ interface BookCopyRepositoryInterface extends RepositoryInterface
      */
     public function countsByStatus(): BaseCollection;
 
+    /**
+     * Copies that can be lent (available or out) keyed by subject name.
+     *
+     * @return BaseCollection<string,int>
+     */
+    public function lendableCopiesBySubject(): BaseCollection;
+
+    /** Titles that have a lendable copy but were not checked out at all inside the window. */
+    public function titlesNeverBorrowedBetween(\DateTimeInterface $start, \DateTimeInterface $end): int;
+
     public function countActiveForBook(int $bookID): int;
 
     public function countByStatusForBook(int $bookID, string $status): int;

@@ -29,7 +29,7 @@ class EndStationSessionTest extends TestCase
 
     private function enter(Student $student, $at = null): AttendanceLog
     {
-        return AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $student->studentID, 'entryTime' => $at ?? now()->subHour()]);
+        return AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $student->studentID, 'entryTime' => $at ?? now()->startOfDay()->addSecond()]);   // always today, even just after midnight
     }
 
     public function test_everyone_inside_is_logged_out_with_their_sessions(): void

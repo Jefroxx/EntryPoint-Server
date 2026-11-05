@@ -155,6 +155,16 @@ class AttendanceService
             $isCheckIn ? 'attendance_check_in' : 'attendance_check_out'
         );
 
+        // The staff are told too, as the attendance diagrams say. Only arrivals (a departure is not news), and not the
+        // librarian who scanned the card, who is looking at it on the station.
+        if ($isCheckIn) {
+            $this->notifications->notifyAllLibrarians(
+                "{$result['student']->user->fullName} checked in to the library at {$log->entryTime->format('g:i A')}.",
+                'student_checked_in',
+                auth()->id()
+            );
+        }
+
         return $result;
     }
 

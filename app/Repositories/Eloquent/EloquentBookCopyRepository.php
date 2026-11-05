@@ -56,6 +56,28 @@ class EloquentBookCopyRepository extends BaseRepository implements BookCopyRepos
             ->pluck('total', 'status');
     }
 
+    public function lendableCopiesBySubject(): BaseCollection
+    {
+        return BookCopy::join('books', 'book_copies.bookID', '=', 'books.bookID')
+            ->join('book_subjects', 'books.subjectID', '=', 'book_subjects.subjectID')
+            ->whereIn('book_copies.status', ['available', 'borrowed'])
+            ->selectRaw('book_subjects.name as name, COUNT(*) as total')
+            ->groupBy('book_subjects.name')
+            ->pluck('total', 'name');
+    }
+
+    public function titlesNeverBorrowedBetween(\DateTimeInterface $start, \DateTimeInterface $end): int
+    {
+        return \App\Models\Book::whereHas('copies', fn ($copies) => $copies->whereIn('status', ['available', 'borrowed']))
+            ->whereNotIn('bookID', function ($query) use ($start, $end) {
+                $query->select('book_copies.bookID')
+                    ->from('loans')
+                    ->join('book_copies', 'loans.copyID', '=', 'book_copies.copyID')
+                    ->whereBetween('loans.checkoutDate', [$start, $end]);
+            })
+            ->count();
+    }
+
     public function paginateCopyCatalog(?string $search, ?int $subjectID, ?string $status, ?string $area, int $perPage): LengthAwarePaginator
     {
         return $this->catalogQuery($search, $subjectID, $status, $area)

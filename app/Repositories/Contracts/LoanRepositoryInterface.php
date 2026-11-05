@@ -73,4 +73,23 @@ interface LoanRepositoryInterface extends RepositoryInterface
      * @return BaseCollection<int,object{title:string,total:int}>
      */
     public function topBooksBetween(\DateTimeInterface $start, \DateTimeInterface $end, int $limit): BaseCollection;
+
+    /**
+     * Loans that fell due inside the window and were not on time: returned after the due date, or still out past it.
+     *
+     * @return BaseCollection<string,int> counts keyed by "Y-m" of the due date
+     */
+    public function lateCountsByMonthBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection;
+
+    /**
+     * Loans out right now and past their due date, grouped by how late they are.
+     *
+     * @return array{label: string, count: int}[]
+     */
+    public function overdueAging(): array;
+
+    /**
+     * @return BaseCollection<string,int> checkouts in the window keyed by subject name
+     */
+    public function loansBySubjectBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection;
 }

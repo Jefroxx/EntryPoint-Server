@@ -207,4 +207,48 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
             ->limit($limit)
             ->get();
     }
+
+    public function lateCountsByMonthBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection
+    {
+        return Loan::whereBetween('dueDate', [$start, $end])
+            ->where(function ($query) {
+                $query->whereColumn('returnDate', '>', 'dueDate')
+                    ->orWhere(fn ($open) => $open->whereNull('returnDate')->where('status', 'Active')->where('dueDate', '<', now()));
+            })
+            ->selectRaw("DATE_FORMAT(dueDate, '%Y-%m') as ym, COUNT(*) as total")
+            ->groupBy('ym')
+            ->pluck('total', 'ym');
+    }
+
+    public function overdueAging(): array
+    {
+        $row = Loan::where('status', 'Active')
+            ->whereNull('returnDate')
+            ->where('dueDate', '<', now())
+            ->selectRaw('
+                COALESCE(SUM(DATEDIFF(NOW(), dueDate) BETWEEN 0 AND 3), 0) as a,
+                COALESCE(SUM(DATEDIFF(NOW(), dueDate) BETWEEN 4 AND 7), 0) as b,
+                COALESCE(SUM(DATEDIFF(NOW(), dueDate) BETWEEN 8 AND 14), 0) as c,
+                COALESCE(SUM(DATEDIFF(NOW(), dueDate) >= 15), 0) as d
+            ')
+            ->first();
+
+        return [
+            ['label' => 'Up to 3 days', 'count' => (int) $row->a],
+            ['label' => '4 to 7 days', 'count' => (int) $row->b],
+            ['label' => '8 to 14 days', 'count' => (int) $row->c],
+            ['label' => '15 days or more', 'count' => (int) $row->d],
+        ];
+    }
+
+    public function loansBySubjectBetween(\DateTimeInterface $start, \DateTimeInterface $end): BaseCollection
+    {
+        return Loan::join('book_copies', 'loans.copyID', '=', 'book_copies.copyID')
+            ->join('books', 'book_copies.bookID', '=', 'books.bookID')
+            ->join('book_subjects', 'books.subjectID', '=', 'book_subjects.subjectID')
+            ->whereBetween('loans.checkoutDate', [$start, $end])
+            ->selectRaw('book_subjects.name as name, COUNT(*) as total')
+            ->groupBy('book_subjects.name')
+            ->pluck('total', 'name');
+    }
 }
