@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+!.env.example
+vendor
+node_modules
+tests
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/public/*
+storage/app/paper-tests.json
+hoppscotch
+.phpunit.cache

@@ -207,7 +207,7 @@ class StaffRolesTest extends TestCase
         $mostActive = collect($board['categories'])->firstWhere('key', 'most-active');
 
         $this->assertCount(1, $mostActive['leaders']);
-        $this->assertSame($student->studentIDNumber, $mostActive['leaders'][0]['studentIDNumber']);
+        $this->assertSame($student->memberIDNumber, $mostActive['leaders'][0]['memberIDNumber']);
     }
 
     public function test_faculty_never_unlock_achievements(): void

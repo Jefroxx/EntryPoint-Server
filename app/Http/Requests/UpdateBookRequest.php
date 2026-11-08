@@ -15,17 +15,18 @@ class UpdateBookRequest extends FormRequest
     {
         return [
             'title'          => ['sometimes', 'string', 'max:255'],
-            'classNumber'    => ['sometimes', 'string', 'max:100'],
-            'callNumber'     => ['sometimes', 'string', 'max:100'],
+            'deweyNumber'    => ['sometimes', 'nullable', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/'],
             'areaOfLibrary' => ['sometimes', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
+            // Marks the book as a new arrival (or takes the mark off): it then shows on the student Home.
+            'isNewArrival'   => ['sometimes', 'boolean'],
 
             'isbn'             => ['sometimes', 'required', 'string', 'max:20'],
             'publicationYear'  => ['sometimes', 'required', 'integer', 'min:1000', 'max:9999'],
             'volume'         => ['sometimes', 'required', 'string', 'max:50'],
             'edition'        => ['sometimes', 'required', 'string', 'max:50'],
-            'pages'          => ['sometimes', 'required', 'integer', 'min:1'],
+            'pageCount'      => ['sometimes', 'required', 'integer', 'min:1'],
             'publisher'      => ['sometimes', 'required', 'string', 'max:255'],
             'sourceOfFund'   => ['sometimes', 'required', 'string', 'max:255'],
             'cost'           => ['sometimes', 'required', 'numeric', 'min:0'],

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Resource;
 use App\Models\ResourceUsageLog;
+use App\Repositories\Contracts\AttendanceLogRepositoryInterface;
 use App\Repositories\Contracts\ResourceRepositoryInterface;
 use App\Repositories\Contracts\ResourceUsageLogRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
@@ -17,6 +18,7 @@ class ResourceService
         private ResourceRepositoryInterface $resources,
         private ResourceUsageLogRepositoryInterface $usageLogs,
         private NotificationService $notifications,
+        private AttendanceLogRepositoryInterface $attendanceLogs,
     ) {
     }
 
@@ -78,6 +80,14 @@ class ResourceService
                 ]);
             }
 
+            // A session is for someone who is in the library: they must have scanned in today and not out again.
+            $visit = $this->attendanceLogs->openLogForStudent($validated['studentID']);
+            if (! $visit || ! $visit->entryTime->isToday()) {
+                throw ValidationException::withMessages([
+                    'studentID' => ['This student is not logged in to the library. Scan their ID at the Station first.'],
+                ]);
+            }
+
             if ($this->usageLogs->hasActiveSessionForStudent($validated['studentID'])) {
                 throw ValidationException::withMessages([
                     'studentID' => ['This student already has an active session on another resource.'],
@@ -106,6 +116,18 @@ class ResourceService
         );
 
         return $log;
+    }
+
+    /**
+     * Logging out of the library also ends the student's running session, so the computer is freed without the
+     * librarian having to remember. The librarian can still end a session by hand before that.
+     * Returns the session that was ended, or null when the student had none.
+     */
+    public function endSessionForStudent(int $studentID): ?ResourceUsageLog
+    {
+        $session = $this->usageLogs->activeForStudent($studentID);
+
+        return $session ? $this->endSession($session) : null;
     }
 
     /**

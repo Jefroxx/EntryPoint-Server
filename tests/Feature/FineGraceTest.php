@@ -40,7 +40,7 @@ class FineGraceTest extends TestCase
 
     private function rule(int $graceDays, string $unit = 'day'): void
     {
-        $type = PenaltyType::firstOrCreate(['category' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
+        $type = PenaltyType::firstOrCreate(['kind' => 'overdue', 'areaOfLibrary' => 'circulation'], ['uuid' => Str::uuid(), 'name' => 'Overdue (circulation)']);
         PenaltyRule::where('penaltyTypeID', $type->penaltyTypeID)->delete();
         PenaltyRule::create(['uuid' => Str::uuid(), 'penaltyTypeID' => $type->penaltyTypeID, 'rate' => 5, 'rateUnit' => $unit, 'gracePeriodDays' => $graceDays]);
     }

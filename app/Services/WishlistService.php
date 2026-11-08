@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Wishlist;
 use App\Repositories\Contracts\BookCopyRepositoryInterface;
+use App\Repositories\Contracts\LoanRepositoryInterface;
 use App\Repositories\Contracts\ReservationRepositoryInterface;
 use App\Repositories\Contracts\WishlistRepositoryInterface;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -14,12 +15,11 @@ use Illuminate\Validation\ValidationException;
 
 class WishlistService
 {
-    private const MAX_CART_ITEMS = 3;
-
     public function __construct(
         private WishlistRepositoryInterface $wishlists,
         private BookCopyRepositoryInterface $bookCopies,
         private ReservationRepositoryInterface $reservations,
+        private LoanRepositoryInterface $loans,
     ) {
     }
 
@@ -40,10 +40,21 @@ class WishlistService
                 ]);
             }
 
-            // Applies to hearted books too: moving one from the wishlist still takes a cart slot.
-            if ($currentCartCount >= self::MAX_CART_ITEMS) {
+            // The cart can't hold more than the reservation slots the student has left (loans and active
+            // reservations already use some). Applies to hearted books too: moving one from the wishlist
+            // still takes a cart place.
+            $slotsLeft = max(
+                ReservationService::MAX_ACTIVE_RESERVATIONS
+                - $this->reservations->activeCountForStudent($studentID)
+                - $this->loans->activeCountForStudent($studentID),
+                0,
+            );
+
+            if ($currentCartCount >= $slotsLeft) {
                 throw ValidationException::withMessages([
-                    'bookID' => ['Your cart is full (max ' . self::MAX_CART_ITEMS . ' books).'],
+                    'bookID' => [$slotsLeft === 0
+                        ? 'You have no slots left, so you can\'t add more books to your cart.'
+                        : "You only have {$slotsLeft} slot(s) left, so your cart can hold {$slotsLeft} book(s)."],
                 ]);
             }
 

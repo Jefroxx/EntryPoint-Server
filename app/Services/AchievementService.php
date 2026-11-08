@@ -44,7 +44,7 @@ class AchievementService
         return $this->achievements->studentsWhoUnlocked($achievement)->map(fn (Student $student) => [
             'studentID'       => $student->studentID,
             'name'            => $student->user ? "{$student->user->firstName} {$student->user->lastName}" : 'Unknown student',
-            'studentIDNumber' => $student->studentIDNumber,
+            'memberIDNumber' => $student->memberIDNumber,
             'academicProgram' => $student->academicProgram,
             'earnedAt'        => $student->pivot->earnedAt,
             'redeemedAt'      => $student->pivot->redeemedAt,

@@ -33,11 +33,13 @@ class HallOfFameTest extends TestCase
         $steady = Student::factory()->create(['registrationStatus' => 'approved']);
 
         // Maria scans in three times on one day; her classmate comes on two different days.
-        foreach (['08:00', '10:00', '13:00'] as $time) {
-            $this->visit($busy, now()->subDay()->format('Y-m-d') . " {$time}");
+        // (each visit ends before the next begins: a student can only be inside once at a time)
+        $day = now()->subDay()->format('Y-m-d');
+        foreach (['08:00' => '09:00', '10:00' => '11:00', '13:00' => '14:00'] as $in => $out) {
+            $this->visit($busy, "{$day} {$in}", "{$day} {$out}");
         }
-        $this->visit($steady, now()->subDays(1)->format('Y-m-d 09:00'));
-        $this->visit($steady, now()->subDays(2)->format('Y-m-d 09:00'));
+        $this->visit($steady, now()->subDays(1)->format('Y-m-d 09:00'), now()->subDays(1)->format('Y-m-d 10:00'));
+        $this->visit($steady, now()->subDays(2)->format('Y-m-d 09:00'), now()->subDays(2)->format('Y-m-d 10:00'));
 
         $board = $this->actingAs($steady->user)->getJson('/api/student/hall-of-fame')->assertOk()->json();
         $leaders = $this->category($board, 'most-active')['leaders'];
@@ -77,7 +79,7 @@ class HallOfFameTest extends TestCase
 
     public function test_librarians_see_full_names_and_id_numbers(): void
     {
-        $student = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 9, 'studentIDNumber' => '02-2024-001']);
+        $student = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 9, 'memberIDNumber' => '02-2024-001']);
         $student->user->update(['firstName' => 'Maria', 'lastName' => 'Santos']);
 
         $librarian = User::factory()->create(['userType' => 'librarian']);
@@ -87,7 +89,7 @@ class HallOfFameTest extends TestCase
         $leader = $this->category($board, 'longest-streak')['leaders'][0];
 
         $this->assertSame('Maria Santos', $leader['name']);
-        $this->assertSame('02-2024-001', $leader['studentIDNumber']);
+        $this->assertSame('02-2024-001', $leader['memberIDNumber']);
         $this->assertArrayNotHasKey('yourValue', $this->category($board, 'longest-streak'));
     }
 
@@ -96,7 +98,7 @@ class HallOfFameTest extends TestCase
         $student = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 9]);
 
         $board = $this->actingAs($student->user)->getJson('/api/student/hall-of-fame')->assertOk()->json();
-        $this->assertArrayNotHasKey('studentIDNumber', $this->category($board, 'longest-streak')['leaders'][0]);
+        $this->assertArrayNotHasKey('memberIDNumber', $this->category($board, 'longest-streak')['leaders'][0]);
 
         $this->getJson('/api/librarian/dashboard/hall-of-fame')->assertForbidden();
     }

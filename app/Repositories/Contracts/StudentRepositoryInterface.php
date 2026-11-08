@@ -34,6 +34,9 @@ interface StudentRepositoryInterface extends RepositoryInterface
 
     public function approvedCount(): int;
 
+    /** @return list<int> IDs of every approved member (they double as the user IDs notifications go to). */
+    public function approvedIDs(): array;
+
     /** Pending registrations whose email is confirmed, i.e. the ones a librarian can approve now. */
     public function readyForReviewCount(): int;
 

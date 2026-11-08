@@ -12,6 +12,7 @@ use App\Models\BookStockLog;
 use App\Services\StockLogService;
 use Illuminate\Validation\Rule;
 use App\Services\CatalogService;
+use App\Services\CirculationService;
 use Illuminate\Http\Request;
 
 class BookController extends Controller
@@ -37,6 +38,45 @@ class BookController extends Controller
         ));
     }
 
+    /** The "check these Dewey numbers" list: books nobody has confirmed a number for yet. */
+    public function deweyReview(Request $request)
+    {
+        $filters = $request->validate([
+            'search'  => ['nullable', 'string', 'max:255'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return response()->json($this->catalog->deweyReview($filters['search'] ?? null, (int) ($filters['perPage'] ?? 15)));
+    }
+
+    /** For the book form's "Look up" button: what the catalogues say about an ISBN. Saves nothing. */
+    public function lookupIsbnDewey(Request $request)
+    {
+        $data = $request->validate(['isbn' => ['required', 'string', 'max:20']]);
+
+        return response()->json($this->catalog->lookupDeweyByIsbn($data['isbn']));
+    }
+
+    /** Looks the book's ISBN up and, if a Dewey number is found, applies it. */
+    public function lookupDewey(Book $book)
+    {
+        $result = $this->catalog->lookupDewey($book);
+
+        return response()->json($result['found']
+            ? ['found' => true, 'message' => "Dewey number set to {$result['book']->deweyNumber}.", 'deweyNumber' => $result['book']->deweyNumber, 'callNumber' => $result['book']->callNumber, 'deweySource' => $result['book']->deweySource]
+            : ['found' => false, 'message' => $result['reason']]);
+    }
+
+    /** A librarian typed the right number in: it is used as is, and counted as checked. */
+    public function setDewey(Request $request, Book $book)
+    {
+        $data = $request->validate(['deweyNumber' => ['required', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/']]);
+
+        $book = $this->catalog->applyDewey($book, $data['deweyNumber'], 'manual');
+
+        return response()->json(['message' => "Dewey number set to {$book->deweyNumber}.", 'deweyNumber' => $book->deweyNumber, 'callNumber' => $book->callNumber, 'deweySource' => $book->deweySource]);
+    }
+
     public function copies(Request $request)
     {
         $filters = $request->validate([
@@ -56,15 +96,60 @@ class BookController extends Controller
         ));
     }
 
+    /** Barcode label data for printing: chosen copies, one book's copies, or everything the catalog filters match. */
+    public function copyLabels(Request $request)
+    {
+        $selection = $request->validate([
+            'copies'    => ['nullable', 'array', 'max:'.CatalogService::MAX_LABELS],
+            'copies.*'  => ['string', 'max:64'],
+            'book'      => ['nullable', 'string', 'max:64'],
+            'search'    => ['nullable', 'string', 'max:255'],
+            'subjectID' => ['nullable', 'integer'],
+            'status'    => ['nullable', 'in:available,borrowed,lost,damaged'],
+            'area'      => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            // "1-20, 25": ranges of accession numbers (a single number is from = to).
+            'accessions'        => ['nullable', 'array', 'max:200'],
+            'accessions.*.from' => ['required', 'integer', 'min:1'],
+            'accessions.*.to'   => ['required', 'integer', 'gte:accessions.*.from'],
+        ]);
+
+        return response()->json($this->catalog->copyLabels($selection));
+    }
+
+    /** The copy a scanned barcode (or typed accession number) belongs to, with whether it can be lent. */
+    public function lookupCopy(Request $request, CirculationService $circulation)
+    {
+        $code = trim($request->validate(['code' => ['required', 'string', 'max:100']])['code']);
+        $copy = $this->catalog->findCopyByScanCode($code);
+
+        // Library-use-only areas (reserved, thesis...) are caught here, at the scan, not after the student is chosen.
+        $terms = $circulation->loanTerms(Book::findOrFail($copy['book']['bookID']));
+        if (! $terms['loanable'] && ! $copy['lendable']) {
+            $copy['lendable'] = 'This book is for library use only and cannot be loaned out.';
+        }
+
+        return response()->json(['copy' => [...$copy, 'dueDate' => $terms['dueDate']]]);
+    }
+
     public function updateCopy(UpdateBookCopyRequest $request, BookCopy $copy)
     {
-        $copy = $this->catalog->updateCopyStatus($copy, $request->validated('status'));
+        $data = $request->validated();
+
+        // Removing the copy ('retired') ignores any detail edits sent with it: it is leaving the catalog anyway.
+        $details = array_intersect_key($data, array_flip(['sourceOfFund', 'cost', 'remarks']));
+        if ($details && ($data['status'] ?? null) !== 'retired') {
+            $copy = $this->catalog->updateCopyDetails($copy, $details);
+        }
+
+        if (isset($data['status']) && $data['status'] !== $copy->status) {
+            $copy = $this->catalog->updateCopyStatus($copy, $data['status']);
+        }
 
         return response()->json([
             'message' => $copy->status === 'retired'
                 ? "Accession no. {$copy->accessionNumber} removed from the catalog."
                 : "Accession no. {$copy->accessionNumber} updated.",
-            'copy' => $copy->only(['copyID', 'accessionNumber', 'status']),
+            'copy' => $copy->only(['copyID', 'accessionNumber', 'status', 'sourceOfFund', 'cost', 'remarks']),
         ]);
     }
 
@@ -158,6 +243,12 @@ class BookController extends Controller
             'message' => 'Book updated successfully.',
             'book'    => $book,
         ]);
+    }
+
+    /** Everything tied to a book, for the "Remove this book" window to show before anything is deleted. */
+    public function removalSummary(Book $book)
+    {
+        return response()->json($this->catalog->removalSummary($book));
     }
 
     public function destroy(Book $book)

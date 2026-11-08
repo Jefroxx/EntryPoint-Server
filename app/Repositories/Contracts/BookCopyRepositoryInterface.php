@@ -16,6 +16,16 @@ interface BookCopyRepositoryInterface extends RepositoryInterface
      */
     public function countsByStatus(): BaseCollection;
 
+    /**
+     * Copies that can be lent (available or out) keyed by subject name.
+     *
+     * @return BaseCollection<string,int>
+     */
+    public function lendableCopiesBySubject(): BaseCollection;
+
+    /** Titles that have a lendable copy but were not checked out at all inside the window. */
+    public function titlesNeverBorrowedBetween(\DateTimeInterface $start, \DateTimeInterface $end): int;
+
     public function countActiveForBook(int $bookID): int;
 
     public function countByStatusForBook(int $bookID, string $status): int;
@@ -28,6 +38,18 @@ interface BookCopyRepositoryInterface extends RepositoryInterface
     public function availableCountForBook(int $bookID): int;
 
     public function generateUniqueBarcode(): string;
+
+    /**
+     * Copies (not retired) with their book and authors, in accession order, for printing labels. Every criterion given
+     * narrows the set: `copies` (uuids), `book` (a book's uuid), the catalog's `search` / `subjectID` / `status` /
+     * `area`, and `accessions` (a list of ['from' => n, 'to' => m] ranges; a single number is from = to).
+     *
+     * @param  array<string, mixed>  $criteria
+     */
+    public function forLabels(array $criteria, int $limit): Collection;
+
+    /** A copy (not retired) by its scanned barcode, or by its accession number when the code is all digits. */
+    public function findByScanCode(string $code): ?BookCopy;
 
     /**
      * The Book Catalog: one row per copy (retired copies excluded), with its book, subject and authors.

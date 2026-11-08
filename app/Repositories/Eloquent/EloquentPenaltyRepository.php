@@ -22,14 +22,14 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
     {
         // The late-return fine only: a lost/damaged penalty on the same loan is a different charge.
         return Penalty::where('loanID', $loanID)
-            ->whereDoesntHave('penaltyType', fn ($query) => $query->whereIn('category', Penalty::COPY_CATEGORIES))
+            ->whereDoesntHave('penaltyType', fn ($query) => $query->whereIn('kind', Penalty::COPY_KINDS))
             ->first() ?? new Penalty(['loanID' => $loanID]);
     }
 
     public function openForCopies(array $copyIDs): Collection
     {
         return Penalty::where('paymentStatus', 'Unpaid')
-            ->whereHas('penaltyType', fn ($query) => $query->whereIn('category', Penalty::COPY_CATEGORIES))
+            ->whereHas('penaltyType', fn ($query) => $query->whereIn('kind', Penalty::COPY_KINDS))
             ->whereIn('copyID', $copyIDs)
             ->with(Penalty::listingRelations())
             ->get();
@@ -42,7 +42,7 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
 
     public function ruleForArea(string $area): ?PenaltyRule
     {
-        return PenaltyType::where('category', $area)->first()?->rules()->first();
+        return PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', $area)->first()?->rules()->first();
     }
 
     public function unpaidCount(): int
@@ -105,7 +105,7 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
     /** `'copy'`: only penalties for a lost or damaged book; `'late'`: only late fees; null: both. */
     private function ofKind(Builder $query, ?string $kind): Builder
     {
-        $copyTypes = fn ($tq) => $tq->whereIn('category', Penalty::COPY_CATEGORIES);
+        $copyTypes = fn ($tq) => $tq->whereIn('kind', Penalty::COPY_KINDS);
 
         return match ($kind) {
             'copy'  => $query->whereHas('penaltyType', $copyTypes),
@@ -121,7 +121,7 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
     private function longUnpaid(Builder $query): Builder
     {
         $cutoff = now()->subDays(Penalty::LONG_UNPAID_DAYS);
-        $copyTypes = fn ($tq) => $tq->whereIn('category', Penalty::COPY_CATEGORIES);
+        $copyTypes = fn ($tq) => $tq->whereIn('kind', Penalty::COPY_KINDS);
 
         return $query->where('paymentStatus', 'Unpaid')->where(fn ($either) => $either
             ->where(fn ($late) => $late
@@ -134,13 +134,13 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
 
     public function fineRuleForArea(string $area): ?PenaltyRule
     {
-        return PenaltyType::where('category', $area)->first()?->rules()->first();
+        return PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', $area)->first()?->rules()->first();
     }
 
     public function upsertFineRule(string $area, float $rate, string $rateUnit, int $gracePeriodDays): PenaltyRule
     {
         $type = PenaltyType::firstOrCreate(
-            ['category' => $area],
+            ['kind' => 'overdue', 'areaOfLibrary' => $area],
             ['uuid' => Str::uuid()]
         );
 
@@ -155,7 +155,7 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
 
     public function deleteFineRule(string $area): void
     {
-        $type = PenaltyType::where('category', $area)->first();
+        $type = PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', $area)->first();
 
         $type?->rules()->delete();
     }

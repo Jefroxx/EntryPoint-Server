@@ -22,10 +22,11 @@ return [
     // The Nuxt client authenticates with a Bearer token (not cookies), so
     // this only needs to list the dev-server origins that call the API —
     // no need for supports_credentials below.
-    'allowed_origins' => [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-    ],
+    // When hosted, set CORS_ALLOWED_ORIGINS to the site's address (comma separated), e.g. https://entrypoint.pages.dev
+    'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', (string) env(
+        'CORS_ALLOWED_ORIGINS',
+        'http://localhost:3000,http://127.0.0.1:3000'
+    ))))),
 
     'allowed_origins_patterns' => [],
 

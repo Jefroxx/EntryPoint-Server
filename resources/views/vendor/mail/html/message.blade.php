@@ -1,7 +1,7 @@
 <x-mail::layout>
 {{-- Header --}}
 <x-slot:header>
-<x-mail::header :url="config('portal.url')">
+<x-mail::header :url="\App\Support\PortalUrl::current()">
 {{ config('app.name') }}
 </x-mail::header>
 </x-slot:header>

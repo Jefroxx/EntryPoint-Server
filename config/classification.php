@@ -14,6 +14,14 @@ return [
     |
     */
 
+    'library_of_congress' => [
+        'enabled'         => env('LOC_LOOKUP_ENABLED', true),
+        // The catalogue's free SRU search service (no key). It answers in MARC XML.
+        'base_url'        => env('LOC_SRU_URL', 'https://lx2.loc.gov/sru/lcdb'),
+        'timeout'         => (int) env('LOC_TIMEOUT', 8),
+        'connect_timeout' => (int) env('LOC_CONNECT_TIMEOUT', 4),
+    ],
+
     'open_library' => [
         'enabled'    => env('OPEN_LIBRARY_LOOKUP_ENABLED', true),
         'base_url'   => env('OPEN_LIBRARY_BASE_URL', 'https://openlibrary.org'),

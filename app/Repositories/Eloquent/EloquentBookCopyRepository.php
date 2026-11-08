@@ -56,7 +56,37 @@ class EloquentBookCopyRepository extends BaseRepository implements BookCopyRepos
             ->pluck('total', 'status');
     }
 
+    public function lendableCopiesBySubject(): BaseCollection
+    {
+        return BookCopy::join('books', 'book_copies.bookID', '=', 'books.bookID')
+            ->join('book_subjects', 'books.subjectID', '=', 'book_subjects.subjectID')
+            ->whereIn('book_copies.status', ['available', 'borrowed'])
+            ->selectRaw('book_subjects.name as name, COUNT(*) as total')
+            ->groupBy('book_subjects.name')
+            ->pluck('total', 'name');
+    }
+
+    public function titlesNeverBorrowedBetween(\DateTimeInterface $start, \DateTimeInterface $end): int
+    {
+        return \App\Models\Book::whereHas('copies', fn ($copies) => $copies->whereIn('status', ['available', 'borrowed']))
+            ->whereNotIn('bookID', function ($query) use ($start, $end) {
+                $query->select('book_copies.bookID')
+                    ->from('loans')
+                    ->join('book_copies', 'loans.copyID', '=', 'book_copies.copyID')
+                    ->whereBetween('loans.checkoutDate', [$start, $end]);
+            })
+            ->count();
+    }
+
     public function paginateCopyCatalog(?string $search, ?int $subjectID, ?string $status, ?string $area, int $perPage): LengthAwarePaginator
+    {
+        return $this->catalogQuery($search, $subjectID, $status, $area)
+            ->orderBy('accessionNumber')
+            ->paginate($perPage);
+    }
+
+    /** The Book Catalog's search and filters as a query, shared by the table and by label printing. */
+    private function catalogQuery(?string $search, ?int $subjectID, ?string $status, ?string $area)
     {
         // whereHas('book') also drops copies whose book was removed (books are soft-deleted).
         return BookCopy::with(['book.subject', 'book.authors'])
@@ -77,14 +107,42 @@ class EloquentBookCopyRepository extends BaseRepository implements BookCopyRepos
                     $inner->orWhereHas('book', fn ($books) => $books->where(function ($book) use ($term) {
                         $book->where('title', 'like', "%{$term}%")
                             ->orWhere('isbn', 'like', "%{$term}%")
-                            ->orWhere('classNumber', 'like', "%{$term}%")
+                            ->orWhereRaw("CONCAT_WS(' ', books.deweyNumber, books.cutter) like ?", ["%{$term}%"])
                             ->orWhereHas('authors', fn ($authors) => $authors->where('name', 'like', "%{$term}%"));
                     }));
                 });
             })
-            ->when($status, fn ($query, $value) => $query->where('status', $value))
+            ->when($status, fn ($query, $value) => $query->where('status', $value));
+    }
+
+    public function forLabels(array $criteria, int $limit): Collection
+    {
+        $ranges = $criteria['accessions'] ?? [];
+
+        return $this->catalogQuery($criteria['search'] ?? null, $criteria['subjectID'] ?? null, $criteria['status'] ?? null, $criteria['area'] ?? null)
+            ->when($criteria['book'] ?? null, fn ($query, $uuid) => $query->whereHas('book', fn ($books) => $books->where('uuid', $uuid)))
+            ->when($criteria['copies'] ?? null, fn ($query, $list) => $query->whereIn('uuid', $list))
+            // "1-20, 25": each range or single number is one more way for a copy to qualify.
+            ->when($ranges, fn ($query) => $query->where(function ($inner) use ($ranges) {
+                foreach ($ranges as $range) {
+                    $inner->orWhereBetween('accessionNumber', [(int) $range['from'], (int) $range['to']]);
+                }
+            }))
             ->orderBy('accessionNumber')
-            ->paginate($perPage);
+            ->limit($limit)
+            ->get();
+    }
+
+    public function findByScanCode(string $code): ?BookCopy
+    {
+        $query = BookCopy::with('book.authors')
+            ->where('status', '!=', 'retired')
+            ->whereHas('book');
+
+        // A scanned label is the copy's barcode. Typing the accession number by hand also works.
+        return ctype_digit($code)
+            ? (clone $query)->where('accessionNumber', (int) $code)->first() ?? $query->where('barcodeValue', $code)->first()
+            : $query->where('barcodeValue', $code)->first();
     }
 
     public function generateUniqueBarcode(): string

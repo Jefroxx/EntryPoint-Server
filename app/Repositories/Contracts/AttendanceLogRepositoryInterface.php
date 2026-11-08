@@ -20,6 +20,9 @@ interface AttendanceLogRepositoryInterface extends RepositoryInterface
     /** Visits still open from an earlier day (the student never scanned out). */
     public function staleOpenLogs(): Collection;
 
+    /** Every visit still open, whatever day it started, oldest first. */
+    public function openLogs(): Collection;
+
     public function recentForStudent(int $studentID, int $limit): Collection;
 
     public function hasVisitedToday(int $studentID): bool;
@@ -31,6 +34,14 @@ interface AttendanceLogRepositoryInterface extends RepositoryInterface
     public function totalVisitsToday(): int;
 
     public function averageMinutesToday(): float;
+
+    /**
+     * One day's attendance at a glance: every visit that started that day, how many different students and
+     * walk-in visitors they were, and the average stay of the visits that have ended. `$date` is Y-m-d.
+     *
+     * @return array{visits: int, students: int, visitors: int, averageMinutes: float}
+     */
+    public function dayStats(string $date): array;
 
     public function averageMinutesBetween(\DateTimeInterface $start, \DateTimeInterface $end): float;
 

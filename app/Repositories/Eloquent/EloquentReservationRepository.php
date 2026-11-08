@@ -15,7 +15,8 @@ class EloquentReservationRepository extends BaseRepository implements Reservatio
 
     public function listWithFilters(?string $status): Collection
     {
-        return Reservation::with(['student.user', 'book'])
+        // The desk sees each book's cover, authors and call number, not just its title.
+        return Reservation::with(['student.user', 'book.authors', 'book.subject'])
             ->when($status, fn ($query) => $query->where('status', $status))
             ->orderBy('reservedAt')
             ->get();

@@ -22,6 +22,11 @@ class EloquentResourceUsageLogRepository extends BaseRepository implements Resou
             ->get();
     }
 
+    public function activeForStudent(int $studentID): ?ResourceUsageLog
+    {
+        return ResourceUsageLog::with('resource')->where('studentID', $studentID)->whereNull('endTime')->first();
+    }
+
     public function hasActiveSessionForStudent(int $studentID): bool
     {
         return ResourceUsageLog::where('studentID', $studentID)->whereNull('endTime')->exists();

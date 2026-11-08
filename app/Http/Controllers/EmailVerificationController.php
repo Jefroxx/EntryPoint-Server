@@ -19,7 +19,7 @@ class EmailVerificationController extends Controller
     public function verify(Request $request, string $uuid, string $hash)
     {
         // Checked here instead of with the `signed` middleware, whose 403 page would strand the student.
-        if (! URL::hasCorrectSignature($request)) {
+        if (! URL::hasCorrectSignature($request, absolute: false)) {
             $result = 'invalid';
         } elseif (! URL::signatureHasNotExpired($request)) {
             $result = 'expired';
@@ -28,7 +28,9 @@ class EmailVerificationController extends Controller
             $result = $status === 'verified' ? '1' : $status;
         }
 
-        return redirect()->away(config('portal.url') . '/login?verified=' . $result);
+        // A relative address: the browser resolves it against the site the link was opened on, so the student
+        // lands on the right domain without Laravel having to know it.
+        return redirect()->away('/login?verified=' . $result);
     }
 
     public function resend(Request $request)

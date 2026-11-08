@@ -216,14 +216,15 @@ class CirculationService
             'returnDate'    => $loan->returnDate?->toIso8601String(),
             'student'       => [
                 'name'            => $loan->student->user->fullName,
-                'studentIDNumber' => $loan->student->studentIDNumber,
+                'memberIDNumber' => $loan->student->memberIDNumber,
                 'program'         => $loan->student->academicProgram,
             ],
             'book' => [
                 ...$book->only([
-                    'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pages', 'publisher',
+                    'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pageCount', 'publisher',
                 ]),
-                'callNumber'      => $book->classNumber,
+                // The slip goes to the student, so an unchecked (guessed) number is left off it.
+                'callNumber'      => $book->publicCallNumber(),
                 'subject'         => $book->subject?->name,
                 'authors'         => $book->authors->pluck('name')->values(),
                 'accessionNumber' => $loan->copy->accessionNumber,
@@ -281,14 +282,14 @@ class CirculationService
                 'title'           => $book->title,
                 'authors'         => $book->authors->pluck('name')->values(),
                 'isbn'            => $book->isbn,
-                'callNumber'      => $book->classNumber,
+                'callNumber'      => $book->callNumber,
                 'areaOfLibrary'   => $book->areaOfLibrary,
                 'accessionNumber' => $copy->accessionNumber,
                 'barcodeValue'    => $copy->barcodeValue,
             ],
             'student' => [
                 'name'            => $user->fullName,
-                'studentIDNumber' => $student->studentIDNumber,
+                'memberIDNumber' => $student->memberIDNumber,
                 'academicProgram' => $student->academicProgram,
                 'email'           => $user->email,
                 'phoneNumber'     => $user->phoneNumber,
@@ -705,6 +706,19 @@ class CirculationService
             'hour'  => (int) ceil($minutes / 60),
             default => (int) ceil($minutes / (60 * 24)), // 'day'
         };
+    }
+
+    /**
+     * What lending this book would mean right now, for the checkout desk to show before anything is saved:
+     * whether its area of the library can be loaned out at all, and the date it would fall due if it went out today.
+     *
+     * @return array{loanable: bool, dueDate: ?string}
+     */
+    public function loanTerms(Book $book): array
+    {
+        $loanable = ! empty($this->loanRules($book)['loanable'] ?? false);
+
+        return ['loanable' => $loanable, 'dueDate' => $loanable ? $this->computeDueDate($book)?->toIso8601String() : null];
     }
 
     private function loanRules(Book $book): array

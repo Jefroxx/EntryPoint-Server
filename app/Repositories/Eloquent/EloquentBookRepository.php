@@ -18,14 +18,38 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
         return $book->load(['subject', 'authors', 'copies']);
     }
 
-    public function classNumberExists(string $classNumber): bool
+    /** Whether another book (a deleted one still counts) already holds this Dewey number + Cutter pair. */
+    public function callNumberExists(string $dewey, string $cutter, ?int $exceptBookID = null): bool
     {
-        return Book::withTrashed()->where('classNumber', $classNumber)->exists();
+        return Book::withTrashed()
+            ->where('deweyNumber', $dewey)->where('cutter', $cutter)
+            ->when($exceptBookID, fn ($query, $id) => $query->where('bookID', '!=', $id))
+            ->exists();
     }
 
     public function totalCount(): int
     {
         return Book::count();
+    }
+
+    public function paginateDeweyReview(?string $search, int $perPage): LengthAwarePaginator
+    {
+        return Book::with(['authors', 'subject'])
+            ->where('deweyStatus', 'needs_review')
+            ->when($search, function ($query, $term) {
+                $query->where(function ($inner) use ($term) {
+                    $inner->where('title', 'like', "%{$term}%")
+                        ->orWhere('isbn', 'like', "%{$term}%")
+                        ->orWhereRaw("CONCAT_WS(' ', books.deweyNumber, books.cutter) like ?", ["%{$term}%"]);
+                });
+            })
+            ->orderBy('title')
+            ->paginate($perPage);
+    }
+
+    public function deweyReviewCount(): int
+    {
+        return Book::where('deweyStatus', 'needs_review')->count();
     }
 
     public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
@@ -41,7 +65,7 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
                 $query->where(function ($inner) use ($term) {
                     $inner->where('title', 'like', "%{$term}%")
                         ->orWhere('isbn', 'like', "%{$term}%")
-                        ->orWhere('classNumber', 'like', "%{$term}%")
+                        ->orWhereRaw("CONCAT_WS(' ', books.deweyNumber, books.cutter) like ?", ["%{$term}%"])
                         ->orWhereHas('authors', fn ($authors) => $authors->where('name', 'like', "%{$term}%"));
                 });
             })
@@ -52,14 +76,14 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
             ->paginate($perPage);
     }
 
-    public function paginateForStudent(?string $search, ?int $subjectID, bool $availableOnly, int $perPage): LengthAwarePaginator
+    public function paginateForStudent(?string $search, ?int $subjectID, bool $availableOnly, int $perPage, bool $newOnly = false): LengthAwarePaginator
     {
         return Book::with(['subject', 'authors'])
             ->withCount($this->copyCounts())
             ->when($search, function ($query, $term) {
                 $query->where(function ($inner) use ($term) {
                     $inner->where('title', 'like', "%{$term}%")
-                        ->orWhere('classNumber', 'like', "%{$term}%")
+                        ->orWhereRaw("CONCAT_WS(' ', books.deweyNumber, books.cutter) like ?", ["%{$term}%"])
                         ->orWhereHas('authors', fn ($authors) => $authors->where('name', 'like', "%{$term}%"))
                         ->orWhereHas('subject', fn ($subjects) => $subjects->where('name', 'like', "%{$term}%"));
                 });
@@ -69,6 +93,8 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
                 "(select count(*) from book_copies where book_copies.bookID = books.bookID and book_copies.status = 'available')
                 > (select count(*) from reservations where reservations.bookID = books.bookID and reservations.status = 'Accepted')"
             ))
+            // "New arrivals": only the books marked new, the most recently added first.
+            ->when($newOnly, fn ($query) => $query->where('isNewArrival', true)->orderByDesc('newArrivalAt'))
             ->orderBy('title')
             ->paginate($perPage);
     }

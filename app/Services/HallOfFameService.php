@@ -59,7 +59,7 @@ class HallOfFameService
                 'name'            => trim($leader['firstName'] . ' ' . $leader['lastName']),
                 'initials'        => $this->initials($leader),
                 'program'         => $leader['program'],
-                'studentIDNumber' => $leader['studentIDNumber'],
+                'memberIDNumber' => $leader['memberIDNumber'],
                 'value'           => $leader['value'],
                 'isYou'           => false,
             ], $leaders),
@@ -186,7 +186,7 @@ class HallOfFameService
             ->orderByDesc('r.value')
             ->orderBy('r.studentID')
             ->limit(self::LEADERS)
-            ->get(['r.studentID', 'r.value', 'u.firstName', 'u.lastName', 's.academicProgram', 's.studentIDNumber'])
+            ->get(['r.studentID', 'r.value', 'u.firstName', 'u.lastName', 's.academicProgram', 's.memberIDNumber'])
             ->values()
             // Equal numbers share a place (3, 3, 2 → 1st, 1st, 3rd); the listing order still breaks the tie.
             ->pipe(function (Collection $rows) {
@@ -209,7 +209,7 @@ class HallOfFameService
                 'rank'            => $row->rank,
                 'firstName'       => (string) $row->firstName,
                 'lastName'        => (string) $row->lastName,
-                'studentIDNumber' => $row->studentIDNumber,
+                'memberIDNumber' => $row->memberIDNumber,
                 'program'         => $row->academicProgram,
                 'value'           => (float) $row->value,
             ]);

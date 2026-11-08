@@ -18,7 +18,7 @@ class Student extends Model
     protected $fillable = [
         'studentID', // Explicitly included because of the 1:1 user mapping
         'uuid',
-        'studentIDNumber',
+        'memberIDNumber',
         'memberType',
         'barcodeValue',
         'academicProgram',

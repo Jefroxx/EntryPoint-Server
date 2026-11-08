@@ -23,7 +23,7 @@ class UpdateMemberRequest extends FormRequest
             'email'            => ['sometimes', 'required', 'email', 'max:120', Rule::unique('users', 'email')->ignore($student->studentID, 'userID')],
             'phoneNumber'      => ['nullable', 'string', 'max:20'],
             'memberType'       => ['sometimes', 'required', Rule::in(['faculty', 'staff'])],
-            'employeeIDNumber' => ['sometimes', 'required', 'string', 'max:40', Rule::unique('students', 'studentIDNumber')->ignore($student->studentID, 'studentID')],
+            'employeeIDNumber' => ['sometimes', 'required', 'string', 'max:40', Rule::unique('students', 'memberIDNumber')->ignore($student->studentID, 'studentID')],
             'department'       => ['sometimes', 'required', 'string', 'max:80'],
         ];
     }

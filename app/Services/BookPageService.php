@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Book;
 use App\Models\BookPage;
+use App\Support\Uploads;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -104,7 +105,7 @@ class BookPageService
             'section'  => $page->section,
             'position' => $page->position,
             // Built from the request's own address, so the link works whatever APP_URL says.
-            'url'      => asset('storage/' . $page->path),
+            'url'      => Uploads::url($page->path),
         ];
     }
 

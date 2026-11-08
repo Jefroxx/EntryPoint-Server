@@ -29,7 +29,7 @@ class StudentApproved extends BrandedMail
             markdown: 'emails.students.approved',
             with: [
                 'firstName' => $this->student->user->firstName,
-                'signInUrl' => config('portal.url'),
+                'signInUrl' => \App\Support\PortalUrl::current(),
             ],
         );
     }

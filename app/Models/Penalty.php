@@ -22,7 +22,7 @@ class Penalty extends Model
      * The penalty types for a lost or damaged copy (not a late return). The student pays the book's price or replaces
      * the book; either way the copy leaves the catalog.
      */
-    public const COPY_CATEGORIES = ['lost', 'damaged'];
+    public const COPY_KINDS = ['lost', 'damaged'];
 
     protected $fillable = [
         'uuid', 'loanID', 'studentID', 'copyID', 'penaltyTypeID', 'amount',
@@ -84,6 +84,6 @@ class Penalty extends Model
     /** True for a penalty over a lost or damaged copy, false for a late-return fine. */
     public function isForCopy(): bool
     {
-        return in_array($this->penaltyType?->category, self::COPY_CATEGORIES, true);
+        return in_array($this->penaltyType?->kind, self::COPY_KINDS, true);
     }
 }

@@ -62,7 +62,7 @@ class LoanSeeder extends Seeder
             ]);
 
             if ($late) {
-                $type = PenaltyType::where('category', $loan->loanType)->first();
+                $type = PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', $loan->loanType)->first();
                 $rule = $type?->rules()->first();
 
                 if ($rule) {
