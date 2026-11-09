@@ -41,10 +41,18 @@ class PhoneScannerTest extends TestCase
         return $this->withToken($token);
     }
 
+    public function test_the_pairing_names_the_address_the_phone_should_open(): void
+    {
+        config(['portal.url' => 'https://entrypoint.digital']);
+
+        $this->actingAs($this->librarian)->postJson('/api/librarian/phone-pairing')
+            ->assertOk()->assertJsonPath('portalUrl', 'https://entrypoint.digital');
+    }
+
     public function test_the_desk_gets_a_code_and_the_phone_trades_it_once_for_a_limited_token(): void
     {
         $code = $this->actingAs($this->librarian)->postJson('/api/librarian/phone-pairing')
-            ->assertOk()->assertJsonStructure(['code', 'expiresAt'])->json('code');
+            ->assertOk()->assertJsonStructure(['code', 'expiresAt', 'portalUrl'])->json('code');
         app('auth')->forgetGuards();
 
         $claimed = $this->postJson('/api/phone-scanner/claim', ['code' => $code])
