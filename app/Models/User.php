@@ -19,6 +19,7 @@ class User extends Authenticatable
         'middleInitial',
         'lastName',
         'email',
+        'username',
         'emailVerifiedAt',
         'password',
         'phoneNumber',

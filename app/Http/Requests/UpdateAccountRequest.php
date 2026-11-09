@@ -17,7 +17,8 @@ class UpdateAccountRequest extends FormRequest
         return [
             'firstName' => ['required', 'string', 'max:255'],
             'lastName'  => ['required', 'string', 'max:255'],
-            'email'     => ['required', 'email', Rule::unique('users', 'email')->ignore($this->user()->userID, 'userID')],
+            // Left out by a student assistant, whose account has a username and no email.
+            'email'     => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($this->user()->userID, 'userID')],
         ];
     }
 }

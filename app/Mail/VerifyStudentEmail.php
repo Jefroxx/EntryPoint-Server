@@ -11,7 +11,8 @@ class VerifyStudentEmail extends BrandedMail
 {
     use SerializesModels;
 
-    public function __construct(public User $user, public string $verifyUrl)
+    /** `$madeByAdmin`: an administrator made the account, so confirming is the only step (no approval after it). */
+    public function __construct(public User $user, public string $verifyUrl, public bool $madeByAdmin = false)
     {
         parent::__construct();
     }
@@ -31,6 +32,7 @@ class VerifyStudentEmail extends BrandedMail
                 'firstName' => $this->user->firstName,
                 'verifyUrl' => $this->verifyUrl,
                 'minutes'   => config('portal.verify_link_minutes'),
+                'madeByAdmin' => $this->madeByAdmin,
             ],
         );
     }

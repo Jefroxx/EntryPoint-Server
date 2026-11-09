@@ -17,6 +17,11 @@ class EloquentUserRepository extends BaseRepository implements UserRepositoryInt
         return User::where('email', $email)->first();
     }
 
+    public function findByLogin(string $login): ?User
+    {
+        return User::where('email', $login)->orWhere('username', $login)->first();
+    }
+
     public function findByUuid(string $uuid): ?User
     {
         return User::where('uuid', $uuid)->first();

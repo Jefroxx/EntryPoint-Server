@@ -30,6 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // `abilities` lets it into its own.
             'full.token'       => \App\Http\Middleware\RejectScopedTokens::class,
             'abilities'        => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
+            // Ends a sign-in that has been unused for `sanctum.idle_timeout` minutes (4 hours).
+            'idle.timeout'     => \App\Http\Middleware\EndIdleSessions::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -48,9 +50,12 @@ return Application::configure(basePath: dirname(__DIR__))
             $replaced = $id !== false && ctype_digit($id)
                 && \Illuminate\Support\Facades\Cache::has(\App\Services\AuthService::REPLACED_TOKEN_PREFIX.$id);
 
+            $idled = $id !== false && ctype_digit($id)
+                && \Illuminate\Support\Facades\Cache::has(\App\Http\Middleware\EndIdleSessions::IDLED_PREFIX.$id);
+
             return response()->json([
                 'message' => $replaced ? 'You were signed out because this account was signed in somewhere else.' : $e->getMessage(),
-                'reason'  => $replaced ? 'signed_in_elsewhere' : 'unauthenticated',
+                'reason'  => $replaced ? 'signed_in_elsewhere' : ($idled ? 'idle' : 'unauthenticated'),
             ], 401);
         });
     })->create();

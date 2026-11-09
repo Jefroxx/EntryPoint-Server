@@ -52,7 +52,7 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
         return Book::where('deweyStatus', 'needs_review')->count();
     }
 
-    public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
+    public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage, ?string $dewey = null): LengthAwarePaginator
     {
         // "Free" means on the shelf and not held for an accepted reservation.
         $free = "(select count(*) from book_copies where book_copies.bookID = books.bookID and book_copies.status = 'available')
@@ -72,6 +72,9 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
             ->when($subjectID, fn ($query, $id) => $query->where('subjectID', $id))
             ->when($availability === 'available', fn ($query) => $query->whereRaw($free))
             ->when($availability === 'unavailable', fn ($query) => $query->whereRaw("not ({$free})"))
+            // Verified = the Dewey number has been confirmed ('ok'); unverified = still only a guess ('needs_review').
+            ->when($dewey === 'verified', fn ($query) => $query->where('deweyStatus', 'ok'))
+            ->when($dewey === 'unverified', fn ($query) => $query->where('deweyStatus', 'needs_review'))
             ->orderByDesc('bookID')
             ->paginate($perPage);
     }

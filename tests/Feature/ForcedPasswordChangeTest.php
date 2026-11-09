@@ -49,6 +49,8 @@ class ForcedPasswordChangeTest extends TestCase
             'firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@stidavao.edu.ph', 'role' => 'assistant',
         ])->assertCreated();
         $temporary = $created->json('temporaryPassword');
+        // (Confirming the mailed link is covered in AdminAccountsTest; here the email is simply marked confirmed.)
+        User::where('email', 'paolo@stidavao.edu.ph')->update(['emailVerifiedAt' => now()]);
 
         [$token, $user] = $this->signIn('/api/librarian/login', 'paolo@stidavao.edu.ph', $temporary);
         $this->assertTrue($user['mustChangePassword']);
@@ -81,6 +83,7 @@ class ForcedPasswordChangeTest extends TestCase
             'memberType' => 'faculty', 'employeeIDNumber' => 'EMP-1', 'department' => 'IT',
         ])->assertCreated();
         $temporary = $created->json('temporaryPassword');
+        User::where('email', 'roberto@davao.sti.edu.ph')->update(['emailVerifiedAt' => now()]);
 
         [$token, $user] = $this->signIn('/api/login', 'roberto@davao.sti.edu.ph', $temporary);
         $this->assertTrue($user['mustChangePassword']);

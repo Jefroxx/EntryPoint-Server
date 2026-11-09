@@ -27,6 +27,7 @@ class BookController extends Controller
             'search'       => ['nullable', 'string', 'max:255'],
             'subjectID'    => ['nullable', 'integer'],
             'availability' => ['nullable', 'in:available,unavailable'],
+            'dewey'        => ['nullable', 'in:verified,unverified'],
             'perPage'      => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -35,6 +36,7 @@ class BookController extends Controller
             isset($filters['subjectID']) ? (int) $filters['subjectID'] : null,
             $filters['availability'] ?? null,
             (int) ($filters['perPage'] ?? 15),
+            $filters['dewey'] ?? null,
         ));
     }
 

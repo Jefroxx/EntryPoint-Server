@@ -17,6 +17,10 @@ use Illuminate\Validation\ValidationException;
  * the permissions of each role. Every change is written to the audit log.
  *
  * A new account gets a temporary password that is returned once, for the administrator to hand over.
+ *
+ * Staff (librarians, administrators, outside assistants) and faculty/staff members are given an email, which they must
+ * confirm with a mailed link before they can sign in; nobody has to approve them after that. A student assistant is
+ * picked from the registered students instead and gets a generated username (no email to confirm).
  */
 class AdminAccountService
 {
@@ -25,6 +29,7 @@ class AdminAccountService
     public function __construct(
         private StaffPermissionService $permissions,
         private AuditLogService $audit,
+        private EmailVerificationService $verification,
     ) {
     }
 
@@ -79,6 +84,11 @@ class AdminAccountService
 
     public function createStaff(User $actor, array $data): array
     {
+        // A student assistant is picked from the registered students (outside assistants use the email path below).
+        if ($data['role'] === 'assistant' && ! empty($data['studentUuid'])) {
+            return $this->createStudentAssistant($actor, $data['studentUuid']);
+        }
+
         $password = $this->temporaryPassword();
 
         $librarian = DB::transaction(function () use ($data, $password) {
@@ -91,16 +101,119 @@ class AdminAccountService
                 'password'        => Hash::make($password),
                 'phoneNumber'     => $data['phoneNumber'] ?? null,
                 'userType'        => 'librarian',
-                'emailVerifiedAt' => now(),
+                // Left empty: they confirm it with the mailed link, and can't sign in until they do.
+                'emailVerifiedAt' => null,
                 'mustChangePassword' => true,
             ]);
 
             return Librarian::create(['librarianID' => $user->userID, 'uuid' => Str::uuid(), 'role' => $data['role']]);
         });
 
+        $sent = $this->verification->sendLink($librarian->user);
+
         $this->audit->record($actor, 'account.created', 'Created a ' . $this->roleLabel($data['role']) . " account: {$librarian->user->fullName}");
 
-        return ['account' => $this->staffRow($librarian->load('user'), $actor), 'temporaryPassword' => $password];
+        return [
+            'account'           => $this->staffRow($librarian->load('user'), $actor),
+            'temporaryPassword' => $password,
+            'verificationSent'  => $sent,
+        ];
+    }
+
+    /**
+     * A student assistant, made from a registered student: name and phone come from the student record, and the
+     * login is a generated username plus a temporary password (the student keeps their own student account).
+     */
+    private function createStudentAssistant(User $actor, string $studentUuid): array
+    {
+        $student = Student::with('user')->where('uuid', $studentUuid)->first();
+
+        if (! $student || $student->memberType !== 'student' || $student->registrationStatus !== 'approved' || $student->user->isDisabled()) {
+            throw ValidationException::withMessages(['studentUuid' => ['Choose a student who is registered in the system.']]);
+        }
+
+        if (Librarian::where('linkedStudentID', $student->studentID)->exists()) {
+            throw ValidationException::withMessages(['studentUuid' => ['This student is already a student assistant.']]);
+        }
+
+        $source = $student->user;
+        $password = $this->temporaryPassword();
+        $username = $this->uniqueUsername($source->firstName, $source->lastName);
+
+        $librarian = DB::transaction(function () use ($source, $student, $password, $username) {
+            $user = User::create([
+                'uuid'               => Str::uuid(),
+                'firstName'          => $source->firstName,
+                'middleInitial'      => $source->middleInitial,
+                'lastName'           => $source->lastName,
+                'email'              => null,
+                'username'           => $username,
+                'password'           => Hash::make($password),
+                'phoneNumber'        => $source->phoneNumber,
+                'userType'           => 'librarian',
+                // No email on this account, so there is nothing to confirm.
+                'emailVerifiedAt'    => now(),
+                'mustChangePassword' => true,
+            ]);
+
+            return Librarian::create([
+                'librarianID'     => $user->userID,
+                'uuid'            => Str::uuid(),
+                'role'            => 'assistant',
+                'linkedStudentID' => $student->studentID,
+            ]);
+        });
+
+        $this->audit->record($actor, 'account.created', "Created a Student assistant account for the registered student {$source->fullName}");
+
+        return [
+            'account'           => $this->staffRow($librarian->load('user'), $actor),
+            'temporaryPassword' => $password,
+            'username'          => $username,
+            'verificationSent'  => false,
+        ];
+    }
+
+    /**
+     * Registered students who can still be made a student assistant: approved, not disabled, not one already.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function assistantCandidates(?string $search): array
+    {
+        return Student::with('user')
+            ->join('users', 'users.userID', '=', 'students.studentID')
+            ->where('students.memberType', 'student')
+            ->where('students.registrationStatus', 'approved')
+            ->whereNull('users.disabledAt')
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('librarians')->whereColumn('librarians.linkedStudentID', 'students.studentID'))
+            ->when($search, fn ($q) => $q->where(fn ($w) => $w
+                ->where('users.firstName', 'like', "%{$search}%")
+                ->orWhere('users.lastName', 'like', "%{$search}%")
+                ->orWhere('students.memberIDNumber', 'like', "%{$search}%")
+                ->orWhere('students.academicProgram', 'like', "%{$search}%")))
+            ->orderBy('users.firstName')
+            ->limit(15)
+            ->get('students.*')
+            ->map(fn (Student $s) => [
+                'uuid'            => $s->uuid,
+                'name'            => $s->user->fullName,
+                'idNumber'        => $s->memberIDNumber,
+                'academicProgram' => $s->academicProgram,
+            ])
+            ->all();
+    }
+
+    /** `sa.` plus the name, plus three digits, checked against the taken ones: sa.juandelacruz482. */
+    private function uniqueUsername(string $first, string $last): string
+    {
+        $name = substr(preg_replace('/[^a-z0-9]/', '', strtolower(Str::ascii($first . $last))) ?: 'assistant', 0, 24);
+
+        do {
+            $username = 'sa.' . $name . random_int(100, 999);
+        } while (User::where('username', $username)->exists());
+
+        return $username;
     }
 
     public function updateStaff(User $actor, Librarian $librarian, array $data): array
@@ -135,6 +248,10 @@ class AdminAccountService
             'lastName'      => $user->lastName,
             'name'          => $user->fullName,
             'email'         => $user->email,
+            'username'      => $user->username,
+            // null = no email on the account (a student assistant's), so nothing to confirm.
+            'emailConfirmed' => $user->email ? (bool) $user->emailVerifiedAt : null,
+            'linkedStudent' => $librarian->linkedStudentID !== null,
             'phoneNumber'   => $user->phoneNumber,
             'role'          => $librarian->role,
             'roleLabel'     => self::ROLE_LABELS[$librarian->role] ?? ucfirst($librarian->role),
@@ -177,8 +294,9 @@ class AdminAccountService
                 'password'        => Hash::make($password),
                 'phoneNumber'     => $data['phoneNumber'] ?? null,
                 'userType'        => 'student',
-                // Made by the administrator, so there is no email to confirm and no registration to approve.
-                'emailVerifiedAt' => now(),
+                // Made by the administrator, so there is no registration to approve; the email still has to be
+                // confirmed with the mailed link before they can sign in.
+                'emailVerifiedAt' => null,
                 'mustChangePassword' => true,
             ]);
 
@@ -194,9 +312,11 @@ class AdminAccountService
             ]);
         });
 
+        $sent = $this->verification->sendLink($student->user);
+
         $this->audit->record($actor, 'account.created', 'Created a ' . $data['memberType'] . " member: {$student->user->fullName}");
 
-        return ['account' => $this->memberRow($student->load('user')), 'temporaryPassword' => $password];
+        return ['account' => $this->memberRow($student->load('user')), 'temporaryPassword' => $password, 'verificationSent' => $sent];
     }
 
     public function updateMember(User $actor, Student $student, array $data): array
@@ -291,6 +411,35 @@ class AdminAccountService
     {
         $this->permissions->set($role, $permissions);
         $this->audit->record($actor, 'roles.updated', 'Changed what the ' . $this->roleLabel($role) . ' role can do');
+
+        return $this->roles();
+    }
+
+    /**
+     * Several roles saved together (the roles screen's one Save button): all of them or none. One audit entry names the
+     * roles whose permissions actually changed; saving a role with the list it already has changes nothing.
+     *
+     * @param array<string, string[]> $roles role => its full list of permissions
+     */
+    public function saveRoles(User $actor, array $roles): array
+    {
+        $changed = [];
+
+        DB::transaction(function () use ($roles, &$changed) {
+            foreach ($roles as $role => $permissions) {
+                $before = $this->permissions->forRole($role);
+                $this->permissions->set($role, $permissions);
+
+                // Both lists come back in the config's order, so a plain comparison is enough.
+                if ($before !== $this->permissions->forRole($role)) {
+                    $changed[] = $this->roleLabel($role);
+                }
+            }
+        });
+
+        if ($changed) {
+            $this->audit->record($actor, 'roles.updated', 'Changed what the ' . implode(' and ', $changed) . ' ' . (count($changed) > 1 ? 'roles' : 'role') . ' can do');
+        }
 
         return $this->roles();
     }

@@ -20,6 +20,7 @@ class Librarian extends Model
         'librarianID',
         'uuid',
         'role',
+        'linkedStudentID', // the student record a student assistant was picked from
     ];
 
     public function user()

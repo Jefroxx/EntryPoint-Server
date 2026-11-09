@@ -20,6 +20,12 @@ class StaffController extends Controller
         return response()->json(['staff' => $this->accounts->staff($request->query('search'), $request->user())]);
     }
 
+    /** Registered students who can still be made a student assistant (the picker in the "Add staff account" form). */
+    public function assistantCandidates(Request $request)
+    {
+        return response()->json(['students' => $this->accounts->assistantCandidates($request->query('search'))]);
+    }
+
     public function store(StoreStaffRequest $request)
     {
         return response()->json($this->accounts->createStaff($request->user(), $request->validated()), 201);

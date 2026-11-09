@@ -80,9 +80,9 @@ class CatalogService
      * remapped to match the frontend's contract (`callNumber` instead of
      * worked out from `deweyNumber` + `cutter`), independent of the storage schema.
      */
-    public function catalogIndex(?string $search, ?int $subjectID, ?string $availability, int $perPage): LengthAwarePaginator
+    public function catalogIndex(?string $search, ?int $subjectID, ?string $availability, int $perPage, ?string $dewey = null): LengthAwarePaginator
     {
-        return $this->books->paginateCatalog($search, $subjectID, $availability, $perPage)->through(fn (Book $book) => [
+        return $this->books->paginateCatalog($search, $subjectID, $availability, $perPage, $dewey)->through(fn (Book $book) => [
             'bookID'        => $book->bookID,
             'uuid'          => $book->uuid,
             'title'         => $book->title,

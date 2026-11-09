@@ -94,11 +94,11 @@ class SettingsService
      */
     public function updateAccount(User $user, array $payload): array
     {
-        $this->users->update($user, [
+        $this->users->update($user, array_filter([
             'firstName' => $payload['firstName'],
             'lastName'  => $payload['lastName'],
-            'email'     => $payload['email'],
-        ]);
+            'email'     => $payload['email'] ?? null,
+        ], fn ($value) => $value !== null));
 
         $user = $user->fresh();
 

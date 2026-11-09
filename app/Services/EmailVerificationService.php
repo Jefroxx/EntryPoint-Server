@@ -28,7 +28,7 @@ class EmailVerificationService
     public function sendLink(User $user): bool
     {
         try {
-            Mail::to($user->email)->send(new VerifyStudentEmail($user, $this->linkFor($user)));
+            Mail::to($user->email)->send(new VerifyStudentEmail($user, $this->linkFor($user), $this->madeByAdmin($user)));
 
             return true;
         } catch (Throwable $exception) {
@@ -46,9 +46,35 @@ class EmailVerificationService
     {
         $user = $this->users->findByEmail($email);
 
-        if ($user && $user->userType === 'student' && ! $user->emailVerifiedAt) {
+        // Students confirming their registration, and staff or faculty accounts an administrator made.
+        if ($user && $user->email && in_array($user->userType, ['student', 'librarian'], true) && ! $user->emailVerifiedAt) {
             $this->sendLink($user);
         }
+    }
+
+    /**
+     * An administrator made this account (staff, faculty or staff member), so confirming the email is all that is
+     * left. A student who registered herself still has a librarian's approval ahead of her.
+     */
+    public function madeByAdmin(User $user): bool
+    {
+        return $user->userType === 'librarian' || $user->student?->registrationStatus === 'approved';
+    }
+
+    /** Which sign-in page the link should end on: 'student' (self-registered), 'member' (faculty/staff) or 'staff'. */
+    public function kindOf(string $uuid): string
+    {
+        $user = $this->users->findByUuid($uuid);
+
+        if (! $user) {
+            return 'student';
+        }
+
+        if ($user->userType === 'librarian') {
+            return 'staff';
+        }
+
+        return $this->madeByAdmin($user) ? 'member' : 'student';
     }
 
     /**
@@ -71,10 +97,13 @@ class EmailVerificationService
 
         $this->users->update($user, ['emailVerifiedAt' => now()]);
 
-        $this->notifications->notifyAllLibrarians(
-            "New student registration pending approval: {$user->firstName} {$user->lastName}",
-            'new_registration'
-        );
+        // Only a student who registered herself waits for approval; an account an administrator made does not.
+        if (! $this->madeByAdmin($user)) {
+            $this->notifications->notifyAllLibrarians(
+                "New student registration pending approval: {$user->firstName} {$user->lastName}",
+                'new_registration'
+            );
+        }
 
         return 'verified';
     }
