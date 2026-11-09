@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Mail\VerifyStudentEmail;
 use App\Models\AuditLog;
 use App\Models\Librarian;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -79,20 +81,48 @@ class AdminAccountsTest extends TestCase
 
     // ---------------------------------------------------------------- staff accounts
 
-    public function test_the_admin_creates_a_staff_account_that_can_sign_in_with_the_temporary_password(): void
+    /** The confirmation link that was mailed, as the path the browser would request. */
+    private function openMailedLink(): void
     {
-        $response = $this->actingAs($this->admin)->postJson('/api/admin/staff', $this->newStaff())
+        $link = null;
+        Mail::assertSent(VerifyStudentEmail::class, function (VerifyStudentEmail $mail) use (&$link) {
+            $link = $mail->verifyUrl;
+
+            return true;
+        });
+
+        $this->app['auth']->forgetGuards();
+        $this->get(parse_url($link, PHP_URL_PATH) . '?' . parse_url($link, PHP_URL_QUERY));
+    }
+
+    public function test_the_admin_creates_a_staff_account_that_signs_in_once_the_email_is_confirmed(): void
+    {
+        Mail::fake();
+
+        $response = $this->actingAs($this->admin)->postJson('/api/admin/staff', $this->newStaff(['role' => 'librarian']))
             ->assertCreated()
-            ->assertJsonPath('account.role', 'assistant')
-            ->assertJsonPath('account.name', 'Paolo Lim');
+            ->assertJsonPath('account.role', 'librarian')
+            ->assertJsonPath('account.name', 'Paolo Lim')
+            ->assertJsonPath('account.emailConfirmed', false)
+            ->assertJsonPath('verificationSent', true);
 
         $password = $response->json('temporaryPassword');
         $this->assertSame(10, strlen($password));
+        Mail::assertSent(VerifyStudentEmail::class, fn ($mail) => $mail->hasTo('paolo@stidavao.edu.ph') && $mail->madeByAdmin);
+
+        // Until the link is opened the account can't sign in.
+        $this->app['auth']->forgetGuards();
+        $this->postJson('/api/librarian/login', ['email' => 'paolo@stidavao.edu.ph', 'password' => $password])
+            ->assertStatus(422)->assertJsonValidationErrors(['email', 'verification']);
+
+        // Opening it lands on the librarian sign-in, and nobody has to approve anything after that.
+        $this->openMailedLink();
+        $this->assertNotNull(User::where('email', 'paolo@stidavao.edu.ph')->first()->emailVerifiedAt);
 
         $this->app['auth']->forgetGuards();
         $this->postJson('/api/librarian/login', ['email' => 'paolo@stidavao.edu.ph', 'password' => $password])
             ->assertOk()
-            ->assertJsonPath('staff.role', 'assistant');
+            ->assertJsonPath('staff.role', 'librarian');
 
         $this->assertDatabaseHas('audit_logs', ['actorID' => $this->admin->userID, 'action' => 'account.created']);
     }
@@ -166,17 +196,29 @@ class AdminAccountsTest extends TestCase
 
     // ---------------------------------------------------------------- faculty and staff members
 
-    public function test_the_admin_creates_a_faculty_member_who_can_sign_in_on_the_student_side(): void
+    public function test_the_admin_creates_a_faculty_member_who_confirms_the_email_and_then_signs_in_on_the_student_side(): void
     {
+        Mail::fake();
+
         $response = $this->actingAs($this->admin)->postJson('/api/admin/members', $this->newMember())
             ->assertCreated()
             ->assertJsonPath('account.memberType', 'faculty')
-            ->assertJsonPath('account.employeeIDNumber', 'EMP-2019-014');
+            ->assertJsonPath('account.employeeIDNumber', 'EMP-2019-014')
+            ->assertJsonPath('verificationSent', true);
 
         $student = Student::where('memberIDNumber', 'EMP-2019-014')->firstOrFail();
         $this->assertSame('approved', $student->registrationStatus);
         $this->assertSame('Information Technology', $student->department);
         $this->assertNotEmpty($student->barcodeValue);
+
+        // Approved from the start, but the email still has to be confirmed.
+        $this->app['auth']->forgetGuards();
+        $this->postJson('/api/login', ['email' => 'roberto@davao.sti.edu.ph', 'password' => $response->json('temporaryPassword')])
+            ->assertStatus(422)->assertJsonValidationErrors(['email', 'verification']);
+
+        $this->openMailedLink();
+        // No librarian is told about a "registration pending approval": there is none.
+        $this->assertSame(0, \App\Models\SystemNotification::where('type', 'new_registration')->count());
 
         $this->app['auth']->forgetGuards();
         $this->postJson('/api/login', ['email' => 'roberto@davao.sti.edu.ph', 'password' => $response->json('temporaryPassword')])
@@ -248,6 +290,39 @@ class AdminAccountsTest extends TestCase
         $this->app['auth']->forgetGuards();
         $this->actingAs($assistant)->getJson('/api/librarian/achievements')->assertOk();
         $this->actingAs($assistant)->getJson('/api/librarian/attendance-logs')->assertForbidden();
+    }
+
+    public function test_one_save_updates_several_roles_together_and_logs_only_the_roles_that_changed(): void
+    {
+        $roles = $this->actingAs($this->admin)->getJson('/api/admin/roles')->json('roles');
+        $librarianNow = collect($roles)->firstWhere('role', 'librarian')['permissions'];
+
+        // The librarian list is sent back unchanged; only the assistant's differs.
+        $this->actingAs($this->admin)->putJson('/api/admin/roles', ['roles' => [
+            'librarian' => $librarianNow,
+            'assistant' => ['circulation', 'engagement'],
+        ]])->assertOk()->assertJsonPath('roles.2.permissions', ['circulation', 'engagement']);
+
+        $entry = AuditLog::where('action', 'roles.updated')->latest('logID')->firstOrFail();
+        $this->assertSame('Changed what the student assistant role can do', $entry->summary);
+        $this->assertSame(1, AuditLog::where('action', 'roles.updated')->count());
+
+        // Nothing changed: no entry.
+        $this->actingAs($this->admin)->putJson('/api/admin/roles', ['roles' => ['assistant' => ['circulation', 'engagement']]])->assertOk();
+        $this->assertSame(1, AuditLog::where('action', 'roles.updated')->count());
+    }
+
+    public function test_a_combined_save_is_all_or_nothing_and_never_touches_the_admin_role(): void
+    {
+        $before = $this->actingAs($this->admin)->getJson('/api/admin/roles')->json('roles');
+
+        $this->actingAs($this->admin)->putJson('/api/admin/roles', ['roles' => ['admin' => []]])->assertJsonValidationErrors('roles');
+        $this->actingAs($this->admin)->putJson('/api/admin/roles', ['roles' => ['assistant' => ['launch-missiles']]])->assertJsonValidationErrors('roles.assistant.0');
+        $this->actingAs($this->admin)->putJson('/api/admin/roles', ['roles' => ['librarian' => ['reports'], 'assistant' => ['launch-missiles']]])->assertStatus(422);
+        $this->actingAs($this->admin)->putJson('/api/admin/roles', [])->assertJsonValidationErrors('roles');
+
+        $this->assertSame($before, $this->actingAs($this->admin)->getJson('/api/admin/roles')->json('roles'));
+        $this->assertSame(0, AuditLog::where('action', 'roles.updated')->count());
     }
 
     public function test_the_admin_role_cannot_be_edited_and_unknown_permissions_are_refused(): void

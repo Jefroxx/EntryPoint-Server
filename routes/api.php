@@ -58,7 +58,7 @@ Route::middleware(['auth:sanctum', 'abilities:scan-relay'])->prefix('phone-scann
 });
 
 // Protected (full sign-ins only: `full.token` turns away the phone's limited token)
-Route::middleware(['auth:sanctum', 'full.token'])->group(function () {
+Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
@@ -135,6 +135,7 @@ Route::middleware(['auth:sanctum', 'full.token'])->group(function () {
         Route::get('/overview', [\App\Http\Controllers\Admin\OverviewController::class, 'show']);
 
         Route::get('/staff', [\App\Http\Controllers\Admin\StaffController::class, 'index']);
+        Route::get('/staff/assistant-candidates', [\App\Http\Controllers\Admin\StaffController::class, 'assistantCandidates']);
         Route::post('/staff', [\App\Http\Controllers\Admin\StaffController::class, 'store']);
         Route::patch('/staff/{librarian}', [\App\Http\Controllers\Admin\StaffController::class, 'update']);
         Route::post('/staff/{librarian}/disable', [\App\Http\Controllers\Admin\StaffController::class, 'disable']);
@@ -159,6 +160,7 @@ Route::middleware(['auth:sanctum', 'full.token'])->group(function () {
         Route::post('/privacy/members/{student}/anonymize', [\App\Http\Controllers\Admin\PrivacyController::class, 'anonymize']);
 
         Route::get('/roles', [\App\Http\Controllers\Admin\RoleController::class, 'index']);
+        Route::put('/roles', [\App\Http\Controllers\Admin\RoleController::class, 'updateAll']);
         Route::put('/roles/{role}', [\App\Http\Controllers\Admin\RoleController::class, 'update']);
 
         Route::get('/audit-logs', [\App\Http\Controllers\Admin\AuditLogController::class, 'index']);

@@ -112,12 +112,21 @@ class AuthService
             ]);
         }
 
+        // A staff account an administrator made with an email must confirm it first. (A student assistant's
+        // username-only account has no email to confirm.)
+        if ($user->email && ! $user->emailVerifiedAt) {
+            throw ValidationException::withMessages([
+                'email'        => ["Confirm your email first. We sent a link to {$user->email}; check your inbox and Junk folder."],
+                'verification' => ['required'],
+            ]);
+        }
+
         return $this->issueToken($user, 'librarian');
     }
 
     private function authenticate(string $email, string $password): User
     {
-        $user = $this->users->findByEmail($email);
+        $user = $this->users->findByLogin($email);
 
         if (! $user || ! Hash::check($password, $user->password)) {
             throw ValidationException::withMessages([

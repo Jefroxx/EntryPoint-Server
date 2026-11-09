@@ -13,8 +13,12 @@ class LoginRequest extends FormRequest
 
     public function rules(): array
     {
+        // The librarian sign-in also takes a username (a student assistant's account has no email); the student
+        // sign-in is email only.
+        $staffSignIn = $this->is('api/librarian/login');
+
         return [
-            'email'    => ['required', 'email'],
+            'email'    => $staffSignIn ? ['required', 'string', 'max:255'] : ['required', 'email'],
             'password' => ['required', 'string'],
         ];
     }

@@ -28,9 +28,16 @@ class EmailVerificationController extends Controller
             $result = $status === 'verified' ? '1' : $status;
         }
 
+        // Staff and faculty accounts an administrator made have no approval after this, so they get their own
+        // message ("staff" or "member"), and staff land on the librarian sign-in.
+        $kind = $this->verification->kindOf($uuid);
+        if ($kind !== 'student' && in_array($result, ['1', 'already'], true)) {
+            $result = $kind;
+        }
+
         // A relative address: the browser resolves it against the site the link was opened on, so the student
         // lands on the right domain without Laravel having to know it.
-        return redirect()->away('/login?verified=' . $result);
+        return redirect()->away(($kind === 'staff' ? '/librarian/login' : '/login') . '?verified=' . $result);
     }
 
     public function resend(Request $request)

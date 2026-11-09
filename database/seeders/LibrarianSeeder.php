@@ -34,6 +34,8 @@ class LibrarianSeeder extends Seeder
                 'birthDate'     => '1990-01-01',
                 'address'       => $address,
                 'userType'      => 'librarian',
+                // Sample accounts: staff must confirm their email to sign in, and nobody is mailing these.
+                'emailVerifiedAt' => now(),
             ]
         );
 
