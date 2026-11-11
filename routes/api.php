@@ -39,6 +39,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Public
+// No per-address throttle on these three, on purpose: through the hosted site's proxy every visitor shares one address,
+// so such a limit would be one bucket for the whole school (and a few bad guesses could lock everyone out, or a class
+// registering together would be refused). Password guessing is stopped per ACCOUNT instead (see LoginThrottle), and a
+// registration still needs a confirmed school email and a librarian's approval before it can do anything.
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/librarian/login', [AuthController::class, 'librarianLogin']);
@@ -217,6 +221,7 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         // Before /books/{book}, so "dewey-review" isn't taken for a book.
         Route::get('/books/dewey-review', [BookController::class, 'deweyReview']);
         Route::post('/dewey/lookup', [BookController::class, 'lookupIsbnDewey'])->middleware('throttle:60,1');
+        Route::post('/isbn/lookup', [BookController::class, 'lookupIsbnDetails'])->middleware('throttle:60,1');
         Route::post('/books/{book}/dewey/lookup', [BookController::class, 'lookupDewey'])->middleware('throttle:60,1');
         Route::put('/books/{book}/dewey', [BookController::class, 'setDewey']);
         Route::get('/books/{book}/removal-summary', [BookController::class, 'removalSummary']);

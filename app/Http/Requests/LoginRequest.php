@@ -19,7 +19,8 @@ class LoginRequest extends FormRequest
 
         return [
             'email'    => $staffSignIn ? ['required', 'string', 'max:255'] : ['required', 'email'],
-            'password' => ['required', 'string'],
+            // A cap, so a megabyte "password" can't be sent just to make the server spend time hashing it.
+            'password' => ['required', 'string', 'max:255'],
         ];
     }
 }
