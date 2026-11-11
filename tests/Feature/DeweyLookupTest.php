@@ -94,8 +94,9 @@ class DeweyLookupTest extends TestCase
         $this->assertSame('005.1', $book->deweyNumber);
         $this->assertSame('library_of_congress', $book->deweySource);
         $this->assertSame('ok', $book->deweyStatus);
-        // The Dewey number plus the Cutter the same record gave for the author.
-        $this->assertSame('005.1 C662', $book->callNumber);
+        // The call number is the Dewey number; the Cutter the same record gave for the author is kept beside it.
+        $this->assertSame('005.1', $book->callNumber);
+        $this->assertSame('C662', $book->cutter);
     }
 
     public function test_open_library_is_used_when_the_library_of_congress_has_nothing(): void
@@ -178,7 +179,7 @@ class DeweyLookupTest extends TestCase
         $book->refresh();
         $this->assertSame('ok', $book->deweyStatus);
         $this->assertSame('library_of_congress', $book->deweySource);
-        $this->assertStringStartsWith('005.1 ', $book->callNumber);
+        $this->assertSame('005.1', $book->callNumber);
 
         $this->actingAs($this->librarian)->getJson('/api/librarian/books/dewey-review')->assertJsonPath('needsReview', 0);
     }
@@ -195,7 +196,7 @@ class DeweyLookupTest extends TestCase
         $book->refresh();
         $this->assertSame('manual', $book->deweySource);
         $this->assertSame('ok', $book->deweyStatus);
-        $this->assertStringStartsWith('005.13 ', $book->callNumber);
+        $this->assertSame('005.13', $book->callNumber);
 
         $this->actingAs($this->librarian)->putJson("/api/librarian/books/{$book->uuid}/dewey", ['deweyNumber' => 'abc'])
             ->assertUnprocessable();
@@ -224,7 +225,7 @@ class DeweyLookupTest extends TestCase
         $this->assertFalse($label['pending']);
         $this->assertSame('005.1', $label['dewey']);
         $this->assertNotEmpty($label['cutter']);
-        $this->assertSame($book->callNumber, $label['dewey'] . ' ' . $label['cutter']);
+        $this->assertSame($book->callNumber, $label['dewey']);
     }
 
     public function test_the_form_can_look_an_isbn_up_without_saving_anything(): void

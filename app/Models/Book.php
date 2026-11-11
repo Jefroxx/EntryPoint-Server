@@ -47,12 +47,13 @@ class Book extends Model
     protected $appends = ['callNumber'];
 
     /**
-     * The call number as it is written on the shelf: the Dewey number and the Cutter, e.g. "005.13 C67". It is not
-     * stored; it is always worked out from `deweyNumber` and `cutter`, so the two can't disagree.
+     * The call number is the Dewey number ("005.13"). The author's Cutter ("C67") is kept apart in `cutter` and is
+     * printed on its own line of the shelf label (see spineLabel), never added on to the call number. It is not
+     * stored; it is always worked out from `deweyNumber`, so the two can't disagree.
      */
     public function getCallNumberAttribute(): ?string
     {
-        $call = trim("{$this->deweyNumber} {$this->cutter}");
+        $call = trim((string) $this->deweyNumber);
 
         return $call === '' ? null : $call;
     }

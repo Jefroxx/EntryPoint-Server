@@ -11,6 +11,7 @@ use App\Models\BookCopy;
 use App\Models\BookStockLog;
 use App\Services\StockLogService;
 use Illuminate\Validation\Rule;
+use App\Services\BookMetadataService;
 use App\Services\CatalogService;
 use App\Services\CirculationService;
 use Illuminate\Http\Request;
@@ -57,6 +58,39 @@ class BookController extends Controller
         $data = $request->validate(['isbn' => ['required', 'string', 'max:20']]);
 
         return response()->json($this->catalog->lookupDeweyByIsbn($data['isbn']));
+    }
+
+    /**
+     * For the Add Book form's scan / "Find details": what the catalogues know about an ISBN (title, authors,
+     * publisher, year, pages, description, cover link and Dewey number). Saves nothing; the librarian reviews it.
+     * "Not found" is an ordinary answer (local and older books often are), so it is a 200, not an error.
+     */
+    public function lookupIsbnDetails(Request $request, BookMetadataService $metadata)
+    {
+        $data = $request->validate(['isbn' => ['required', 'string', 'max:40']]);
+
+        $isbn = BookMetadataService::normalizeIsbn($data['isbn']);
+
+        if ($isbn === null) {
+            return response()->json([
+                'found'   => false,
+                'reason'  => 'invalid',
+                'message' => "That isn't a valid ISBN. Check the digits (a book's ISBN has 10 or 13).",
+            ]);
+        }
+
+        $book = $metadata->lookupByIsbn($isbn);
+
+        if ($book === null) {
+            return response()->json([
+                'found'   => false,
+                'reason'  => 'not_found',
+                'isbn'    => $isbn,
+                'message' => 'No catalogue has this book. Type its details in below.',
+            ]);
+        }
+
+        return response()->json(['found' => true] + $book);
     }
 
     /** Looks the book's ISBN up and, if a Dewey number is found, applies it. */
@@ -113,6 +147,8 @@ class BookController extends Controller
             'accessions'        => ['nullable', 'array', 'max:200'],
             'accessions.*.from' => ['required', 'integer', 'min:1'],
             'accessions.*.to'   => ['required', 'integer', 'gte:accessions.*.from'],
+            // Print the call number and Cutter of books whose Dewey number is only a guess (left off by default).
+            'includeUnconfirmed' => ['nullable', 'boolean'],
         ]);
 
         return response()->json($this->catalog->copyLabels($selection));

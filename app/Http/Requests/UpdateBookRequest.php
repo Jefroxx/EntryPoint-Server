@@ -2,10 +2,32 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\ValidIsbn;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateBookRequest extends FormRequest
 {
+    public function messages(): array
+    {
+        return [
+            'publicationYear.max' => "The publication year can't be in the future. It can be " . now()->year . ' at the latest.',
+            'publicationYear.min' => 'Enter the four-digit year the book was published, like 2024.',
+        ];
+    }
+
+    /**
+     * An ISBN is checked when it is changed. A book catalogued long ago may carry one that would not pass (a test
+     * entry, an unreadable label), and that must not stop its title or shelf from being edited.
+     */
+    private function isbnRules(): array
+    {
+        $rules = ['sometimes', 'required', 'string', 'max:20'];
+        $book = $this->route('book');
+        $unchanged = is_object($book) && $this->input('isbn') === $book->isbn;
+
+        return $unchanged ? $rules : [...$rules, new ValidIsbn];
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -22,8 +44,9 @@ class UpdateBookRequest extends FormRequest
             // Marks the book as a new arrival (or takes the mark off): it then shows on the student Home.
             'isNewArrival'   => ['sometimes', 'boolean'],
 
-            'isbn'             => ['sometimes', 'required', 'string', 'max:20'],
-            'publicationYear'  => ['sometimes', 'required', 'integer', 'min:1000', 'max:9999'],
+            'isbn'             => $this->isbnRules(),
+            // A book can't have been published in the future.
+            'publicationYear'  => ['sometimes', 'required', 'integer', 'min:1000', 'max:' . now()->year],
             'volume'         => ['sometimes', 'required', 'string', 'max:50'],
             'edition'        => ['sometimes', 'required', 'string', 'max:50'],
             'pageCount'      => ['sometimes', 'required', 'integer', 'min:1'],
