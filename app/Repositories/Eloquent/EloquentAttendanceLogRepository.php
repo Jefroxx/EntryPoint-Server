@@ -18,16 +18,17 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
 
     public function listWithFilters(?int $studentID, bool $activeOnly): Collection
     {
-        return AttendanceLog::with('student.user')
+        return AttendanceLog::with(['student.user', 'checkedInByUser.librarian', 'checkedOutByUser.librarian'])
             ->when($studentID, fn ($query) => $query->where('studentID', $studentID))
             ->when($activeOnly, fn ($query) => $query->whereNull('exitTime'))
             ->orderByDesc('entryTime')
-            ->get();
+            ->get()
+            ->each->withStaff();
     }
 
     public function paginate(?string $search, ?string $date, bool $activeOnly, int $perPage): LengthAwarePaginator
     {
-        return AttendanceLog::with('student.user')
+        return AttendanceLog::with(['student.user', 'checkedInByUser.librarian', 'checkedOutByUser.librarian'])
             ->when($search, fn ($query, $term) => $query->where(
                 fn ($q) => $q->whereHas(
                     'student',
@@ -39,7 +40,9 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
             ->when($date, fn ($query, $value) => $query->whereDate('entryTime', $value))
             ->when($activeOnly, fn ($query) => $query->whereNull('exitTime'))
             ->orderByDesc('entryTime')
-            ->paginate($perPage);
+            ->paginate($perPage)
+            // The staff screens see who scanned each visit in and out.
+            ->through(fn (AttendanceLog $log) => $log->withStaff());
     }
 
     public function recentForStudent(int $studentID, int $limit): Collection

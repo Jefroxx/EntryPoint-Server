@@ -21,6 +21,7 @@ class AuthService
         private UserRepositoryInterface $users,
         private StudentRepositoryInterface $students,
         private EmailVerificationService $verification,
+        private LoginThrottle $throttle,
     ) {
     }
 
@@ -126,13 +127,21 @@ class AuthService
 
     private function authenticate(string $email, string $password): User
     {
+        // Repeated failures lock the sign-in for a few minutes (see LoginThrottle); checked first, so a locked-out
+        // guesser doesn't even get an answer about the password.
+        $this->throttle->ensureNotLocked($email);
+
         $user = $this->users->findByLogin($email);
 
         if (! $user || ! Hash::check($password, $user->password)) {
+            $this->throttle->fail($email);
+
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
+
+        $this->throttle->clear($email);
 
         if ($user->isDisabled()) {
             throw ValidationException::withMessages([
@@ -158,7 +167,16 @@ class AuthService
             $user->tokens()->delete();
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // How long a sign-in lasts before the password is needed again. Staff accounts can change records, fines and
+        // other people's accounts, so theirs are shorter than a student's (config sanctum.expiration, 14 days); an
+        // administrator's is shorter still. A token that is stolen or forgotten on a shared desk stops working by itself.
+        $minutes = match (true) {
+            $relation === 'student'                                  => null,
+            $user->librarian?->role === 'admin'                      => 60 * 12,
+            default                                                  => 60 * 24 * 3,
+        };
+
+        $token = $user->createToken('auth_token', ['*'], $minutes ? now()->addMinutes($minutes) : null)->plainTextToken;
 
         return [
             'user'  => $user->load($relation),

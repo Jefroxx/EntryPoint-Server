@@ -18,6 +18,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Behind the Nuxt proxy / Cloudflare tunnel, so trust X-Forwarded-* for https URLs.
         $middleware->trustProxies(at: '*');
 
+        // Safety headers (no framing, no sniffing, no caching) on every API answer. Global, not in the api group: the
+        // sign-in check is hoisted above group middleware, so a 401 would otherwise skip the headers.
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
         $middleware->alias([
             'librarian'        => \App\Http\Middleware\EnsureUserIsLibrarian::class,
             'student'          => \App\Http\Middleware\EnsureUserIsStudent::class,

@@ -2,10 +2,19 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\ValidIsbn;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreBookRequest extends FormRequest
 {
+    public function messages(): array
+    {
+        return [
+            'publicationYear.max' => "The publication year can't be in the future. It can be " . now()->year . ' at the latest.',
+            'publicationYear.min' => 'Enter the four-digit year the book was published, like 2024.',
+        ];
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -24,8 +33,9 @@ class StoreBookRequest extends FormRequest
 
             // A new book's record is complete: only the remarks may be left out.
             // (A book with no edition or volume says "N/A". A donated book costs 0.)
-            'isbn'             => ['required', 'string', 'max:20'],
-            'publicationYear'  => ['required', 'integer', 'min:1000', 'max:9999'],
+            'isbn'             => ['required', 'string', 'max:20', new ValidIsbn],
+            // A book can't have been published in the future.
+            'publicationYear'  => ['required', 'integer', 'min:1000', 'max:' . now()->year],
             'volume'         => ['required', 'string', 'max:50'],
             'edition'        => ['required', 'string', 'max:50'],
             'pageCount'      => ['required', 'integer', 'min:1'],

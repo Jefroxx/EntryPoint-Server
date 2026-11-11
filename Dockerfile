@@ -18,6 +18,10 @@ RUN apt-get update \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 
+# Speed: keep compiled PHP in memory (the code never changes inside a running container, so files are not re-checked),
+# and compress JSON answers (Apache only compresses HTML and text by default; the book lists are large JSON).
+RUN { echo 'opcache.enable=1'; echo 'opcache.memory_consumption=128'; echo 'opcache.interned_strings_buffer=16';       echo 'opcache.max_accelerated_files=10000'; echo 'opcache.validate_timestamps=0'; } > /usr/local/etc/php/conf.d/opcache-prod.ini     && a2enmod deflate     && echo 'AddOutputFilterByType DEFLATE application/json' > /etc/apache2/conf-available/deflate-json.conf     && a2enconf deflate-json
+
 # Serve the "public" folder, and let .htaccess rewrite every address to index.php.
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf \

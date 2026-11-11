@@ -15,7 +15,8 @@ class ChangePasswordRequest extends FormRequest
     {
         return [
             'currentPassword' => ['required', 'string'],
-            'newPassword'     => ['required', 'string', 'min:8', 'confirmed'],
+            // Staff accounts can change records and other people's accounts, so theirs must be longer.
+            'newPassword'     => ['required', 'string', 'min:'.($this->user()?->userType === 'librarian' ? 10 : 8), 'max:255', 'confirmed'],
         ];
     }
 }

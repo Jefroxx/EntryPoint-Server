@@ -196,17 +196,33 @@ class CatalogService
         $copies = $this->bookCopies->forLabels($selection, self::MAX_LABELS + 1);
         $total = $copies->count();
 
-        $labels = $copies->take(self::MAX_LABELS)->map(fn (BookCopy $copy) => [
-            'uuid'            => $copy->uuid,
-            'accessionNumber' => $copy->accessionNumber,
-            'barcodeValue'    => $copy->barcodeValue,
-            'title'           => $copy->book->title,
-            'authors'         => $copy->book->authors->pluck('name')->values(),
-            // Only a checked number goes on a label; a guess from the category would put the book in the wrong place.
-            'callNumber'      => $copy->book->publicCallNumber(),
-            'area'            => Str::headline((string) ($copy->book->areaOfLibrary ?: 'circulation')),
-            'year'            => $copy->book->publicationYear,
-        ])->values()->all();
+        // Off unless the librarian asks for it in the print window: a number that is only a guess from the category is
+        // left off the label (so nobody shelves by it), and printing it is a choice, made knowing it may be wrong.
+        $includeUnconfirmed = (bool) ($selection['includeUnconfirmed'] ?? false);
+
+        $labels = $copies->take(self::MAX_LABELS)->map(function (BookCopy $copy) use ($includeUnconfirmed) {
+            // The label's lines, top to bottom: area of the library, call number (the Dewey number), the author's
+            // Cutter, year of publication. While the Dewey number is only a guess, the call number and Cutter lines
+            // stay empty (`spineLabel` does that), unless the librarian chose to print the guess.
+            $spine = $copy->book->spineLabel();
+            $printGuess = $spine['pending'] && $includeUnconfirmed;
+
+            return [
+                'uuid'            => $copy->uuid,
+                'accessionNumber' => $copy->accessionNumber,
+                'barcodeValue'    => $copy->barcodeValue,
+                'title'           => $copy->book->title,
+                'authors'         => $copy->book->authors->pluck('name')->values(),
+                // The two parts of the shelf number, apart (the label prints them on their own lines) ...
+                'dewey'           => $printGuess ? ($copy->book->deweyNumber ?: null) : $spine['dewey'],
+                'cutter'          => $printGuess ? ($copy->book->cutter ?: null) : $spine['cutter'],
+                // ... and joined. `unconfirmed` says the number is a guess (or was left off for that reason), whichever way it prints.
+                'callNumber'      => $printGuess ? $copy->book->callNumber : $copy->book->publicCallNumber(),
+                'unconfirmed'     => $spine['pending'],
+                'area'            => Str::headline((string) ($copy->book->areaOfLibrary ?: 'circulation')),
+                'year'            => $copy->book->publicationYear,
+            ];
+        })->values()->all();
 
         return ['labels' => $labels, 'total' => $total, 'truncated' => $total > self::MAX_LABELS];
     }

@@ -27,6 +27,7 @@ return [
         'announcements' => 'Announcements',
         'privacy'     => 'Data privacy',
         'roles'       => 'Roles and permissions',
+        'security'    => 'Security',
     ],
 
     'actions' => [

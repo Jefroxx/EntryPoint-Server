@@ -109,7 +109,8 @@ class DatabaseGuardsTest extends TestCase
     {
         BookSubject::factory()->create();
         $first = Book::factory()->create(['deweyNumber' => '005.13', 'cutter' => 'C67']);
-        $this->assertSame('005.13 C67', $first->callNumber);
+        $this->assertSame('005.13', $first->callNumber);
+        $this->assertSame('C67', $first->cutter);
 
         $first->delete(); // soft-deleted: its number stays reserved
         $this->expectException(UniqueConstraintViolationException::class);

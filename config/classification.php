@@ -25,11 +25,25 @@ return [
     'open_library' => [
         'enabled'    => env('OPEN_LIBRARY_LOOKUP_ENABLED', true),
         'base_url'   => env('OPEN_LIBRARY_BASE_URL', 'https://openlibrary.org'),
+        // Where its cover pictures are served from (a cover is found by ISBN there, whether or not a record is).
+        'covers_url' => env('OPEN_LIBRARY_COVERS_URL', 'https://covers.openlibrary.org'),
         // On a cold PHP/Windows TLS handshake, 2-3s was cutting it close and
         // intermittently timed out in testing — 6/4 gives it room without
         // letting a genuinely dead host hang the request for long.
         'timeout'    => (int) env('OPEN_LIBRARY_TIMEOUT', 6),
         'connect_timeout' => (int) env('OPEN_LIBRARY_CONNECT_TIMEOUT', 4),
+    ],
+
+    /*
+    | Google Books: the third source for filling in a book from its ISBN (title, authors, publisher, pages,
+    | description, cover). It works without a key at a modest daily quota; a key (GOOGLE_BOOKS_API_KEY) lifts it.
+    */
+    'google_books' => [
+        'enabled'         => env('GOOGLE_BOOKS_LOOKUP_ENABLED', true),
+        'base_url'        => env('GOOGLE_BOOKS_BASE_URL', 'https://www.googleapis.com/books/v1'),
+        'key'             => env('GOOGLE_BOOKS_API_KEY'),
+        'timeout'         => (int) env('GOOGLE_BOOKS_TIMEOUT', 6),
+        'connect_timeout' => (int) env('GOOGLE_BOOKS_CONNECT_TIMEOUT', 4),
     ],
 
     /*
