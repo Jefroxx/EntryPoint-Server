@@ -103,7 +103,7 @@ class AttendanceService
             }
 
             if ($open) {
-                $log = $this->attendanceLogs->update($open, ['exitTime' => now()]);
+                $log = $this->attendanceLogs->update($open, ['exitTime' => now(), 'checkedOutBy' => auth()->id()]);
 
                 return [
                     'action'          => 'check_out',
@@ -120,6 +120,8 @@ class AttendanceService
                 'uuid'      => Str::uuid(),
                 'studentID' => $student->studentID,
                 'entryTime' => now(),
+                // The staff account that scanned the card: so a shared desk can tell who checked the student in.
+                'checkedInBy' => auth()->id(),
             ]);
 
             if (! $alreadyVisitedToday) {
@@ -136,7 +138,8 @@ class AttendanceService
         });
 
         $isCheckIn = $result['action'] === 'check_in';
-        $log = $result['log'];
+        $log = $result['log']->withStaff();
+        $result['log'] = $log;
 
         // Leaving the library also ends a computer or room session the student still has open.
         $result['endedSession'] = null;
@@ -177,7 +180,8 @@ class AttendanceService
             'visitorName'    => $name,
             'visitorPurpose' => $purpose,
             'entryTime'      => now(),
-        ]);
+            'checkedInBy'    => auth()->id(),
+        ])->withStaff();
     }
 
     /** Closes a visitor's open visit by hand (they have no card to scan on the way out). */
@@ -191,7 +195,7 @@ class AttendanceService
             throw ValidationException::withMessages(['log' => ['This visitor is already checked out.']]);
         }
 
-        return $this->attendanceLogs->update($log, ['exitTime' => now()]);
+        return $this->attendanceLogs->update($log, ['exitTime' => now(), 'checkedOutBy' => auth()->id()])->withStaff();
     }
 
     /**
@@ -230,7 +234,7 @@ class AttendanceService
             $today = $log->entryTime->isToday();
 
             if ($today) {
-                $this->attendanceLogs->update($log, ['exitTime' => now()]);
+                $this->attendanceLogs->update($log, ['exitTime' => now(), 'checkedOutBy' => auth()->id()]);
             } else {
                 $this->closeStale($log);
             }
