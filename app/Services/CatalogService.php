@@ -552,7 +552,8 @@ class CatalogService
         $result = $this->classification->lookupByIsbn($isbn);
 
         if (! $result || empty($result['deweyClass'])) {
-            return ['found' => false];
+            // 'unreachable' = a catalogue did not answer, so "no number" may only mean "couldn't ask".
+            return ['found' => false, 'unreachable' => in_array('unreachable', $this->classification->lastStatus(), true)];
         }
 
         return [

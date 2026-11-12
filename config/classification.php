@@ -16,8 +16,13 @@ return [
 
     'library_of_congress' => [
         'enabled'         => env('LOC_LOOKUP_ENABLED', true),
-        // The catalogue's free SRU search service (no key). It answers in MARC XML.
-        'base_url'        => env('LOC_SRU_URL', 'https://lx2.loc.gov/sru/lcdb'),
+        // The catalogue's free SRU search service (no key). It answers in MARC XML. The classic search port (210) is
+        // tried first: on 2026-11-12 the https address below did not accept connections at all (the server itself was
+        // up, and port 210 answered in half a second). It is plain http, which is fine for a public catalogue search
+        // that carries only an ISBN.
+        'base_url'        => env('LOC_SRU_URL', 'http://lx2.loc.gov:210/LCDB'),
+        // Asked only when the first address doesn't answer, so one dead door doesn't take the Dewey lookup down.
+        'fallback_url'    => env('LOC_SRU_FALLBACK_URL', 'https://lx2.loc.gov/sru/lcdb'),
         'timeout'         => (int) env('LOC_TIMEOUT', 8),
         'connect_timeout' => (int) env('LOC_CONNECT_TIMEOUT', 4),
     ],
