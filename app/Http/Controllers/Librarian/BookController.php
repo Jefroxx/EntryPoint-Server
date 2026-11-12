@@ -79,18 +79,43 @@ class BookController extends Controller
             ]);
         }
 
-        $book = $metadata->lookupByIsbn($isbn);
+        $result = $metadata->lookup($isbn);
+        $book = $result['book'];
+        $status = $result['sourceStatus'];
 
         if ($book === null) {
+            $silent = array_keys(array_filter($status, fn ($s) => $s === 'unreachable'));
+            $labels = ['library_of_congress' => 'the Library of Congress', 'open_library' => 'Open Library', 'google_books' => 'Google Books'];
+            $names = implode(' and ', array_map(fn ($key) => $labels[$key] ?? $key, $silent));
+
             return response()->json([
-                'found'   => false,
-                'reason'  => 'not_found',
-                'isbn'    => $isbn,
-                'message' => 'No catalogue has this book. Type its details in below.',
+                'found'        => false,
+                'reason'       => 'not_found',
+                'isbn'         => $isbn,
+                'sourceStatus' => $status,
+                // Saying which catalogue stayed silent matters: "not found" and "didn't answer" call for different next steps.
+                'message'      => $silent
+                    ? "No catalogue that answered has this book, and {$names} didn't answer, so it may be there. Try again in a moment, or type the details in below."
+                    : 'No catalogue has this book. Type its details in below.',
             ]);
         }
 
-        return response()->json(['found' => true] + $book);
+        return response()->json(['found' => true, 'sourceStatus' => $status, 'deweyStatus' => $result['deweyStatus']] + $book);
+    }
+
+    /**
+     * Asks ONE catalogue about an ISBN and says how it went (found / none / unreachable / off), so the Add Book screen
+     * can show each catalogue's progress as it finishes. Saves nothing; the answer is cached for the lookup that follows.
+     */
+    public function lookupIsbnSource(Request $request, BookMetadataService $metadata)
+    {
+        $data = $request->validate([
+            'isbn'   => ['required', 'string', 'max:40'],
+            'source' => ['required', 'string', 'in:' . implode(',', BookMetadataService::SOURCES)],
+            'retry'  => ['nullable', 'boolean'],
+        ]);
+
+        return response()->json($metadata->lookupSource($data['isbn'], $data['source'], (bool) ($data['retry'] ?? false)));
     }
 
     /** Looks the book's ISBN up and, if a Dewey number is found, applies it. */

@@ -29,10 +29,27 @@ class LibraryClassificationService
     private const DEWEY_PATTERN = '/^\d{3}(\.\d{1,10})?$/';
 
     /**
+     * What happened to each catalogue on the last {@see lookupByIsbn()} call: 'found', 'none' (answered, but has no
+     * record) or 'unreachable' (timed out or errored). Empty when the answer came from the cache. A caller that has to
+     * tell "nobody has it" from "a catalogue didn't answer" reads this straight after the lookup.
+     *
+     * @var array<string, string>
+     */
+    private array $status = [];
+
+    /** @return array<string, string> */
+    public function lastStatus(): array
+    {
+        return $this->status;
+    }
+
+    /**
+     * @param bool $skipLibraryOfCongress the caller just found that server unreachable: don't wait for it a second time
      * @return array{deweyClass: ?string, cutterCandidates: string[], publishYear: ?int, source: ?string}|null
      */
-    public function lookupByIsbn(string $isbn): ?array
+    public function lookupByIsbn(string $isbn, bool $skipLibraryOfCongress = false): ?array
     {
+        $this->status = [];
         $isbn = preg_replace('/[^0-9Xx]/', '', $isbn) ?? '';
 
         if ($isbn === '') {
@@ -42,10 +59,20 @@ class LibraryClassificationService
         $key = 'classification:isbn:' . strtoupper($isbn);
 
         if (Cache::has($key)) {
+            // A miss that was only remembered because a catalogue didn't answer is still "couldn't ask", not "nobody has it".
+            if (Cache::has($key . ':down')) {
+                $this->status[self::SOURCE_LOC] = 'unreachable';
+            }
+
             return Cache::get($key) ?: null;
         }
 
-        $result = $this->fromLibraryOfCongress($isbn);
+        if ($skipLibraryOfCongress) {
+            $this->status[self::SOURCE_LOC] = 'unreachable';
+            $result = null;
+        } else {
+            $result = $this->fromLibraryOfCongress($isbn);
+        }
 
         // Open Library fills in what the Library of Congress lacks (a number, or the Cutter).
         if (! $result || ! $result['deweyClass']) {
@@ -55,8 +82,18 @@ class LibraryClassificationService
             }
         }
 
-        // A hit is kept for 90 days; a miss only for a day, since catalogues add records over time.
-        Cache::put($key, $result ?? false, $result ? now()->addDays(90) : now()->addDay());
+        // A hit is kept for 90 days; a miss only for a day, since catalogues add records over time. A miss where a
+        // catalogue didn't answer proves nothing, so it is only remembered for a few minutes (enough not to hammer a
+        // server that is down, short enough that the next try asks again).
+        $failed = in_array('unreachable', $this->status, true);
+        $found = $result && ! empty($result['deweyClass']);
+        Cache::put($key, $result ?? false, $found ? now()->addDays(90) : ($failed ? now()->addMinutes(5) : now()->addDay()));
+
+        if ($failed && ! $found) {
+            Cache::put($key . ':down', true, now()->addMinutes(5));
+        } else {
+            Cache::forget($key . ':down');
+        }
 
         return $result;
     }
@@ -119,23 +156,38 @@ class LibraryClassificationService
             return null;
         }
 
-        try {
-            $response = Http::timeout(config('classification.library_of_congress.timeout', 8))
-                ->connectTimeout(config('classification.library_of_congress.connect_timeout', 4))
-                ->get(config('classification.library_of_congress.base_url'), [
-                    'version'        => '1.1',
-                    'operation'      => 'searchRetrieve',
-                    'query'          => "bath.isbn={$isbn}",
-                    'maximumRecords' => 1,
-                    'recordSchema'   => 'marcxml',
-                ]);
-        } catch (Throwable $e) {
-            Log::warning("Library of Congress lookup failed for ISBN {$isbn}: {$e->getMessage()}");
+        // The first address that answers wins; the next is only asked when the one before it didn't (see config).
+        $response = null;
+        foreach (array_unique(array_filter([
+            config('classification.library_of_congress.base_url'),
+            config('classification.library_of_congress.fallback_url'),
+        ])) as $url) {
+            try {
+                $candidate = Http::timeout(config('classification.library_of_congress.timeout', 8))
+                    ->connectTimeout(config('classification.library_of_congress.connect_timeout', 4))
+                    ->get($url, [
+                        'version'        => '1.1',
+                        'operation'      => 'searchRetrieve',
+                        'query'          => "bath.isbn={$isbn}",
+                        'maximumRecords' => 1,
+                        'recordSchema'   => 'marcxml',
+                    ]);
+            } catch (Throwable $e) {
+                Log::warning("Library of Congress lookup at {$url} failed for ISBN {$isbn}: {$e->getMessage()}");
 
-            return null;
+                continue;
+            }
+
+            if ($candidate->ok()) {
+                $response = $candidate;
+
+                break;
+            }
         }
 
-        if (! $response->ok()) {
+        if (! $response) {
+            $this->status[self::SOURCE_LOC] = 'unreachable';
+
             return null;
         }
 
@@ -143,6 +195,8 @@ class LibraryClassificationService
 
         // (A parsed document with only namespaced children is "falsy" in PHP, so compare with false.)
         if ($xml === false) {
+            $this->status[self::SOURCE_LOC] = 'unreachable';
+
             return null;
         }
 
@@ -153,8 +207,12 @@ class LibraryClassificationService
         $year = $xml->xpath('//m:controlfield[@tag="008"]');
 
         if (! $dewey && ! $lcc) {
+            $this->status[self::SOURCE_LOC] = 'none';
+
             return null;
         }
+
+        $this->status[self::SOURCE_LOC] = 'found';
 
         $lccStrings = [];
         foreach ($lcc ?: [] as $field) {
@@ -194,19 +252,26 @@ class LibraryClassificationService
                 ]);
         } catch (Throwable $e) {
             Log::warning("Open Library lookup failed for ISBN {$isbn}: {$e->getMessage()}");
+            $this->status[self::SOURCE_OPEN_LIBRARY] = 'unreachable';
 
             return null;
         }
 
         if (! $response->ok()) {
+            $this->status[self::SOURCE_OPEN_LIBRARY] = 'unreachable';
+
             return null;
         }
 
         $record = $response->json("ISBN:{$isbn}");
 
         if (! $record) {
+            $this->status[self::SOURCE_OPEN_LIBRARY] = 'none';
+
             return null;
         }
+
+        $this->status[self::SOURCE_OPEN_LIBRARY] = 'found';
 
         $classifications = $record['classifications'] ?? [];
 
