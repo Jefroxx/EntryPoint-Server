@@ -69,6 +69,35 @@ class BookMetadataService
         return null;
     }
 
+    /**
+     * Every form one book's ISBN can be stored in, hyphens and spaces left out: the ISBN-13, and the ISBN-10 it was
+     * made from (978-prefixed ones only). Empty when the ISBN isn't valid.
+     *
+     * @return string[]
+     */
+    public static function isbnVariants(?string $raw): array
+    {
+        $isbn13 = self::normalizeIsbn($raw);
+
+        if ($isbn13 === null) {
+            return [];
+        }
+
+        $variants = [$isbn13];
+
+        if (str_starts_with($isbn13, '978')) {
+            $core = substr($isbn13, 3, 9);
+            $sum = 0;
+            for ($i = 0; $i < 9; $i++) {
+                $sum += (int) $core[$i] * (10 - $i);
+            }
+            $check = (11 - $sum % 11) % 11;
+            $variants[] = $core . ($check === 10 ? 'X' : (string) $check);
+        }
+
+        return $variants;
+    }
+
     private static function isbn13CheckDigit(string $first12): int
     {
         $sum = 0;

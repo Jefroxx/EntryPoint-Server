@@ -27,6 +27,19 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
             ->exists();
     }
 
+    public function findByIsbn(array $isbns): ?Book
+    {
+        if ($isbns === []) {
+            return null;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($isbns), '?'));
+
+        return Book::whereRaw("UPPER(REPLACE(REPLACE(isbn, '-', ''), ' ', '')) in ({$placeholders})", array_map('strtoupper', $isbns))
+            ->orderBy('bookID')
+            ->first();
+    }
+
     public function totalCount(): int
     {
         return Book::count();

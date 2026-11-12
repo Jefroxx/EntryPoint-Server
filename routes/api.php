@@ -221,6 +221,7 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         // Before /books/{book}, so "dewey-review" isn't taken for a book.
         Route::get('/books/dewey-review', [BookController::class, 'deweyReview']);
         Route::post('/dewey/lookup', [BookController::class, 'lookupIsbnDewey'])->middleware('throttle:60,1');
+        Route::post('/isbn/existing', [BookController::class, 'findByIsbn']);
         Route::post('/isbn/lookup', [BookController::class, 'lookupIsbnDetails'])->middleware('throttle:60,1');
         Route::post('/isbn/lookup/source', [BookController::class, 'lookupIsbnSource'])->middleware('throttle:120,1');
         Route::post('/books/{book}/dewey/lookup', [BookController::class, 'lookupDewey'])->middleware('throttle:60,1');
