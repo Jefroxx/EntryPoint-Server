@@ -397,8 +397,39 @@ class CatalogService
         });
     }
 
+    /**
+     * The book already catalogued under this ISBN (in any usual form), shaped for the Add Copies window; null when
+     * the ISBN is new to the library. A scan of a book the library owns means "another copy", not "another book".
+     *
+     * @return array{bookUuid: string, title: string, authors: string[], coverImageURL: ?string, callNumber: ?string, copies: int}|null
+     */
+    public function findBookByIsbn(string $isbn): ?array
+    {
+        $book = $this->books->findByIsbn(BookMetadataService::isbnVariants($isbn));
+
+        if (! $book) {
+            return null;
+        }
+
+        return [
+            'bookUuid'      => $book->uuid,
+            'title'         => $book->title,
+            'authors'       => $book->authors()->pluck('name')->values()->all(),
+            'coverImageURL' => $book->coverImageURL,
+            'callNumber'    => $book->callNumber,
+            'copies'        => $book->copies()->where('status', '!=', 'retired')->count(),
+        ];
+    }
+
     public function createBook(array $validated): Book
     {
+        // The same ISBN is the same book: another physical one is a copy of it (see addCopies), never a second record.
+        if (! empty($validated['isbn']) && $existing = $this->findBookByIsbn($validated['isbn'])) {
+            throw ValidationException::withMessages([
+                'isbn' => ["This ISBN is already in the catalog as \"{$existing['title']}\". Add a copy of that book instead of adding it again."],
+            ]);
+        }
+
         // Best-effort live lookup, done before the DB transaction opens (a
         // network call has no business holding DB locks). Returns null on
         // any miss/failure/timeout — never blocks the book from being added.

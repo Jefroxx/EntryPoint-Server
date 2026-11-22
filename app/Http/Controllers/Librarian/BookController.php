@@ -61,6 +61,17 @@ class BookController extends Controller
     }
 
     /**
+     * Is this ISBN already a book in the catalog? Asked first on a scan, so a book the library owns becomes a new
+     * copy of it instead of a second record. Quick (no catalogue lookups); saves nothing.
+     */
+    public function findByIsbn(Request $request)
+    {
+        $data = $request->validate(['isbn' => ['required', 'string', 'max:40']]);
+
+        return response()->json(['exists' => ($book = $this->catalog->findBookByIsbn($data['isbn'])) !== null, 'book' => $book]);
+    }
+
+    /**
      * For the Add Book form's scan / "Find details": what the catalogues know about an ISBN (title, authors,
      * publisher, year, pages, description, cover link and Dewey number). Saves nothing; the librarian reviews it.
      * "Not found" is an ordinary answer (local and older books often are), so it is a 200, not an error.

@@ -11,6 +11,14 @@ interface BookRepositoryInterface extends RepositoryInterface
 
     public function callNumberExists(string $dewey, string $cutter, ?int $exceptBookID = null): bool;
 
+    /**
+     * The catalogued book holding any of these ISBNs (compared with hyphens and spaces left out, so "978-0-14-043205-3"
+     * and "9780140432053" are the same book). A removed book doesn't count.
+     *
+     * @param string[] $isbns
+     */
+    public function findByIsbn(array $isbns): ?Book;
+
     public function totalCount(): int;
 
     /**
