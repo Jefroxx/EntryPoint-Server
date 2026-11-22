@@ -47,6 +47,12 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/librarian/login', [AuthController::class, 'librarianLogin']);
 
+// "Forgot password?": ask for a link (the answer is the same for any address), then use it. Slowed down per address
+// like the email resend below, since each ask sends an email.
+Route::post('/password/forgot', [\App\Http\Controllers\PasswordResetController::class, 'forgot'])->middleware('throttle:5,1');
+Route::post('/password/check', [\App\Http\Controllers\PasswordResetController::class, 'check'])->middleware('throttle:30,1');
+Route::post('/password/reset',[\App\Http\Controllers\PasswordResetController::class, 'reset'])->middleware('throttle:10,1');
+
 // Email confirmation: the link a registering student gets, and "send a new link" from sign-in.
 Route::get('/email/verify/{uuid}/{hash}', [EmailVerificationController::class, 'verify'])
     ->middleware('throttle:12,1')->name('verification.verify');

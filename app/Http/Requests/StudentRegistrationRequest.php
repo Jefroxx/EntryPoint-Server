@@ -22,7 +22,7 @@ class StudentRegistrationRequest extends FormRequest
 
         return [
             'firstName'       => ['required', 'string', 'max:255'],
-            'middleInitial'   => ['nullable', 'string', 'max:5'],
+            'middleInitial'   => ['nullable', 'string', 'max:1'],
             'lastName'        => ['required', 'string', 'max:255'],
             'email'           => $email,
             'password'        => ['required', 'string', 'min:8', 'confirmed'],
