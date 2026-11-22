@@ -263,12 +263,15 @@ class AdminAccountService
 
     // ---------------------------------------------------------------- faculty and staff members
 
-    public function members(?string $search, ?string $type, int $perPage = 15): LengthAwarePaginator
+    /** $status: "active" or "disabled" narrows by whether the account can sign in; anything else means all. */
+    public function members(?string $search, ?string $type, int $perPage = 15, ?string $status = null): LengthAwarePaginator
     {
         return Student::with('user')
             ->join('users', 'users.userID', '=', 'students.studentID')
             ->where('students.memberType', '!=', 'student')
             ->when($type && $type !== 'all', fn ($q) => $q->where('students.memberType', $type))
+            ->when($status === 'active', fn ($q) => $q->whereNull('users.disabledAt'))
+            ->when($status === 'disabled', fn ($q) => $q->whereNotNull('users.disabledAt'))
             ->when($search, fn ($q) => $q->where(fn ($w) => $w
                 ->where('users.firstName', 'like', "%{$search}%")
                 ->orWhere('users.lastName', 'like', "%{$search}%")

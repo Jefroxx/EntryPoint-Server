@@ -198,7 +198,9 @@ class ReservationService
 
             $this->notifications->send(
                 $studentID,
-                "Reservation for \"{$reservation->book->title}\" submitted - you're #{$queuePosition} in line.",
+                // First in line means no one else is ahead, so there is nothing to wait behind: a librarian just has to accept it.
+                "Reservation for \"{$reservation->book->title}\" submitted - "
+                    . ($queuePosition <= 1 ? 'a librarian will review it soon.' : "you're #{$queuePosition} in line."),
                 'reservation_submitted'
             );
         }
@@ -263,7 +265,16 @@ class ReservationService
             ]);
         }
 
+        $title = $reservation->book->title;
+
         $this->reservations->delete($reservation);
+
+        // The earlier "submitted" notice stays in the list, so say plainly that it no longer stands.
+        $this->notifications->send(
+            $studentID,
+            "You cancelled your reservation for \"{$title}\". Reserve it again anytime, but you'd join the back of the queue.",
+            'reservation_cancelled'
+        );
     }
 
     /**

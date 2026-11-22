@@ -251,6 +251,23 @@ class AdminAccountsTest extends TestCase
         $this->assertSame([(string) $faculty->uuid], array_column($found, 'uuid'));
     }
 
+    public function test_the_members_list_can_be_filtered_by_account_status(): void
+    {
+        $active = Student::factory()->faculty()->approved()->create();
+        $disabled = Student::factory()->staff()->approved()->create();
+        $disabled->user->update(['disabledAt' => now()]);
+
+        $onlyActive = $this->actingAs($this->admin)->getJson('/api/admin/members?status=active')->assertOk()->json('data');
+        $this->assertSame([(string) $active->uuid], array_column($onlyActive, 'uuid'));
+
+        $onlyDisabled = $this->actingAs($this->admin)->getJson('/api/admin/members?status=disabled')->json('data');
+        $this->assertSame([(string) $disabled->uuid], array_column($onlyDisabled, 'uuid'));
+
+        // "all" (or nothing) leaves it alone, and it combines with the type.
+        $this->assertCount(2, $this->actingAs($this->admin)->getJson('/api/admin/members?status=all')->json('data'));
+        $this->assertSame([], $this->actingAs($this->admin)->getJson('/api/admin/members?type=faculty&status=disabled')->json('data'));
+    }
+
     public function test_a_member_can_be_edited_disabled_and_given_a_new_password_but_a_student_cannot_be_edited_here(): void
     {
         $faculty = Student::factory()->faculty()->approved()->create();

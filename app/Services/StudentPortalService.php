@@ -77,7 +77,7 @@ class StudentPortalService
                 'registrationStatus' => $student->registrationStatus,
             ],
             'points'      => (int) $student->knowledgeScore,
-            'visitStreak' => (int) $student->visitStreak,
+            'visitStreak' => $student->currentVisitStreak(),
             'stats'       => [
                 'activeLoans'        => $activeLoans,
                 'overdueLoans'       => $this->loans->overdueCountForStudent($student->studentID),

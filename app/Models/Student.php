@@ -42,6 +42,21 @@ class Student extends Model
         return $this->memberType === 'student';
     }
 
+    /**
+     * The visit streak as of today. The stored number is only moved at a check-in, so left alone it would keep saying
+     * "8 days in a row" for someone who last came a month ago: it only counts while the last visit was today or yesterday.
+     */
+    public function currentVisitStreak(): int
+    {
+        if ((int) $this->visitStreak <= 0) {
+            return 0;
+        }
+
+        $last = $this->attendanceLogs()->max('entryTime');
+
+        return $last && \Illuminate\Support\Carbon::parse($last)->startOfDay()->gte(today()->subDay()) ? (int) $this->visitStreak : 0;
+    }
+
     public function scopeStudentsOnly($query)
     {
         return $query->where('students.memberType', 'student');
