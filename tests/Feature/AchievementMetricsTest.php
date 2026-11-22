@@ -148,9 +148,19 @@ class AchievementMetricsTest extends TestCase
     public function test_the_points_and_streak_metrics_still_read_the_student_columns(): void
     {
         $this->student->update(['knowledgeScore' => 120, 'visitStreak' => 6]);
+        // The streak counts while the last visit was today or yesterday.
+        AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'entryTime' => now()->subDay(), 'exitTime' => now()->subDay()->addHour()]);
 
         $this->assertSame(120, $this->value('knowledgeScore'));
         $this->assertSame(6, $this->value('visitStreak'));
+    }
+
+    public function test_a_streak_that_is_no_longer_running_reads_as_zero(): void
+    {
+        $this->student->update(['visitStreak' => 6]);
+        AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'entryTime' => now()->subDays(30), 'exitTime' => now()->subDays(30)->addHour()]);
+
+        $this->assertSame(0, $this->value('visitStreak'));
     }
 
     // ---- the achievements themselves ----

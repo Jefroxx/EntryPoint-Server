@@ -19,6 +19,30 @@ class HallOfFameTest extends TestCase
         AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $student->studentID, 'entryTime' => $entry, 'exitTime' => $exit]);
     }
 
+    /** A student with a stored streak and a visit yesterday: a streak only counts while the last visit was today or yesterday. */
+    private function withStreak(array $attributes): Student
+    {
+        $student = Student::factory()->create($attributes);
+        $this->visit($student, now()->subDay()->format('Y-m-d 09:00'), now()->subDay()->format('Y-m-d 10:00'));
+
+        return $student;
+    }
+
+    public function test_a_streak_that_is_no_longer_running_does_not_count(): void
+    {
+        $stale = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 8]);
+        $this->visit($stale, now()->subDays(40)->format('Y-m-d 09:00'), now()->subDays(40)->format('Y-m-d 10:00'));
+        $viewer = $this->withStreak(['registrationStatus' => 'approved', 'visitStreak' => 2]);
+
+        $leaders = $this->category($this->actingAs($viewer->user)->getJson('/api/student/hall-of-fame')->assertOk()->json(), 'longest-streak')['leaders'];
+
+        // The 8-day streak ended weeks ago, so only the running 2-day one is ranked.
+        $this->assertCount(1, $leaders);
+        $this->assertEquals(2, $leaders[0]['value']);
+        $this->assertSame(0, $stale->fresh()->currentVisitStreak());
+        $this->assertSame(2, $viewer->fresh()->currentVisitStreak());
+    }
+
     private function category(array $board, string $key): array
     {
         return collect($board['categories'])->firstWhere('key', $key);
@@ -56,7 +80,7 @@ class HallOfFameTest extends TestCase
         $this->travelTo(now()->startOfMonth()->addDays(10)->setTime(12, 0));
 
         $pending = Student::factory()->create(['registrationStatus' => 'pending', 'visitStreak' => 30]);
-        $viewer = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 2]);
+        $viewer = $this->withStreak(['registrationStatus' => 'approved', 'visitStreak' => 2]);
 
         $board = $this->actingAs($viewer->user)->getJson('/api/student/hall-of-fame')->assertOk()->json();
         $leaders = $this->category($board, 'longest-streak')['leaders'];
@@ -68,9 +92,9 @@ class HallOfFameTest extends TestCase
 
     public function test_ties_share_a_place(): void
     {
-        $a = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 5]);
-        Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 5]);
-        Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 3]);
+        $a = $this->withStreak(['registrationStatus' => 'approved', 'visitStreak' => 5]);
+        $this->withStreak(['registrationStatus' => 'approved', 'visitStreak' => 5]);
+        $this->withStreak(['registrationStatus' => 'approved', 'visitStreak' => 3]);
 
         $board = $this->actingAs($a->user)->getJson('/api/student/hall-of-fame')->assertOk()->json();
 
@@ -79,7 +103,7 @@ class HallOfFameTest extends TestCase
 
     public function test_librarians_see_full_names_and_id_numbers(): void
     {
-        $student = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 9, 'memberIDNumber' => '02-2024-001']);
+        $student = $this->withStreak(['registrationStatus' => 'approved', 'visitStreak' => 9, 'memberIDNumber' => '02-2024-001']);
         $student->user->update(['firstName' => 'Maria', 'lastName' => 'Santos']);
 
         $librarian = User::factory()->create(['userType' => 'librarian']);
@@ -95,7 +119,7 @@ class HallOfFameTest extends TestCase
 
     public function test_students_never_get_id_numbers_or_the_staff_board(): void
     {
-        $student = Student::factory()->create(['registrationStatus' => 'approved', 'visitStreak' => 9]);
+        $student = $this->withStreak(['registrationStatus' => 'approved', 'visitStreak' => 9]);
 
         $board = $this->actingAs($student->user)->getJson('/api/student/hall-of-fame')->assertOk()->json();
         $this->assertArrayNotHasKey('memberIDNumber', $this->category($board, 'longest-streak')['leaders'][0]);

@@ -24,6 +24,7 @@ class MemberController extends Controller
             $request->query('search'),
             $request->query('type'),
             (int) ($request->query('perPage') ?? 15),
+            $request->query('status'),
         ));
     }
 

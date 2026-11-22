@@ -62,6 +62,19 @@ class ReservationHoldTest extends TestCase
         $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$second->uuid}/accept")->assertStatus(422);
     }
 
+    public function test_cancelling_a_reservation_tells_the_student_it_no_longer_stands(): void
+    {
+        $ana = Student::factory()->create(['registrationStatus' => 'approved']);
+        $reservation = $this->reserve($ana);
+
+        $this->actingAs($ana->user)->deleteJson("/api/student/reservations/{$reservation->uuid}")->assertOk();
+
+        $this->assertNull(Reservation::find($reservation->reservationID));
+        $notice = \App\Models\SystemNotification::where('userID', $ana->studentID)->where('type', 'reservation_cancelled')->first();
+        $this->assertNotNull($notice);
+        $this->assertStringContainsString($this->book->title, $notice->message);
+    }
+
     public function test_a_held_copy_cannot_be_lent_to_someone_without_the_reservation(): void
     {
         $ana = Student::factory()->create(['registrationStatus' => 'approved']);

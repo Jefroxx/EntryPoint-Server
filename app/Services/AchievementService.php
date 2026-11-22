@@ -87,6 +87,10 @@ class AchievementService
 
     public function indexForStudent(Student $student): BaseCollection
     {
+        // Achievements unlock at the moment something happens (a loan, a visit...). Check once more when the list is
+        // opened, so a goal that is already met never shows a full bar next to "Locked".
+        $this->evaluateForStudent($student);
+
         $unlocked = $this->achievements->unlockedByStudent($student)->keyBy('achievementID');
         $measured = []; // each metric is counted once per request, however many achievements use it
 

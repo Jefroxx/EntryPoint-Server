@@ -112,7 +112,7 @@ class AchievementMetrics
 
         return match ($metric) {
             'knowledgeScore' => (int) $student->knowledgeScore,
-            'visitStreak'    => (int) $student->visitStreak,
+            'visitStreak'    => $student->currentVisitStreak(),
 
             'booksBorrowed' => DB::table('loans')->where('studentID', $id)->count(),
 

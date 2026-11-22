@@ -158,7 +158,11 @@ class HallOfFameService
                 'icon'   => 'i-tabler-flame',
                 'unit'   => 'day',
                 'period' => 'now',
-                'rows'   => DB::table('students')->selectRaw('studentID, visitStreak AS value'),
+                // The stored streak only counts while the last visit was today or yesterday (see Student::currentVisitStreak()).
+                'rows'   => DB::table('students')->selectRaw(
+                    'studentID, CASE WHEN EXISTS (SELECT 1 FROM attendance_logs a WHERE a.studentID = students.studentID AND DATE(a.entryTime) >= ?) THEN visitStreak ELSE 0 END AS value',
+                    [today()->subDay()->toDateString()],
+                ),
             ],
             [
                 'key'    => 'achievement-hunter',
