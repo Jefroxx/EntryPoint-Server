@@ -16,12 +16,14 @@ class ResourceUsageLogController extends Controller
 
     public function index(Request $request)
     {
-        $usageLogs = $this->resourceService->listUsageLogs(
-            $request->query('resID'),
-            $request->boolean('active')
-        );
-
-        return response()->json(['usageLogs' => $usageLogs]);
+        return response()->json($this->resourceService->pagedUsageLogs(
+            $request->query('search'),
+            in_array($request->query('status'), ['active', 'ended'], true) ? $request->query('status') : null,
+            $request->query('type'),
+            $request->query('resID') ? (int) $request->query('resID') : null,
+            $request->query('date'),
+            (int) ($request->query('perPage') ?? 12),
+        ));
     }
 
     public function store(StoreResourceUsageLogRequest $request)

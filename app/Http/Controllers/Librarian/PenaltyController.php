@@ -28,14 +28,35 @@ class PenaltyController extends Controller
             'loan'      => ['nullable', 'uuid', 'exists:loans,uuid'],
             'studentID' => ['required_without:loan', 'nullable', 'integer', 'exists:students,studentID'],
             'copyID'    => ['required_without:loan', 'nullable', 'integer', 'exists:book_copies,copyID'],
+            // What happened to the book, in the librarian's words; the student sees it in their notice.
+            'reason'    => ['nullable', 'string', 'max:500'],
         ]);
 
         $loan = isset($data['loan']) ? Loan::where('uuid', $data['loan'])->with('copy')->firstOrFail() : null;
         $copy = ! $loan && isset($data['copyID']) ? BookCopy::findOrFail($data['copyID']) : null;
 
-        $penalty = $this->copyPenalties->issue($data['type'], (float) $data['amount'], $loan, $data['studentID'] ?? null, $copy);
+        $penalty = $this->copyPenalties->issue($data['type'], (float) $data['amount'], $loan, $data['studentID'] ?? null, $copy, $data['reason'] ?? null);
 
         return response()->json(['message' => 'Penalty issued.', 'penalty' => $penalty], 201);
+    }
+
+    /** A note and (when it is settled) the amount of an unpaid penalty. */
+    public function update(Request $request, Penalty $penalty)
+    {
+        $data = $request->validate([
+            'amount' => ['nullable', 'numeric', 'gt:0', 'max:99999999.99'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        return response()->json(['message' => 'Penalty updated.', 'penalty' => $this->circulation->updatePenalty($penalty, $data)]);
+    }
+
+    /** Forgive a late fee, with a reason. */
+    public function waive(Request $request, Penalty $penalty)
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:500']]);
+
+        return response()->json(['message' => 'Fine waived.', 'penalty' => $this->circulation->waivePenalty($penalty, $data['reason'])]);
     }
 
     /** The book turned up or was repaired: the penalty is cancelled and the copy goes back on the shelf. */
@@ -62,17 +83,22 @@ class PenaltyController extends Controller
     {
         $filters = $request->validate([
             'search'  => ['nullable', 'string', 'max:255'],
-            'status'  => ['nullable', 'in:Unpaid,Paid,Replaced,longUnpaid'],
+            'status'  => ['nullable', 'in:Unpaid,Paid,Replaced,Waived,longUnpaid'],
             'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
             // 'copy': a lost or damaged book (the Lost & Damaged tab); 'late': late fees (the Penalties tab).
             'kind'    => ['nullable', 'in:copy,late'],
+            'area'    => ['nullable', 'exists:loan_periods,area'],
+            // For lost or damaged books: only the lost ones, or only the damaged ones.
+            'type'    => ['nullable', 'in:lost,damaged'],
         ]);
 
         return response()->json($this->circulation->penaltiesIndex(
             $filters['search'] ?? null,
             $filters['status'] ?? null,
             (int) ($filters['perPage'] ?? 15),
-            $filters['kind'] ?? null
+            $filters['kind'] ?? null,
+            $filters['area'] ?? null,
+            $filters['type'] ?? null
         ));
     }
 

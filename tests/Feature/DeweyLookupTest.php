@@ -128,7 +128,7 @@ class DeweyLookupTest extends TestCase
         $this->assertSame('ok', $book->deweyStatus);
     }
 
-    public function test_a_book_nobody_could_classify_is_guessed_and_flagged_for_review(): void
+    public function test_a_book_nobody_could_classify_has_no_dewey_number_and_is_flagged_for_review(): void
     {
         Http::fake([
             'lx2.loc.gov*'    => Http::response($this->locEmpty()),
@@ -137,8 +137,10 @@ class DeweyLookupTest extends TestCase
 
         $this->create()->assertCreated();
 
+        // Never a guess from the category: the number is left empty until someone finds or types one.
         $book = Book::where('isbn', '9780262033848')->firstOrFail();
-        $this->assertSame('guessed', $book->deweySource);
+        $this->assertNull($book->deweyNumber);
+        $this->assertNull($book->deweySource);
         $this->assertSame('needs_review', $book->deweyStatus);
     }
 
@@ -213,7 +215,7 @@ class DeweyLookupTest extends TestCase
         $this->assertTrue($label['pending']);
         $this->assertNull($label['dewey']);
         $this->assertNull($label['cutter']);
-        $this->assertSame('Circulation', $label['area']);
+        $this->assertSame('CIR', $label['area']);   // the area's acronym
         $this->assertSame(2009, $label['year']);
 
         // Once a librarian confirms the number, the call number and the whole label appear.

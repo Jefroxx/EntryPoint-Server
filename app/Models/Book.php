@@ -79,12 +79,18 @@ class Book extends Model
         $ok = $this->deweyStatus === 'ok' && $this->deweyNumber;
 
         return [
-            'area'    => \Illuminate\Support\Str::headline((string) ($this->areaOfLibrary ?: 'circulation')),
+            // The area's acronym is what the librarian set for it (CIR, FIC...); the key is only a fallback.
+            'area'    => $this->libraryArea?->acronym ?? \Illuminate\Support\Str::headline((string) ($this->areaOfLibrary ?: 'circulation')),
             'dewey'   => $ok ? $this->deweyNumber : null,
             'cutter'  => $ok && $this->cutter ? $this->cutter : null,
             'year'    => $this->publicationYear ? (int) $this->publicationYear : null,
             'pending' => ! $ok,
         ];
+    }
+
+    public function libraryArea()
+    {
+        return $this->belongsTo(LoanPeriod::class, 'areaOfLibrary', 'area');
     }
 
     public function subject()

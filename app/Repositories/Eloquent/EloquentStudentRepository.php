@@ -68,7 +68,29 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
     /** "members" is faculty and staff together (everyone who is not a student); anything else is one exact type. */
     private function ofMemberType($query, string $type)
     {
-        return $type === 'members' ? $query->whereIn('memberType', ['faculty', 'staff']) : $query->where('memberType', $type);
+        // A member whose data was removed (see PrivacyService) is an empty shell kept for the library's records: not a person to look up.
+        return $type === 'members'
+            ? $query->whereIn('memberType', ['faculty', 'staff'])->where('memberIDNumber', 'not like', 'REMOVED-%')
+            : $query->where('memberType', $type);
+    }
+
+    public function programs(?string $memberType = null): array
+    {
+        $column = $memberType === 'student' ? 'academicProgram' : 'department';
+
+        return Student::when($memberType, fn ($query, $value) => $this->ofMemberType($query, $value))
+            ->whereNotNull($column)
+            ->distinct()
+            ->orderBy($column)
+            ->pluck($column)
+            ->all();
+    }
+
+    public function countsByMemberType(): array
+    {
+        $counts = $this->ofMemberType(Student::query(), 'members')->selectRaw('memberType, COUNT(*) as total')->groupBy('memberType')->pluck('total', 'memberType');
+
+        return ['faculty' => (int) $counts->get('faculty', 0), 'staff' => (int) $counts->get('staff', 0)];
     }
 
     public function approvedCountByProgram(): \Illuminate\Support\Collection
@@ -90,8 +112,11 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
         return $code;
     }
 
-    public function paginate(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null): LengthAwarePaginator
+    public function paginate(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null, ?string $sort = null, bool $inLibrary = false): LengthAwarePaginator
     {
+        // The oldest registration first by default where there is a queue to work through (pending), newest first elsewhere.
+        $oldestFirst = ($sort ?? ($status === 'pending' ? 'oldest' : 'newest')) === 'oldest';
+
         return Student::with('user')
             ->when($memberType, fn ($query, $value) => $this->ofMemberType($query, $value))
             ->when($search, fn ($query, $term) => $query->where(function ($q) use ($term) {
@@ -102,15 +127,23 @@ class EloquentStudentRepository extends BaseRepository implements StudentReposit
                         ->orWhere('lastName', 'like', "%{$term}%")
                         ->orWhere('email', 'like', "%{$term}%"));
             }))
-            ->when($program, fn ($query, $value) => $query->where('academicProgram', $value))
+            // A student has a program; faculty and staff have a department, so the same filter narrows by that instead.
+            ->when($program, fn ($query, $value) => $query->where($memberType === 'student' ? 'academicProgram' : 'department', $value))
             ->when($status, fn ($query, $value) => $query->where('registrationStatus', $value))
-            ->orderByDesc('studentID')
+            // Only those who have confirmed their email can be approved, so only they are waiting for the librarian.
+            ->when($status === 'pending', fn ($query) => $query->whereHas('user', fn ($uq) => $uq->whereNotNull('emailVerifiedAt')))
+            // Only those who scanned in today and have not scanned out (who a computer or room session can be for).
+            ->when($inLibrary, fn ($query) => $query->whereHas('attendanceLogs', fn ($log) => $log->whereNull('exitTime')->whereDate('entryTime', today())))
+            ->orderBy('studentID', $oldestFirst ? 'asc' : 'desc')
             ->paginate($perPage);
     }
 
     public function countsByRegistrationStatus(?string $memberType = null): array
     {
         $counts = Student::when($memberType, fn ($query, $value) => $this->ofMemberType($query, $value))
+            // A registration that has not confirmed its email is not waiting for a librarian yet, so it is not counted.
+            ->where(fn ($query) => $query->where('registrationStatus', '!=', 'pending')
+                ->orWhereHas('user', fn ($uq) => $uq->whereNotNull('emailVerifiedAt')))
             ->selectRaw('registrationStatus, COUNT(*) as total')
             ->groupBy('registrationStatus')
             ->pluck('total', 'registrationStatus');

@@ -28,7 +28,7 @@ interface PenaltyRepositoryInterface extends RepositoryInterface
      * `$status`: 'Unpaid', 'Paid', 'Replaced', or 'longUnpaid' (unpaid long after the book came back).
      * `$kind`: 'copy' (a lost or damaged book), 'late' (a late fee), or null for both.
      */
-    public function paginate(?string $search, ?string $status, int $perPage, ?string $kind = null): LengthAwarePaginator;
+    public function paginate(?string $search, ?string $status, int $perPage, ?string $kind = null, ?string $area = null, ?string $type = null): LengthAwarePaginator;
 
     /**
      * @return array{unpaidCount: int, unpaidTotal: float, paidCount: int, replacedCount: int, longUnpaidCount: int, longUnpaidDays: int}

@@ -16,8 +16,6 @@ use Illuminate\Validation\ValidationException;
 
 class ReservationService
 {
-    public const MAX_ACTIVE_RESERVATIONS = 3;
-
     public function __construct(
         private ReservationRepositoryInterface $reservations,
         private LoanRepositoryInterface $loans,
@@ -103,6 +101,7 @@ class ReservationService
             'Waiting'   => 'This reservation has not been accepted yet.',
             'Rejected'  => 'This reservation was rejected.',
             'Fulfilled' => 'This reservation has already been collected.',
+            'Expired'   => 'This reservation expired: it was not collected in time. The student can reserve the book again.',
             default     => null,
         };
 
@@ -146,10 +145,12 @@ class ReservationService
             $activeCount = $this->reservations->activeCountForStudent($studentID, lock: true)
                 + $this->loans->activeCountForStudent($studentID);
 
-            if ($activeCount + $cartItems->count() > self::MAX_ACTIVE_RESERVATIONS) {
-                $slotsLeft = max(self::MAX_ACTIVE_RESERVATIONS - $activeCount, 0);
+            $max = AppSettings::maxBooks();
+
+            if ($activeCount + $cartItems->count() > $max) {
+                $slotsLeft = max($max - $activeCount, 0);
                 throw ValidationException::withMessages([
-                    'cart' => ['You can only have ' . self::MAX_ACTIVE_RESERVATIONS . " active reservations at a time. You have {$slotsLeft} slot(s) left."],
+                    'cart' => ['You can only have ' . $max . " active reservations at a time. You have {$slotsLeft} slot(s) left."],
                 ]);
             }
 
@@ -158,6 +159,16 @@ class ReservationService
             if ($this->reservations->alreadyReservedForBooks($studentID, $bookIDs)) {
                 throw ValidationException::withMessages([
                     'cart' => ['One or more books in your cart are already in your active reservations.'],
+                ]);
+            }
+
+            // One copy of a title at a time: a book the student has out (any copy of it) can't be reserved again.
+            $held = \App\Models\Loan::where('studentID', $studentID)->whereIn('status', ['Active', 'Received'])
+                ->whereHas('copy', fn ($copy) => $copy->whereIn('bookID', $bookIDs))->with('copy.book')->first();
+
+            if ($held) {
+                throw ValidationException::withMessages([
+                    'cart' => ["You already have \"{$held->copy->book->title}\" borrowed. Return it before reserving it again."],
                 ]);
             }
 
@@ -221,12 +232,14 @@ class ReservationService
             throw ValidationException::withMessages(['reservation' => [$block]]);
         }
 
-        $this->reservations->update($reservation, ['status' => 'Accepted']);
+        $this->reservations->update($reservation, ['status' => 'Accepted', 'acceptedAt' => now()]);
         $reservation->load('book');
 
+        // The copy is held for a limited time (Settings > Reservations): the student is told by when to collect it.
+        $hold = AppSettings::describeHours(AppSettings::holdHours());
         $this->notifications->send(
             $reservation->studentID,
-            "Your reservation for \"{$reservation->book->title}\" is ready for pickup!",
+            "Your reservation for \"{$reservation->book->title}\" is ready for pickup! Collect it within {$hold} or it will be released to the next student.",
             'reservation_accepted'
         );
 
@@ -275,6 +288,35 @@ class ReservationService
             "You cancelled your reservation for \"{$title}\". Reserve it again anytime, but you'd join the back of the queue.",
             'reservation_cancelled'
         );
+    }
+
+    /**
+     * Accepted reservations that were not collected within the hold period expire: the copy they held is free again,
+     * the student is told, and the next in line is told a copy is available. Run hourly (reservations:expire).
+     */
+    public function expireStale(): int
+    {
+        $hours = AppSettings::holdHours();
+
+        $stale = Reservation::with('book')
+            ->where('status', 'Accepted')
+            ->whereNotNull('acceptedAt')
+            ->where('acceptedAt', '<=', now()->subHours($hours))
+            ->get();
+
+        foreach ($stale as $reservation) {
+            $this->reservations->update($reservation, ['status' => 'Expired']);
+
+            $this->notifications->send(
+                $reservation->studentID,
+                "Your reservation for \"{$reservation->book->title}\" expired because it wasn't collected within " . AppSettings::describeHours($hours) . '. You can reserve it again.',
+                'reservation_expired'
+            );
+
+            $this->notifyNextInQueue($reservation->bookID);
+        }
+
+        return $stale->count();
     }
 
     /**

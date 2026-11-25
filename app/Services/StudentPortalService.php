@@ -84,7 +84,8 @@ class StudentPortalService
                 'readyReservations'  => $this->reservations->readyCountForStudent($student->studentID),
                 'activeReservations' => $activeReservations,
                 // The limit covers books the student holds now (loans) plus waiting or accepted reservations.
-                'slotsLeft'          => max(ReservationService::MAX_ACTIVE_RESERVATIONS - $activeLoans - $activeReservations, 0),
+                'maxBooks'           => AppSettings::maxBooks(),
+                'slotsLeft'          => max(AppSettings::maxBooks() - $activeLoans - $activeReservations, 0),
                 'unpaidFines'        => $this->penalties->unpaidTotalForStudent($student->studentID),
                 'wishlistCount'      => $this->wishlists->wishlistCountForStudent($student->studentID),
                 'cartCount'          => $this->wishlists->cartCountForStudent($student->studentID),
@@ -137,7 +138,10 @@ class StudentPortalService
 
             return [
                 'penaltyID'     => $penalty->penaltyID,
+                'uuid'          => $penalty->uuid,
                 'kind'          => $kind,
+                'reason'        => $penalty->isForCopy() ? $penalty->reason : null,
+                'studentChoice' => $penalty->isForCopy() ? $penalty->studentChoice : null,
                 'amount'        => (float) $penalty->amount,
                 'paymentStatus' => $penalty->paymentStatus,
                 'computedAt'    => $penalty->computedAt,

@@ -23,7 +23,8 @@ use App\Http\Controllers\Librarian\ScanController;
 use App\Http\Controllers\Librarian\SelfReturnReportController;
 use App\Http\Controllers\Librarian\SettingsController;
 use App\Http\Controllers\Librarian\StudentApprovalController;
-use App\Http\Controllers\Librarian\SubjectController;
+use App\Http\Controllers\Librarian\AreaController;
+use App\Http\Controllers\Librarian\FundSourceController;
 use App\Http\Controllers\Student\AccountController as StudentAccountController;
 use App\Http\Controllers\Student\AchievementController as StudentAchievementController;
 use App\Http\Controllers\Student\BookSuggestionController as StudentBookSuggestionController;
@@ -94,6 +95,7 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::put('/password', [StudentAccountController::class, 'changePassword'])->middleware('throttle:6,1');
         Route::get('/loans', [PortalController::class, 'loans']);
         Route::get('/penalties', [PortalController::class, 'penalties']);
+        Route::post('/penalties/{penalty}/choice', [PortalController::class, 'choosePenalty']);
         Route::get('/attendance', [PortalController::class, 'attendance']);
         // Students only (not faculty or staff members): the Hall of Fame, redemptions, achievements and the points shop.
         Route::get('/hall-of-fame', [PortalController::class, 'hallOfFame'])->middleware('engagement');
@@ -240,13 +242,20 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::put('/books/{book}/pages/order', [BookPageController::class, 'reorder']);
         Route::delete('/book-pages/{page}', [BookPageController::class, 'destroy']);
 
-        Route::get('/subjects', [SubjectController::class, 'index']);
-        Route::post('/subjects', [SubjectController::class, 'store']);
-        Route::patch('/subjects/{subject}', [SubjectController::class, 'update']);
-        Route::delete('/subjects/{subject}', [SubjectController::class, 'destroy']);
+        Route::get('/areas', [AreaController::class, 'index']);
+        Route::post('/areas', [AreaController::class, 'store']);
+        Route::get('/areas/{area}/books', [AreaController::class, 'books']);
+        Route::patch('/areas/{area}', [AreaController::class, 'update']);
+        Route::delete('/areas/{area}', [AreaController::class, 'destroy']);
+        Route::get('/fund-sources', [FundSourceController::class, 'index']);
+        Route::post('/fund-sources', [FundSourceController::class, 'store']);
+        Route::get('/fund-sources/{fundSource}/copies', [FundSourceController::class, 'copies']);
+        Route::patch('/fund-sources/{fundSource}', [FundSourceController::class, 'update']);
+        Route::delete('/fund-sources/{fundSource}', [FundSourceController::class, 'destroy']);
 
         Route::get('/settings', [SettingsController::class, 'index']);
-        Route::put('/settings/loan-periods', [SettingsController::class, 'saveLoanPeriods']);
+        Route::put('/settings/borrowing', [SettingsController::class, 'saveBorrowing']);
+        Route::put('/settings/rewards', [SettingsController::class, 'saveRewards']);
         Route::put('/settings/fine-rules/{area}', [SettingsController::class, 'saveFineRule']);
         Route::delete('/settings/fine-rules/{area}', [SettingsController::class, 'deleteFineRule']);
         Route::patch('/settings/account', [SettingsController::class, 'updateAccount']);
@@ -264,6 +273,8 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::get('/penalties', [PenaltyController::class, 'index']);
         Route::get('/penalties/stats', [PenaltyController::class, 'stats']);
         Route::post('/penalties', [PenaltyController::class, 'store']);
+        Route::patch('/penalties/{penalty}', [PenaltyController::class, 'update']);
+        Route::post('/penalties/{penalty}/waive', [PenaltyController::class, 'waive']);
         Route::post('/penalties/{penalty}/settle', [PenaltyController::class, 'settle']);
         Route::post('/penalties/{penalty}/replace', [PenaltyController::class, 'replace']);
         Route::post('/penalties/{penalty}/cancel', [PenaltyController::class, 'cancel']);
@@ -286,6 +297,12 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::patch('/resources/{resource}', [LibrarianResourceController::class, 'update']);
         Route::delete('/resources/{resource}', [LibrarianResourceController::class, 'destroy']);
 
+        // The kinds of resource a resource can be (picked from this list, never typed).
+        Route::get('/resource-types', [\App\Http\Controllers\Librarian\ResourceTypeController::class, 'index']);
+        Route::post('/resource-types', [\App\Http\Controllers\Librarian\ResourceTypeController::class, 'store']);
+        Route::patch('/resource-types/{resourceType}', [\App\Http\Controllers\Librarian\ResourceTypeController::class, 'update']);
+        Route::delete('/resource-types/{resourceType}', [\App\Http\Controllers\Librarian\ResourceTypeController::class, 'destroy']);
+
         Route::get('/resource-usage-logs', [ResourceUsageLogController::class, 'index']);
         Route::post('/resource-usage-logs', [ResourceUsageLogController::class, 'store']);
         Route::post('/resource-usage-logs/{usageLog}/end', [ResourceUsageLogController::class, 'end']);
@@ -303,12 +320,19 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::post('/market-items/{item}/photo', [LibrarianMarketItemController::class, 'storePhoto']);
         Route::delete('/market-items/{item}/photo', [LibrarianMarketItemController::class, 'destroyPhoto']);
 
+        // The kinds of reward a reward can be (picked from this list, never typed).
+        Route::get('/market-item-types', [\App\Http\Controllers\Librarian\MarketItemTypeController::class, 'index']);
+        Route::post('/market-item-types', [\App\Http\Controllers\Librarian\MarketItemTypeController::class, 'store']);
+        Route::patch('/market-item-types/{marketItemType}', [\App\Http\Controllers\Librarian\MarketItemTypeController::class, 'update']);
+        Route::delete('/market-item-types/{marketItemType}', [\App\Http\Controllers\Librarian\MarketItemTypeController::class, 'destroy']);
+
         Route::get('/point-redemptions', [PointRedemptionController::class, 'index']);
         Route::post('/point-redemptions/{redemption}/fulfill', [PointRedemptionController::class, 'fulfill']);
         Route::post('/point-redemptions/{redemption}/cancel', [PointRedemptionController::class, 'cancel']);
 
         Route::get('/book-suggestions', [LibrarianBookSuggestionController::class, 'index']);
         Route::post('/book-suggestions/{suggestion}/approve', [LibrarianBookSuggestionController::class, 'approve']);
+        Route::post('/book-suggestions/{suggestion}/arrived', [LibrarianBookSuggestionController::class, 'arrived']);
         Route::post('/book-suggestions/{suggestion}/reject', [LibrarianBookSuggestionController::class, 'reject']);
     });
 });

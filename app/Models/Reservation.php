@@ -12,9 +12,9 @@ class Reservation extends Model
 
     protected $primaryKey = 'reservationID';
 
-    protected $fillable = ['uuid', 'studentID', 'bookID', 'status', 'reservedAt'];
+    protected $fillable = ['uuid', 'studentID', 'bookID', 'status', 'reservedAt', 'acceptedAt'];
 
-    protected $casts = ['reservedAt' => 'datetime'];
+    protected $casts = ['reservedAt' => 'datetime', 'acceptedAt' => 'datetime'];
 
     protected $appends = ['pickupCode'];
 

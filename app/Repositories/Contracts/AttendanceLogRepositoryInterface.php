@@ -11,7 +11,8 @@ interface AttendanceLogRepositoryInterface extends RepositoryInterface
 {
     public function listWithFilters(?int $studentID, bool $activeOnly): Collection;
 
-    public function paginate(?string $search, ?string $date, bool $activeOnly, int $perPage): LengthAwarePaginator;
+    /** $status: in | out. $who: students | members | visitors. $sort: oldest (newest first by default). */
+    public function paginate(?string $search, ?string $date, bool $activeOnly, int $perPage, ?string $status = null, ?string $who = null, ?string $sort = null): LengthAwarePaginator;
 
     public function openLogForStudent(int $studentID): ?AttendanceLog;
 

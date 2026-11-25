@@ -40,11 +40,20 @@ class WishlistService
                 ]);
             }
 
+            // One copy of a title at a time: not a book they have reserved or borrowed already.
+            if ($this->reservations->alreadyReservedForBooks($studentID, [$bookID])) {
+                throw ValidationException::withMessages(['bookID' => ['You already have a reservation for this book.']]);
+            }
+
+            if (\App\Models\Loan::where('studentID', $studentID)->whereIn('status', ['Active', 'Received'])->whereHas('copy', fn ($copy) => $copy->where('bookID', $bookID))->exists()) {
+                throw ValidationException::withMessages(['bookID' => ['You already have this book borrowed.']]);
+            }
+
             // The cart can't hold more than the reservation slots the student has left (loans and active
             // reservations already use some). Applies to hearted books too: moving one from the wishlist
             // still takes a cart place.
             $slotsLeft = max(
-                ReservationService::MAX_ACTIVE_RESERVATIONS
+                AppSettings::maxBooks()
                 - $this->reservations->activeCountForStudent($studentID)
                 - $this->loans->activeCountForStudent($studentID),
                 0,

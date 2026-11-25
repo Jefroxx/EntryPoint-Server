@@ -18,6 +18,8 @@ class ReservationController extends Controller
     {
         return response()->json([
             'reservations' => $this->reservationService->listAll($request->query('status')),
+            // The most books one student can hold: the cards are sized for that many.
+            'maxBooks'     => \App\Services\AppSettings::maxBooks(),
         ]);
     }
 

@@ -135,7 +135,7 @@ class EloquentBookCopyRepository extends BaseRepository implements BookCopyRepos
 
     public function findByScanCode(string $code): ?BookCopy
     {
-        $query = BookCopy::with('book.authors')
+        $query = BookCopy::with(['book.authors', 'book.libraryArea'])
             ->where('status', '!=', 'retired')
             ->whereHas('book');
 

@@ -15,7 +15,7 @@ class Loan extends Model
     protected $fillable = [
         'uuid', 'studentID', 'copyID', 'loanType',
         'checkoutDate', 'dueDate', 'returnDate', 'status',
-        'dueSoonNotifiedAt', 'overdueNotifiedAt',
+        'dueSoonNotifiedAt', 'overdueNotifiedAt', 'fineStartsAt',
     ];
 
     protected $casts = [
@@ -24,6 +24,7 @@ class Loan extends Model
         'returnDate'        => 'datetime',
         'dueSoonNotifiedAt' => 'datetime',
         'overdueNotifiedAt' => 'datetime',
+        'fineStartsAt'      => 'datetime',
     ];
 
     public function student()

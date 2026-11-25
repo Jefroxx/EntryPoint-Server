@@ -12,11 +12,19 @@ class UpdateResourceRequest extends FormRequest
         return true;
     }
 
+    public function messages(): array
+    {
+        return [
+            'resourceType.exists' => 'Choose one of the types on the list.',
+            'name.unique'         => 'A resource with this name already exists.',
+        ];
+    }
+
     public function rules(): array
     {
         return [
-            'resourceType' => ['sometimes', 'string', 'max:100'],
-            'name'         => ['sometimes', 'string', 'max:150'],
+            'resourceType' => ['sometimes', 'string', 'max:100', Rule::exists('resource_types', 'name')],
+            'name'         => ['sometimes', 'string', 'max:150', Rule::unique('resources', 'name')->ignore($this->route('resource')?->resID, 'resID')],
             // 'In Use' is set only by starting/ending a usage session, not by a direct edit.
             'status'       => ['sometimes', Rule::in(['Available', 'Unavailable'])],
         ];

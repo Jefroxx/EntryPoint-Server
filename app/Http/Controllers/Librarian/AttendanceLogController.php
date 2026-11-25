@@ -21,7 +21,10 @@ class AttendanceLogController extends Controller
             $request->query('search'),
             $request->query('date'),
             $request->boolean('active'),
-            (int) ($request->query('perPage') ?? 15)
+            (int) ($request->query('perPage') ?? 15),
+            in_array($request->query('status'), ['in', 'out'], true) ? $request->query('status') : null,
+            in_array($request->query('who'), ['students', 'members', 'visitors'], true) ? $request->query('who') : null,
+            $request->query('sort') === 'oldest' ? 'oldest' : null,
         ));
     }
 
@@ -78,7 +81,7 @@ class AttendanceLogController extends Controller
             'log'             => $result['log'],
             'student'         => [
                 'name'            => $student->user->fullName,
-                'program'         => $student->academicProgram,
+                'program'         => $student->academicProgram ?? $student->department,
                 'memberIDNumber' => $student->memberIDNumber,
                 'visitStreak'     => $student->visitStreak,
             ],

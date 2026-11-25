@@ -26,7 +26,7 @@ class StoreBookRequest extends FormRequest
             'title'          => ['required', 'string', 'max:255'],
             // The Dewey number alone ("005.1"). Left out, it is looked up by ISBN.
             'deweyNumber'    => ['nullable', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/'],
-            'areaOfLibrary' => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            'areaOfLibrary' => ['nullable', 'exists:loan_periods,area'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
             'quantity'       => ['required', 'integer', 'min:1', 'max:100'],
@@ -46,8 +46,9 @@ class StoreBookRequest extends FormRequest
             // Ticked only for books that really just arrived (old books get catalogued too).
             'isNewArrival'   => ['nullable', 'boolean'],
 
-            'subjectID'     => ['nullable', 'integer', 'exists:book_subjects,subjectID', 'required_without:subjectName'],
-            'subjectName'    => ['nullable', 'string', 'max:255', 'required_without:subjectID'],
+            // The librarian no longer picks a category (the area of the library replaced it); a book without one gets the default.
+            'subjectID'     => ['nullable', 'integer', 'exists:book_subjects,subjectID'],
+            'subjectName'    => ['nullable', 'string', 'max:255'],
 
             'authors'                 => ['required', 'array', 'min:1'],
             'authors.*.authorID'      => ['nullable', 'integer', 'exists:authors,authorID', 'required_without:authors.*.name'],

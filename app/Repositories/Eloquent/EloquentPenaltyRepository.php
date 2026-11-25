@@ -71,7 +71,7 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
             ->sum('amount');
     }
 
-    public function paginate(?string $search, ?string $status, int $perPage, ?string $kind = null): LengthAwarePaginator
+    public function paginate(?string $search, ?string $status, int $perPage, ?string $kind = null, ?string $area = null, ?string $type = null): LengthAwarePaginator
     {
         return $this->ofKind(Penalty::with(Penalty::listingRelations()), $kind)
             // Grouped, so the status filter below applies to both halves of the search.
@@ -82,6 +82,9 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
                 'copy.book',
                 fn ($bq) => $bq->where('title', 'like', "%{$term}%")
             )))
+            // The collection the book belongs to; for a lost or damaged book, which of the two it was.
+            ->when($area, fn ($query, $key) => $query->whereHas('copy.book', fn ($bq) => $bq->where('areaOfLibrary', $key)))
+            ->when($type, fn ($query, $kindOf) => $query->whereHas('penaltyType', fn ($tq) => $tq->where('kind', $kindOf)))
             ->when($status === 'longUnpaid', fn ($query) => $this->longUnpaid($query))
             ->when($status && $status !== 'longUnpaid', fn ($query) => $query->where('paymentStatus', $status))
             ->orderByDesc('computedAt')

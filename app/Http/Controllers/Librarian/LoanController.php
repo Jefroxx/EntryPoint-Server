@@ -19,7 +19,9 @@ class LoanController extends Controller
         return response()->json($this->circulation->index(
             $request->query('search'),
             $request->query('status'),
-            (int) ($request->query('perPage') ?? 15)
+            (int) ($request->query('perPage') ?? 15),
+            $request->query('area') ?: null,
+            $request->boolean('hideReceived')
         ));
     }
 
@@ -96,7 +98,7 @@ class LoanController extends Controller
             'receiptNumber' => ['required_if:finePaid,true,1', 'nullable', 'string', 'max:50'],
         ]);
 
-        $loan = $this->circulation->returnBook($loan, (bool) ($data['finePaid'] ?? false), $data['receiptNumber'] ?? null);
+        $loan = $this->circulation->returnBook($loan, (bool) ($data['finePaid'] ?? false), $data['receiptNumber'] ?? null, $request->user()->librarian->librarianID);
         $penalty = $loan->penalties()->latest('computedAt')->first();
 
         return response()->json([

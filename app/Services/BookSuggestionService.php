@@ -75,7 +75,31 @@ class BookSuggestionService
         return $suggestion->fresh();
     }
 
-    public function reject(BookSuggestion $suggestion, int $librarianID): BookSuggestion
+    /** The approved book is now in the library: the student who asked for it is told. */
+    public function markArrived(BookSuggestion $suggestion, int $librarianID): BookSuggestion
+    {
+        if ($suggestion->status !== 'Approved') {
+            throw ValidationException::withMessages([
+                'suggestion' => ["Only an 'Approved' request can be marked as arrived."],
+            ]);
+        }
+
+        $this->suggestions->update($suggestion, [
+            'status'                => 'Arrived',
+            'progressStep'          => 'Arrived',
+            'reviewedByLibrarianID' => $librarianID,
+        ]);
+
+        $this->notifications->send(
+            $suggestion->studentID,
+            "Good news! \"{$suggestion->title}\", the book you requested, has arrived in the library. You can borrow it now.",
+            'book_suggestion_arrived'
+        );
+
+        return $suggestion->fresh();
+    }
+
+    public function reject(BookSuggestion $suggestion, int $librarianID, ?string $reason = null): BookSuggestion
     {
         if ($suggestion->status !== 'Pending') {
             throw ValidationException::withMessages([
@@ -86,12 +110,13 @@ class BookSuggestionService
         $this->suggestions->update($suggestion, [
             'status'                => 'Rejected',
             'progressStep'          => 'Rejected',
+            'rejectionReason'       => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
             'reviewedByLibrarianID' => $librarianID,
         ]);
 
         $this->notifications->send(
             $suggestion->studentID,
-            "Your suggestion for \"{$suggestion->title}\" was not approved this time.",
+            "Your suggestion for \"{$suggestion->title}\" was not approved this time." . ($reason !== null && trim($reason) !== '' ? ' Reason: ' . trim($reason) : ''),
             'book_suggestion_rejected'
         );
 

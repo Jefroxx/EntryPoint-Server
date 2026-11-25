@@ -36,7 +36,7 @@ class ResourceService
     {
         return $this->resources->create([
             'uuid'         => Str::uuid(),
-            'resourceType' => $validated['resourceType'],
+            'resourceType' => $this->canonicalType($validated['resourceType']),
             'name'         => $validated['name'],
             'status'       => 'Available',
         ]);
@@ -50,7 +50,17 @@ class ResourceService
             ]);
         }
 
+        if (isset($validated['resourceType'])) {
+            $validated['resourceType'] = $this->canonicalType($validated['resourceType']);
+        }
+
         return $this->resources->update($resource, $validated)->fresh();
+    }
+
+    /** The type as it is written on the list (the request may have come in other capitals). */
+    private function canonicalType(string $type): string
+    {
+        return \App\Models\ResourceType::where('name', $type)->value('name') ?? $type;
     }
 
     public function delete(Resource $resource): void
@@ -67,6 +77,29 @@ class ResourceService
     public function listUsageLogs(?int $resID, bool $activeOnly): Collection
     {
         return $this->usageLogs->listWithFilters($resID, $activeOnly);
+    }
+
+    public function pagedUsageLogs(?string $search, ?string $status, ?string $type, ?int $resID, ?string $date, int $perPage)
+    {
+        return $this->usageLogs->paginate($search, $status, $type, $resID, $date, $perPage);
+    }
+
+    /** Sessions still running from before today (the library has long closed). */
+    public function staleActiveSessions()
+    {
+        return $this->usageLogs->staleActive();
+    }
+
+    /**
+     * The library is closed, so nothing is in use any more: every running session ends. $at is the closing time to record
+     * (the clean-up runs after the fact); with none, it is now. Returns how many ended.
+     */
+    public function endAllActiveSessions(?\Carbon\CarbonInterface $at = null): int
+    {
+        $sessions = $this->usageLogs->allActive();
+        $sessions->each(fn (ResourceUsageLog $session) => $this->endSession($session, $at));
+
+        return $sessions->count();
     }
 
     public function startSession(array $validated, int $staffLibrarianID): ResourceUsageLog
@@ -123,11 +156,11 @@ class ResourceService
      * librarian having to remember. The librarian can still end a session by hand before that.
      * Returns the session that was ended, or null when the student had none.
      */
-    public function endSessionForStudent(int $studentID): ?ResourceUsageLog
+    public function endSessionForStudent(int $studentID, ?\Carbon\CarbonInterface $at = null): ?ResourceUsageLog
     {
         $session = $this->usageLogs->activeForStudent($studentID);
 
-        return $session ? $this->endSession($session) : null;
+        return $session ? $this->endSession($session, $at) : null;
     }
 
     /**
@@ -135,7 +168,7 @@ class ResourceService
      * transaction — the previous model-method version wrote the log and the
      * resource status in two separate, unguarded statements.
      */
-    public function endSession(ResourceUsageLog $usageLog): ResourceUsageLog
+    public function endSession(ResourceUsageLog $usageLog, ?\Carbon\CarbonInterface $at = null): ResourceUsageLog
     {
         if ($usageLog->endTime) {
             throw ValidationException::withMessages([
@@ -143,8 +176,11 @@ class ResourceService
             ]);
         }
 
-        DB::transaction(function () use ($usageLog) {
-            $this->usageLogs->update($usageLog, ['endTime' => now()]);
+        // Never before it started (a session closed at a closing time that is earlier than the start).
+        $end = $at && $at->greaterThan($usageLog->startTime) ? $at : now();
+
+        DB::transaction(function () use ($usageLog, $end) {
+            $this->usageLogs->update($usageLog, ['endTime' => $end]);
             $this->resources->update($usageLog->resource, ['status' => 'Available']);
         });
 

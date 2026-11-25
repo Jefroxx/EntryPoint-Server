@@ -26,7 +26,7 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
             ->each->withStaff();
     }
 
-    public function paginate(?string $search, ?string $date, bool $activeOnly, int $perPage): LengthAwarePaginator
+    public function paginate(?string $search, ?string $date, bool $activeOnly, int $perPage, ?string $status = null, ?string $who = null, ?string $sort = null): LengthAwarePaginator
     {
         return AttendanceLog::with(['student.user', 'checkedInByUser.librarian', 'checkedOutByUser.librarian'])
             ->when($search, fn ($query, $term) => $query->where(
@@ -38,8 +38,13 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
                 )->orWhere('visitorName', 'like', "%{$term}%")
             ))
             ->when($date, fn ($query, $value) => $query->whereDate('entryTime', $value))
-            ->when($activeOnly, fn ($query) => $query->whereNull('exitTime'))
-            ->orderByDesc('entryTime')
+            ->when($activeOnly || $status === 'in', fn ($query) => $query->whereNull('exitTime'))
+            ->when($status === 'out', fn ($query) => $query->whereNotNull('exitTime'))
+            // Who: students, faculty and staff members, or walk-in visitors (no account).
+            ->when($who === 'students', fn ($query) => $query->whereHas('student', fn ($sq) => $sq->where('memberType', 'student')))
+            ->when($who === 'members', fn ($query) => $query->whereHas('student', fn ($sq) => $sq->whereIn('memberType', ['faculty', 'staff'])))
+            ->when($who === 'visitors', fn ($query) => $query->whereNull('studentID'))
+            ->orderBy('entryTime', $sort === 'oldest' ? 'asc' : 'desc')
             ->paginate($perPage)
             // The staff screens see who scanned each visit in and out.
             ->through(fn (AttendanceLog $log) => $log->withStaff());
@@ -55,7 +60,8 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
 
     public function currentlyInLibraryCount(): int
     {
-        return AttendanceLog::whereNull('exitTime')->count();
+        // Today's visits only: one left open from an earlier day is not someone inside now (the nightly clean-up closes it).
+        return AttendanceLog::whereNull('exitTime')->whereDate('entryTime', today())->count();
     }
 
     public function totalVisitsToday(): int
@@ -85,7 +91,8 @@ class EloquentAttendanceLogRepository extends BaseRepository implements Attendan
             'visits'         => $day()->count(),
             'students'       => $day()->whereNotNull('studentID')->distinct()->count('studentID'),
             'visitors'       => $day()->whereNull('studentID')->count(),
-            'averageMinutes' => $average ? round((float) $average, 1) : 0.0,
+            // No finished visit yet means there is no average to give (not an average of zero).
+            'averageMinutes' => $average === null ? null : round((float) $average, 1),
         ];
     }
 

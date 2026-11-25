@@ -29,6 +29,7 @@ class BookController extends Controller
             'subjectID'    => ['nullable', 'integer'],
             'availability' => ['nullable', 'in:available,unavailable'],
             'dewey'        => ['nullable', 'in:verified,unverified'],
+            'area'         => ['nullable', 'exists:loan_periods,area'],
             'perPage'      => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -38,6 +39,7 @@ class BookController extends Controller
             $filters['availability'] ?? null,
             (int) ($filters['perPage'] ?? 15),
             $filters['dewey'] ?? null,
+            $filters['area'] ?? null,
         ));
     }
 
@@ -155,7 +157,7 @@ class BookController extends Controller
             'search'    => ['nullable', 'string', 'max:255'],
             'subjectID' => ['nullable', 'integer'],
             'status'    => ['nullable', 'in:available,borrowed,lost,damaged'],
-            'area'      => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            'area'      => ['nullable', 'exists:loan_periods,area'],
             'perPage'   => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -178,13 +180,11 @@ class BookController extends Controller
             'search'    => ['nullable', 'string', 'max:255'],
             'subjectID' => ['nullable', 'integer'],
             'status'    => ['nullable', 'in:available,borrowed,lost,damaged'],
-            'area'      => ['nullable', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            'area'      => ['nullable', 'exists:loan_periods,area'],
             // "1-20, 25": ranges of accession numbers (a single number is from = to).
             'accessions'        => ['nullable', 'array', 'max:200'],
             'accessions.*.from' => ['required', 'integer', 'min:1'],
             'accessions.*.to'   => ['required', 'integer', 'gte:accessions.*.from'],
-            // Print the call number and Cutter of books whose Dewey number is only a guess (left off by default).
-            'includeUnconfirmed' => ['nullable', 'boolean'],
         ]);
 
         return response()->json($this->catalog->copyLabels($selection));

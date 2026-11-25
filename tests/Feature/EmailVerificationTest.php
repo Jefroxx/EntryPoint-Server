@@ -168,9 +168,9 @@ class EmailVerificationTest extends TestCase
         $this->register();
         $student = Student::first();
 
-        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/reject")->assertOk();
+        $this->actingAs($librarian)->postJson("/api/librarian/students/{$student->uuid}/reject", ['reason' => 'The ID number does not match your school ID.'])->assertOk();
 
-        Mail::assertSent(StudentRejected::class, fn ($mail) => $mail->hasTo('ana@school.edu.ph'));
+        Mail::assertSent(StudentRejected::class, fn ($mail) => $mail->hasTo('ana@school.edu.ph') && $mail->reason === 'The ID number does not match your school ID.');
         Mail::assertNotSent(StudentApproved::class);
     }
 

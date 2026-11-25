@@ -11,7 +11,7 @@ class StudentRejected extends BrandedMail
 {
     use SerializesModels;
 
-    public function __construct(public Student $student)
+    public function __construct(public Student $student, public string $reason = '')
     {
         parent::__construct();
     }
@@ -29,6 +29,7 @@ class StudentRejected extends BrandedMail
             markdown: 'emails.students.rejected',
             with: [
                 'firstName' => $this->student->user->firstName,
+                'reason'    => $this->reason,
             ],
         );
     }

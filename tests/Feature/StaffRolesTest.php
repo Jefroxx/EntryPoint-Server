@@ -68,12 +68,12 @@ class StaffRolesTest extends TestCase
         $this->actingAs($this->staff('librarian'))->postJson("/api/librarian/students/{$student->uuid}/approve")->assertOk();
     }
 
-    public function test_everyone_can_read_settings_and_manage_their_own_account_but_only_settings_staff_change_loan_periods(): void
+    public function test_everyone_can_read_settings_and_manage_their_own_account_but_only_settings_staff_change_fine_rules(): void
     {
         $assistant = $this->staff('assistant');
 
         $this->actingAs($assistant)->getJson('/api/librarian/settings')->assertOk();
-        $this->actingAs($assistant)->putJson('/api/librarian/settings/loan-periods', [])->assertForbidden();
+        $this->actingAs($assistant)->putJson('/api/librarian/settings/fine-rules/circulation', ['rate' => 5, 'rateUnit' => 'day', 'gracePeriodDays' => 0])->assertForbidden();
         $this->actingAs($assistant)->deleteJson('/api/librarian/settings/fine-rules/circulation')->assertForbidden();
 
         // The account and password routes aren't behind the 'settings' permission (these fail validation, not the role check).

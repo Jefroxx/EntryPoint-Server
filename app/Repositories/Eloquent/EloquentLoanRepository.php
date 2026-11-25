@@ -24,6 +24,10 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
     {
         return Loan::where('status', 'Active')
             ->where('dueDate', '<', now())
+            // A rejected on-time report starts the fine from the rejection, not from the due time.
+            ->where(fn ($query) => $query->whereNull('fineStartsAt')->orWhere('fineStartsAt', '<', now()))
+            // While a student's self-return report waits to be checked, nothing is charged and no overdue notice goes out.
+            ->whereDoesntHave('selfReturnReport', fn ($report) => $report->where('verificationStatus', 'Pending'))
             ->with('copy.book')
             ->get();
     }
@@ -69,7 +73,8 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
 
     public function activeCountForStudent(int $studentID): int
     {
-        return Loan::where('studentID', $studentID)->where('status', 'Active')->count();
+        // A book handed in but not yet checked is still the student's until the librarian finishes the return.
+        return Loan::where('studentID', $studentID)->whereIn('status', ['Active', 'Received'])->count();
     }
 
     public function overdueCountForStudent(int $studentID): int
@@ -113,17 +118,24 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
             ->get();
     }
 
-    public function paginate(?string $search, ?string $status, int $perPage): LengthAwarePaginator
+    public function paginate(?string $search, ?string $status, int $perPage, ?string $area = null, bool $hideReceived = false): LengthAwarePaginator
     {
         return Loan::with(['student.user', 'copy.book'])
-            ->when($search, fn ($query, $term) => $query->whereHas(
+            // Grouped, so the status and collection filters below apply to a match on the book AND on the student.
+            ->when($search, fn ($query, $term) => $query->where(fn ($sq) => $sq->whereHas(
                 'copy.book',
                 fn ($bq) => $bq->where('title', 'like', "%{$term}%")
             )->orWhereHas(
                 'student.user',
                 fn ($uq) => $uq->where('firstName', 'like', "%{$term}%")->orWhere('lastName', 'like', "%{$term}%")
-            ))
+            )))
+            ->when($area, fn ($query, $key) => $query->where('loanType', $key))
+            // Handed in and waiting to be checked: those are looked after under Self-Return Reports.
+            ->when($hideReceived && ! $status, fn ($query) => $query->where('status', '!=', 'Received'))
+            // Out and not late: 'later' is more than a day from due, 'dueSoon' is within the next day, 'active' is both together.
             ->when($status === 'active', fn ($query) => $query->where('status', 'Active')->where('dueDate', '>=', now()))
+            ->when($status === 'later', fn ($query) => $query->where('status', 'Active')->where('dueDate', '>', now()->addHours(24)))
+            ->when($status === 'dueSoon', fn ($query) => $query->where('status', 'Active')->where('dueDate', '>=', now())->where('dueDate', '<=', now()->addHours(24)))
             ->when($status === 'overdue', fn ($query) => $query->where('status', 'Active')->where('dueDate', '<', now()))
             ->when($status === 'received', fn ($query) => $query->where('status', 'Received'))
             ->when($status === 'returned', fn ($query) => $query->where('status', 'Returned'))
@@ -139,6 +151,8 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
     {
         return [
             'active'  => Loan::where('status', 'Active')->count(),
+            // Not late and more than a day from due (so the tiles active-later, due soon, overdue and to check never overlap).
+            'later'   => Loan::where('status', 'Active')->where('dueDate', '>', now()->addHours(24))->count(),
             'dueSoon' => Loan::where('status', 'Active')
                 ->where('dueDate', '>=', now())
                 ->where('dueDate', '<=', now()->addHours(24))

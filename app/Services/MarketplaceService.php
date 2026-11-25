@@ -42,7 +42,7 @@ class MarketplaceService
         return $this->marketItems->create([
             'uuid'      => Str::uuid(),
             'name'      => $validated['name'],
-            'type'      => $validated['type'] ?? null,
+            'type'      => isset($validated['type']) ? $this->canonicalType($validated['type']) : null,
             'pointCost' => $validated['pointCost'],
             'stock'     => $validated['stock'],
         ]);
@@ -50,14 +50,24 @@ class MarketplaceService
 
     public function updateItem(MarketItem $item, array $validated): MarketItem
     {
+        if (! empty($validated['type'])) {
+            $validated['type'] = $this->canonicalType($validated['type']);
+        }
+
         return $this->marketItems->update($item, $validated)->fresh();
+    }
+
+    /** The type as it is written on the list (the request may have come in other capitals). */
+    private function canonicalType(string $type): string
+    {
+        return \App\Models\MarketItemType::where('name', $type)->value('name') ?? $type;
     }
 
     public function deleteItem(MarketItem $item): void
     {
         if ($this->marketItems->hasRedemptionHistory($item)) {
             throw ValidationException::withMessages([
-                'item' => ['Cannot delete: this item has redemption history. Set stock to 0 to retire it instead.'],
+                'item' => ['Cannot delete: this item has redemption history. Set its stock to 0 to stop students redeeming it instead.'],
             ]);
         }
 
@@ -252,7 +262,7 @@ class MarketplaceService
      * Cancel a pending redemption — refunds the points and restocks the
      * item, e.g. if the physical reward turned out to be unavailable.
      */
-    public function cancelRedemption(PointRedemption $redemption): PointRedemption
+    public function cancelRedemption(PointRedemption $redemption, string $reason): PointRedemption
     {
         if ($redemption->fulfillmentStatus !== 'Pending') {
             throw ValidationException::withMessages([
@@ -260,8 +270,8 @@ class MarketplaceService
             ]);
         }
 
-        DB::transaction(function () use ($redemption) {
-            $this->pointRedemptions->update($redemption, ['fulfillmentStatus' => 'Cancelled']);
+        DB::transaction(function () use ($redemption, $reason) {
+            $this->pointRedemptions->update($redemption, ['fulfillmentStatus' => 'Cancelled', 'cancelReason' => trim($reason)]);
             $this->marketItems->incrementStock($redemption->item, $redemption->quantity);
             $this->students->creditPoints($redemption->student, $redemption->pointsSpent);
         });
@@ -273,7 +283,7 @@ class MarketplaceService
 
         $this->notifications->send(
             $redemption->studentID,
-            "Your redemption of \"{$redemption->item->name}\" was cancelled and your {$redemption->pointsSpent} points have been refunded.",
+            "Your redemption of \"{$redemption->item->name}\" was cancelled: " . trim($reason) . " Your {$redemption->pointsSpent} points have been refunded.",
             'redemption_cancelled'
         );
 

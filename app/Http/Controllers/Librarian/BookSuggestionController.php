@@ -30,9 +30,22 @@ class BookSuggestionController extends Controller
         ]);
     }
 
+    public function arrived(Request $request, BookSuggestion $suggestion)
+    {
+        $suggestion = $this->bookSuggestions->markArrived($suggestion, $request->user()->librarian->librarianID);
+
+        return response()->json([
+            'message'    => 'Marked as arrived. The student has been told.',
+            'suggestion' => $suggestion,
+        ]);
+    }
+
     public function reject(Request $request, BookSuggestion $suggestion)
     {
-        $suggestion = $this->bookSuggestions->reject($suggestion, $request->user()->librarian->librarianID);
+        // Why it was turned down: the student is told. Required, so a request is never rejected without an answer.
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:500']]);
+
+        $suggestion = $this->bookSuggestions->reject($suggestion, $request->user()->librarian->librarianID, $data['reason']);
 
         return response()->json([
             'message'    => 'Suggestion rejected.',

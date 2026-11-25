@@ -59,7 +59,7 @@ class AddCopiesAcquisitionTest extends TestCase
         $this->add(['quantity' => 1, 'sourceOfFund' => 'Donation', 'cost' => 0])->assertCreated();
 
         $copy = BookCopy::where('bookID', $this->book->bookID)->firstOrFail();
-        $this->assertSame('Donation', $copy->sourceOfFund);
+        $this->assertSame('Donated', $copy->sourceOfFund);
         $this->assertSame('0.00', $copy->cost);
         $this->assertNull($copy->remarks);
     }
