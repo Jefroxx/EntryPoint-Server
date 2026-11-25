@@ -82,10 +82,10 @@ class CopyStatusTest extends TestCase
         $this->actingAs($this->librarian)
             ->patchJson("/api/librarian/copies/{$copy->uuid}", ['cost' => 250.5, 'sourceOfFund' => '  Donation ', 'remarks' => 'From the Class of 2025'])
             ->assertOk()
-            ->assertJsonPath('copy.sourceOfFund', 'Donation');
+            ->assertJsonPath('copy.sourceOfFund', 'Donated');
 
         $fresh = $copy->fresh();
-        $this->assertSame('Donation', $fresh->sourceOfFund);
+        $this->assertSame('Donated', $fresh->sourceOfFund);
         $this->assertEquals(250.5, $fresh->cost);
         $this->assertSame('From the Class of 2025', $fresh->remarks);
         $this->assertSame('available', $fresh->status);

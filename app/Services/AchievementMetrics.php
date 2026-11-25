@@ -138,7 +138,7 @@ class AchievementMetrics
 
             'reservationsPickedUp' => DB::table('reservations')->where('studentID', $id)->where('status', 'Fulfilled')->count(),
 
-            'suggestionsApproved' => DB::table('book_suggestions')->where('studentID', $id)->where('status', 'Approved')->count(),
+            'suggestionsApproved' => DB::table('book_suggestions')->where('studentID', $id)->whereIn('status', ['Approved', 'Arrived'])->count(),
 
             // A cancelled redemption was refunded, so it doesn't count as a reward the student got.
             'rewardsRedeemed' => DB::table('point_redemptions')->where('studentID', $id)->where('fulfillmentStatus', '!=', 'Cancelled')->count(),

@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Auth;
 
 /**
  * The librarian's visual record of stock: when copies were added to the catalog and when they were
- * removed, with the reason and who did it.
+ * removed, with the reason and who did it, and every change made to a copy or a book's record in between
+ * (status, cost, source of fund, remarks, title, area, Dewey number...) as "edited".
  */
 class StockLogService
 {
@@ -28,6 +29,34 @@ class StockLogService
     public function edited(Book $book, BookCopy $copy, string $note): BookStockLog
     {
         return $this->record($book, $copy, 'edited', 'Edited details', $note);
+    }
+
+    /** A copy's status changed by hand or at the return desk (on the shelf, damaged, lost); the note says from what to what. */
+    public function statusChanged(Book $book, BookCopy $copy, ?string $before, string $after, ?string $reason = null): ?BookStockLog
+    {
+        if ($before === $after) {
+            return null;
+        }
+
+        return $this->record($book, $copy, 'edited', 'Status changed', 'Status: '.self::statusLabel($before).' → '.self::statusLabel($after).($reason ? '. Reason: '.$reason : ''));
+    }
+
+    /** A change to the book's own record (title, area, Dewey number, authors...): not one copy's, so no accession number. */
+    public function bookEdited(Book $book, string $note): BookStockLog
+    {
+        return $this->record($book, null, 'edited', 'Book details edited', $note);
+    }
+
+    public static function statusLabel(?string $status): string
+    {
+        return match ($status) {
+            'available' => 'On the shelf',
+            'borrowed'  => 'Borrowed',
+            'damaged'   => 'Damaged',
+            'lost'      => 'Lost',
+            'retired'   => 'Removed',
+            default     => $status ?: '—',
+        };
     }
 
     public function paginate(?string $search, ?string $action, ?int $bookID, int $perPage): LengthAwarePaginator
@@ -52,15 +81,15 @@ class StockLogService
             ->paginate($perPage);
     }
 
-    private function record(Book $book, BookCopy $copy, string $action, string $reason, ?string $note): BookStockLog
+    private function record(Book $book, ?BookCopy $copy, string $action, string $reason, ?string $note): BookStockLog
     {
         $user = Auth::user();
 
         return BookStockLog::create([
             'bookID'          => $book->bookID,
             'bookTitle'       => $book->title,
-            'copyID'          => $copy->copyID,
-            'accessionNumber' => (string) $copy->accessionNumber,
+            'copyID'          => $copy?->copyID,
+            'accessionNumber' => $copy ? (string) $copy->accessionNumber : null,
             'action'          => $action,
             'reason'          => $reason,
             'note'            => $note,

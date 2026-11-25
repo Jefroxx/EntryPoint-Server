@@ -28,9 +28,9 @@ class AttendanceService
         return $this->attendanceLogs->listWithFilters($studentID, $activeOnly);
     }
 
-    public function index(?string $search, ?string $date, bool $activeOnly, int $perPage): LengthAwarePaginator
+    public function index(?string $search, ?string $date, bool $activeOnly, int $perPage, ?string $status = null, ?string $who = null, ?string $sort = null): LengthAwarePaginator
     {
-        return $this->attendanceLogs->paginate($search, $date, $activeOnly, $perPage);
+        return $this->attendanceLogs->paginate($search, $date, $activeOnly, $perPage, $status, $who, $sort);
     }
 
     /**
@@ -49,6 +49,11 @@ class AttendanceService
             'inside'              => [
                 'students' => $open->whereNotNull('studentID')->count(),
                 'visitors' => $open->whereNull('studentID')->count(),
+                // Of those, the ones whose visit started on an earlier day (left open, waiting for the nightly clean-up).
+                'earlier'  => [
+                    'students' => $open->whereNotNull('studentID')->filter(fn ($log) => ! $log->entryTime->isToday())->count(),
+                    'visitors' => $open->whereNull('studentID')->filter(fn ($log) => ! $log->entryTime->isToday())->count(),
+                ],
             ],
             'currentlyInLibrary'  => $this->attendanceLogs->currentlyInLibraryCount(),
             'totalVisitsToday'    => $this->attendanceLogs->totalVisitsToday(),
@@ -206,17 +211,21 @@ class AttendanceService
      */
     public function closeStale(AttendanceLog $log): array
     {
-        $exit = config('attendance.auto_close') === 'hours'
-            ? $log->entryTime->copy()->addHours((int) config('attendance.auto_close_hours'))
-            : $log->entryTime->copy()->setTimeFromTimeString((string) config('attendance.closing_time'));
-
-        if ($exit->lessThan($log->entryTime)) {
-            $exit = $log->entryTime->copy(); // came in after closing time
-        }
+        $exit = $this->autoCloseTime($log->entryTime);
 
         $this->attendanceLogs->update($log, ['exitTime' => $exit]);
 
         return ['logID' => $log->logID, 'exitTime' => $exit->toIso8601String()];
+    }
+
+    /** When something that started at $start is closed for it: the closing time of that day (or N hours later, see config/attendance.php). */
+    private function autoCloseTime(\Carbon\CarbonInterface $start): \Carbon\CarbonInterface
+    {
+        $exit = config('attendance.auto_close') === 'hours'
+            ? $start->copy()->addHours((int) config('attendance.auto_close_hours'))
+            : $start->copy()->setTimeFromTimeString((string) config('attendance.closing_time'));
+
+        return $exit->lessThan($start) ? $start->copy() : $exit; // came in after closing time
     }
 
     /**
@@ -261,6 +270,10 @@ class AttendanceService
             }
         }
 
+        // The library is closed, so nothing is in use: any session still running (a facility started for someone whose
+        // visit was already closed, say) ends with it.
+        $counts['sessionsEnded'] += $this->resources->endAllActiveSessions();
+
         return $counts;
     }
 
@@ -270,6 +283,10 @@ class AttendanceService
         $logs = $this->attendanceLogs->staleOpenLogs();
 
         $logs->each(fn (AttendanceLog $log) => $this->closeStale($log));
+
+        // A computer or room session left running from an earlier day ends at that day's closing time too:
+        // when the visits are closed the library is closed, so nothing can still be in use.
+        $this->resources->staleActiveSessions()->each(fn ($session) => $this->resources->endSession($session, $this->autoCloseTime($session->startTime)));
 
         return $logs->count();
     }

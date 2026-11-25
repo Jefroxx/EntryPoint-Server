@@ -122,6 +122,56 @@ class LostDamagedPenaltyTest extends TestCase
         $this->assertSame('damaged', $copy->fresh()->status);
     }
 
+    public function test_the_student_chooses_to_replace_or_pay_and_the_librarians_are_told(): void
+    {
+        $penalty = $this->open();
+
+        // The student's own list carries what the choice needs.
+        $row = $this->actingAs($this->student->user)->getJson('/api/student/penalties')->assertOk()->json('penalties.0');
+        $this->assertSame($penalty->uuid, $row['uuid']);
+        $this->assertNull($row['studentChoice']);
+
+        $this->postJson("/api/student/penalties/{$penalty->uuid}/choice", ['choice' => 'replace'])->assertOk();
+        $this->assertSame('replace', $penalty->fresh()->studentChoice);
+
+        $note = \App\Models\SystemNotification::where('userID', $this->librarian->userID)->where('type', 'copy_penalty_choice')->firstOrFail();
+        $this->assertStringContainsString('replace the book', $note->message);
+
+        // They can change their mind until it is settled; the choice is only a note for the desk, nothing is settled by it.
+        $this->postJson("/api/student/penalties/{$penalty->uuid}/choice", ['choice' => 'pay'])->assertOk();
+        $this->assertSame('pay', $penalty->fresh()->studentChoice);
+        $this->assertSame('Unpaid', $penalty->fresh()->paymentStatus);
+
+        $this->postJson("/api/student/penalties/{$penalty->uuid}/choice", ['choice' => 'maybe'])->assertUnprocessable();
+    }
+
+    public function test_only_the_student_who_owes_it_can_choose_and_not_once_it_is_settled(): void
+    {
+        $penalty = $this->open();
+
+        $this->actingAs($this->other->user)->postJson("/api/student/penalties/{$penalty->uuid}/choice", ['choice' => 'replace'])->assertUnprocessable();
+        $this->assertNull($penalty->fresh()->studentChoice);
+
+        $this->actingAs($this->librarian)->postJson("/api/librarian/penalties/{$penalty->uuid}/replace")->assertOk();
+        $this->actingAs($this->student->user)->postJson("/api/student/penalties/{$penalty->uuid}/choice", ['choice' => 'pay'])->assertUnprocessable();
+    }
+
+    public function test_the_reason_is_kept_told_to_the_student_and_written_in_the_stock_log(): void
+    {
+        $copy = $this->copy();
+
+        $this->issue(['type' => 'damaged', 'studentID' => $this->student->studentID, 'copyID' => $copy->copyID, 'reason' => 'Spilled water on it in the reading room'])
+            ->assertCreated()
+            ->assertJsonPath('penalty.reason', 'Spilled water on it in the reading room');
+
+        $note = \App\Models\SystemNotification::where('userID', $this->student->studentID)->where('type', 'copy_penalty_issued')->firstOrFail();
+        $this->assertStringContainsString('Spilled water on it in the reading room', $note->message);
+
+        $log = \App\Models\BookStockLog::where('copyID', $copy->copyID)->where('action', 'edited')->firstOrFail();
+        $this->assertStringContainsString('Damaged', $log->note);
+        $this->assertStringContainsString('Reason: Spilled water on it in the reading room', $log->note);
+    }
+
     public function test_a_student_and_a_copy_they_hold_charges_them_and_closes_that_loan(): void
     {
         $copy = $this->copy('borrowed');

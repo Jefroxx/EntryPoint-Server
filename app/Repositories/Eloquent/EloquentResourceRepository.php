@@ -18,16 +18,19 @@ class EloquentResourceRepository extends BaseRepository implements ResourceRepos
         return Resource::with('activeUsage.student.user')
             ->when($resourceType, fn ($query) => $query->where('resourceType', $resourceType))
             ->when($status, fn ($query) => $query->where('status', $status))
-            ->orderBy('name')
-            ->get();
+            ->get()
+            // By the numbers in the name, not letter by letter: Projector 3 comes before Projector 11.
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
     }
 
     public function studentListWithFilters(?string $resourceType): Collection
     {
         return Resource::query()
             ->when($resourceType, fn ($query) => $query->where('resourceType', $resourceType))
-            ->orderBy('name')
-            ->get(['resID', 'resourceType', 'name', 'status']);
+            ->get(['resID', 'resourceType', 'name', 'status'])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
     }
 
     public function lockForUpdate(int $resID): Resource

@@ -20,17 +20,22 @@ class StudentApprovalService
     ) {
     }
 
-    public function index(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null): LengthAwarePaginator
+    public function index(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null, ?string $sort = null, bool $inLibrary = false): LengthAwarePaginator
     {
-        return $this->students->paginate($search, $program, $status, $perPage, $memberType);
+        return $this->students->paginate($search, $program, $status, $perPage, $memberType, $sort, $inLibrary);
     }
 
     /**
-     * @return array{total: int, pending: int, approved: int, rejected: int}
+     * @return array{total: int, pending: int, approved: int, rejected: int, programs: list<string>}
      */
     public function stats(?string $memberType = null): array
     {
-        return $this->students->countsByRegistrationStatus($memberType);
+        return [
+            ...$this->students->countsByRegistrationStatus($memberType),
+            'programs' => $this->students->programs($memberType),
+            // The faculty and staff list is counted by type, since it has no registration queue.
+            ...($memberType === 'members' ? $this->students->countsByMemberType() : []),
+        ];
     }
 
     public function approve(Student $student, int $librarianID): Student
@@ -48,6 +53,7 @@ class StudentApprovalService
             'barcodeValue'          => $this->students->generateUniqueBarcode(),
             'reviewedByLibrarianID' => $librarianID,
             'reviewedAt'            => now(),
+            'rejectionReason'       => null,
         ]);
 
         $this->notifications->send(
@@ -67,7 +73,7 @@ class StudentApprovalService
         return $student->fresh();
     }
 
-    public function reject(Student $student, int $librarianID): Student
+    public function reject(Student $student, int $librarianID, string $reason): Student
     {
         if ($student->registrationStatus === 'approved') {
             throw ValidationException::withMessages(['student' => ['Cannot reject an already-approved student.']]);
@@ -77,16 +83,17 @@ class StudentApprovalService
             'registrationStatus'    => 'rejected',
             'reviewedByLibrarianID' => $librarianID,
             'reviewedAt'            => now(),
+            'rejectionReason'       => trim($reason),
         ]);
 
         $this->notifications->send(
             $student->studentID,
-            'Your registration was not approved. Please contact the library for details.',
+            'Your registration was not approved: ' . trim($reason) . ' Please contact the library if you have questions.',
             'registration_rejected'
         );
 
         try {
-            Mail::to($student->user->email)->send(new StudentRejected($student));
+            Mail::to($student->user->email)->send(new StudentRejected($student, trim($reason)));
         } catch (Throwable $exception) {
             Log::error("Rejection email failed for student {$student->studentID}", ['exception' => $exception]);
         }

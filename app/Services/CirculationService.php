@@ -37,12 +37,32 @@ class CirculationService
         private NotificationService $notifications,
         private AchievementService $achievements,
         private CopyPenaltyService $copyPenalties,
+        private StockLogService $stockLog,
     ) {
     }
 
-    public function index(?string $search, ?string $status, int $perPage): LengthAwarePaginator
+    public function index(?string $search, ?string $status, int $perPage, ?string $area = null, bool $hideReceived = false): LengthAwarePaginator
     {
-        return $this->loans->paginate($search, $status, $perPage);
+        // An overdue loan says what it has cost so far (what returning it right now would charge).
+        return $this->loans->paginate($search, $status, $perPage, $area, $hideReceived)->through(function (Loan $loan) {
+            $loan->setAttribute('fineSoFar', $this->fineSoFar($loan));
+
+            return $loan;
+        });
+    }
+
+    private function fineSoFar(Loan $loan): ?float
+    {
+        $end = $this->fineEnd($loan);
+
+        if ($loan->status !== 'Active' || $this->fineClock($loan)->greaterThanOrEqualTo($end)) {
+            return null;
+        }
+
+        $rule = $this->penalties->ruleForArea($loan->copy?->book?->areaOfLibrary ?? $loan->loanType);
+        $units = $rule ? $this->lateUnits($this->fineClock($loan), $end, $rule) : 0;
+
+        return $units > 0 ? round($rule->rate * $units, 2) : null;
     }
 
     /**
@@ -54,11 +74,11 @@ class CirculationService
     }
 
     /** `$kind`: 'copy' for the Lost & Damaged tab, 'late' for the Penalties tab, null for both. */
-    public function penaltiesIndex(?string $search, ?string $status, int $perPage, ?string $kind = null): LengthAwarePaginator
+    public function penaltiesIndex(?string $search, ?string $status, int $perPage, ?string $kind = null, ?string $area = null, ?string $type = null): LengthAwarePaginator
     {
         // penaltyType -> penalty_type: matches the frontend's naming, kept
         // out of the model layer since it's purely a response-shape concern.
-        return $this->penalties->paginate($search, $status, $perPage, $kind)->through(function (Penalty $penalty) {
+        return $this->penalties->paginate($search, $status, $perPage, $kind, $area, $type)->through(function (Penalty $penalty) {
             $array = $penalty->toArray();
             $array['penalty_type'] = $penalty->penaltyType;
             unset($array['penaltyType']);
@@ -93,6 +113,64 @@ class CirculationService
             // Paying for a lost or damaged book ends that copy's life in the catalog.
             $this->copyPenalties->retireAfterPayment($penalty);
         });
+
+        return $penalty->fresh(Penalty::listingRelations());
+    }
+
+    /**
+     * The librarian corrects a fine that is still unpaid: a note on it, and (once its amount is settled) the amount.
+     * A late fee that is still running up can't have its amount typed over: the hourly job would write it back.
+     */
+    public function updatePenalty(Penalty $penalty, array $data): Penalty
+    {
+        $penalty->loadMissing('loan', 'penaltyType');
+
+        if ($penalty->paymentStatus !== 'Unpaid') {
+            throw ValidationException::withMessages(['penalty' => ['Only an unpaid penalty can be edited.']]);
+        }
+
+        $changes = [];
+
+        if (array_key_exists('amount', $data) && $data['amount'] !== null && (float) $data['amount'] !== (float) $penalty->amount) {
+            if (! $penalty->isForCopy() && $penalty->loan && $penalty->loan->status !== 'Returned') {
+                throw ValidationException::withMessages(['amount' => ['This fine is still running up until the book is back, so its amount can\'t be changed yet.']]);
+            }
+            $changes['amount'] = round((float) $data['amount'], 2);
+        }
+
+        if (array_key_exists('reason', $data)) {
+            $changes['reason'] = trim((string) $data['reason']) !== '' ? trim($data['reason']) : null;
+        }
+
+        if ($changes) {
+            $this->penalties->update($penalty, $changes);
+
+            if (isset($changes['amount'])) {
+                $title = $penalty->copy?->book()->withTrashed()->first()?->title ?? 'a book';
+                $this->notifications->send($penalty->studentID, "The penalty for \"{$title}\" was changed to ₱" . number_format($changes['amount'], 2) . '.', 'penalty_amount_changed');
+            }
+        }
+
+        return $penalty->fresh(Penalty::listingRelations());
+    }
+
+    /** The librarian forgives a late fee, with a reason. Nothing is owed any more and the student is told. */
+    public function waivePenalty(Penalty $penalty, string $reason): Penalty
+    {
+        $penalty->loadMissing('penaltyType');
+
+        if ($penalty->paymentStatus !== 'Unpaid') {
+            throw ValidationException::withMessages(['penalty' => ['Only an unpaid fine can be waived.']]);
+        }
+
+        if ($penalty->isForCopy()) {
+            throw ValidationException::withMessages(['penalty' => ['A lost or damaged book is not waived: mark the book found or repaired to cancel the penalty instead.']]);
+        }
+
+        $this->penalties->update($penalty, ['paymentStatus' => 'Waived', 'settledAt' => now(), 'reason' => trim($reason)]);
+
+        $title = $penalty->copy?->book()->withTrashed()->first()?->title ?? 'a book';
+        $this->notifications->send($penalty->studentID, "Your late fee for \"{$title}\" was waived. You no longer owe it.", 'penalty_waived');
 
         return $penalty->fresh(Penalty::listingRelations());
     }
@@ -149,6 +227,8 @@ class CirculationService
                 }
             }
 
+            $this->assertCanBorrow((int) $validated['studentID'], $reservation !== null, (int) $copy->bookID);
+
             $this->assertLoanable($copy->book);
 
             $loan = $this->loans->create([
@@ -188,6 +268,43 @@ class CirculationService
         );
 
         return $loan;
+    }
+
+    /**
+     * Who may borrow at the desk: an approved account, with no overdue book, no unpaid penalty, and a free slot. A
+     * student has three slots in all (loans and open reservations together, the same as when reserving); collecting
+     * a reservation turns one of those slots into a loan, so it never needs a free one.
+     */
+    private function assertCanBorrow(int $studentID, bool $collectingReservation, int $bookID): void
+    {
+        $student = \App\Models\Student::find($studentID);
+
+        if (! $student || $student->registrationStatus !== 'approved') {
+            throw ValidationException::withMessages(['studentID' => ["This account isn't approved, so it can't borrow books."]]);
+        }
+
+        $overdue = \App\Models\Loan::where('studentID', $studentID)->where('status', 'Active')->where('dueDate', '<', now())->count();
+        if ($overdue > 0) {
+            throw ValidationException::withMessages(['studentID' => ["They have {$overdue} overdue " . ($overdue === 1 ? 'book' : 'books') . '. Return ' . ($overdue === 1 ? 'it' : 'them') . ' first.']]);
+        }
+
+        if ($this->penalties->unpaidTotalForStudent($studentID) > 0) {
+            throw ValidationException::withMessages(['studentID' => ['They have an unpaid penalty. Settle it first (Circulation > Penalties).']]);
+        }
+
+        // One copy of a title at a time: they can't have a second copy of a book they still have out.
+        $sameBook = \App\Models\Loan::where('studentID', $studentID)->whereIn('status', ['Active', 'Received'])
+            ->whereHas('copy', fn ($copy) => $copy->where('bookID', $bookID))->exists();
+        if ($sameBook) {
+            throw ValidationException::withMessages(['studentID' => ['They already have a copy of this book. A student can have only one copy of a title at a time.']]);
+        }
+
+        $max = AppSettings::maxBooks();
+        $slotsUsed = $this->loans->activeCountForStudent($studentID) + $this->reservations->activeCountForStudent($studentID);
+
+        if ($collectingReservation ? $slotsUsed > $max : $slotsUsed >= $max) {
+            throw ValidationException::withMessages(['studentID' => ["They already have {$max} " . ($max === 1 ? 'book' : 'books') . " out or reserved, which is the most at a time."]]);
+        }
     }
 
     /**
@@ -246,6 +363,9 @@ class CirculationService
      */
     public function returnPreview(Loan $loan, ?SelfReturnReport $report = null): array
     {
+        // Returning at the desk a book the student already reported is judged as of their report too.
+        $report ??= $this->pendingReport($loan);
+
         if ($loan->status !== 'Active') {
             throw ValidationException::withMessages([
                 'loan' => ["Only an 'Active' loan can be returned."],
@@ -259,7 +379,9 @@ class CirculationService
         $user = $student->user;
 
         $rule = $this->penalties->ruleForArea($book->areaOfLibrary);
-        $unitsLate = $rule ? $this->lateUnits($loan->dueDate, now(), $rule) : 0;
+        // A self-return report is judged as of the moment the student reported, not the moment it is looked at.
+        $end = $report?->reportedAt ?? now();
+        $unitsLate = $rule ? $this->lateUnits($this->fineClock($loan), $end, $rule) : 0;
 
         // An overdue book can already have its fine on record (the hourly job writes it), and the desk may have
         // marked it paid in the Penalties tab: then the window can say so itself instead of asking.
@@ -276,7 +398,7 @@ class CirculationService
                 'status'     => $loan->status,
                 'checkoutAt' => $loan->checkoutDate->toIso8601String(),
                 'dueAt'      => $loan->dueDate->toIso8601String(),
-                'overdue'    => $loan->dueDate->isPast(),
+                'overdue'    => $this->fineClock($loan)->lt($end),
             ],
             'book' => [
                 'title'           => $book->title,
@@ -321,8 +443,20 @@ class CirculationService
      * Returns an active loan. `$finePaid` is the librarian saying the student has paid the late fee at the desk:
      * the fine is then settled in the same step; otherwise it stays on record as unpaid.
      */
-    public function returnBook(Loan $loan, bool $finePaid = false, ?string $receiptNumber = null): Loan
+    public function returnBook(Loan $loan, bool $finePaid = false, ?string $receiptNumber = null, ?int $librarianID = null): Loan
     {
+        // The student already reported this book back: returning it at the desk settles that report, so the fine is
+        // judged as of when they reported it, exactly as if the report had been verified.
+        $pending = $this->pendingReport($loan);
+        if ($pending && $loan->status === 'Active' && $librarianID) {
+            $this->verifySelfReturn($pending, $librarianID, $finePaid, $receiptNumber);
+
+            $loan->refresh();
+            $this->loans->loadForResponse($loan);
+
+            return $loan;
+        }
+
         // A book already handed over and waiting to be checked finishes as "in good condition".
         if ($loan->status === 'Received') {
             return $this->finishReturn($loan, 'good');
@@ -417,7 +551,13 @@ class CirculationService
 
         DB::transaction(function () use ($loan, $condition) {
             $this->loans->update($loan, ['status' => 'Returned']);
-            $this->bookCopies->update($loan->copy, ['status' => $condition === 'damaged' ? 'damaged' : 'available']);
+            $before = $loan->copy->status;
+            $after = $condition === 'damaged' ? 'damaged' : 'available';
+            $this->bookCopies->update($loan->copy, ['status' => $after]);
+            // Only a copy that came back damaged is a change to the copy; coming back on the shelf is loan activity.
+            if ($after === 'damaged') {
+                $this->stockLog->statusChanged($loan->copy->book, $loan->copy, $before, 'damaged');
+            }
             $this->accruePenalty($loan);
 
             if ($condition !== 'damaged') {
@@ -546,7 +686,11 @@ class CirculationService
                 'verifiedByLibrarianID' => $librarianID,
                 'verificationStatus'    => 'Verified',
             ]);
-            $penalty = $this->markReturned($report->loan);
+            // The book came back when the student handed it in, not when the librarian got round to checking: a fine
+            // stops there, and a book reported before it was due is never late, however long the check took.
+            $loan = $report->loan;
+            $this->loans->update($loan, ['returnDate' => $loan->returnDate ?? $report->reportedAt]);
+            $penalty = $this->markReturned($loan);
 
             if ($finePaid && $penalty && $penalty->paymentStatus !== 'Paid') {
                 $this->penalties->update($penalty, ['paymentStatus' => 'Paid', 'settledAt' => now(), 'receiptNumber' => $receiptNumber]);
@@ -574,11 +718,20 @@ class CirculationService
             ]);
         }
 
-        $this->selfReturnReports->update($report, [
-            'verifiedByLibrarianID' => $librarianID,
-            'verificationStatus'    => 'Rejected',
-            'rejectionReason'       => $reason,
-        ]);
+        DB::transaction(function () use ($report, $librarianID, $reason) {
+            $this->selfReturnReports->update($report, [
+                'verifiedByLibrarianID' => $librarianID,
+                'verificationStatus'    => 'Rejected',
+                'rejectionReason'       => $reason,
+            ]);
+
+            // The student reported it before it was due, so nothing was late until now: the late fee starts counting
+            // from this rejection. (A report made once the book was already overdue changes nothing: it stays late.)
+            $loan = $report->loan;
+            if ($report->reportedAt->lessThanOrEqualTo($loan->dueDate)) {
+                $this->loans->update($loan, ['fineStartsAt' => now()]);
+            }
+        });
 
         $this->selfReturnReports->loadForResponse($report);
 
@@ -661,13 +814,19 @@ class CirculationService
         }
 
         $endTime = $loan->returnDate ?? now();
-        $elapsedUnits = $this->lateUnits($loan->dueDate, $endTime, $rule);
+        $elapsedUnits = $this->lateUnits($this->fineClock($loan), $endTime, $rule);
 
         if ($elapsedUnits <= 0) {
             return null; // not actually overdue
         }
 
         $penalty = $this->penalties->firstOrNewForLoan($loan->loanID);
+
+        // Once a fine is paid, replaced or waived it is settled: the clock running on never changes it.
+        if ($penalty->exists && $penalty->paymentStatus !== 'Unpaid') {
+            return $penalty;
+        }
+
         $penalty->uuid ??= (string) Str::uuid();
         $penalty->studentID = $loan->studentID;
         $penalty->copyID = $loan->copyID;
@@ -684,6 +843,33 @@ class CirculationService
      * How many units a fine is charged for: the lateness that is left once the rule's grace period (whole days after
      * the due time) has passed. Within the grace period nothing is charged.
      */
+    /** The student's self-return report for this loan, if it is still waiting to be checked. */
+    private function pendingReport(Loan $loan): ?SelfReturnReport
+    {
+        $report = $loan->selfReturnReport;
+
+        return $report && $report->verificationStatus === 'Pending' ? $report : null;
+    }
+
+    /**
+     * When this loan's late fee starts counting: the due time, or later if an on-time self-return report was rejected
+     * (the book was not really handed in, so the clock starts at the rejection).
+     */
+    private function fineClock(Loan $loan): Carbon
+    {
+        $due = Carbon::parse($loan->dueDate);
+
+        return $loan->fineStartsAt && $loan->fineStartsAt->gt($due) ? Carbon::parse($loan->fineStartsAt) : $due;
+    }
+
+    /** Where a still-out loan's fine counts up to: now, or the moment the student reported it while that report waits. */
+    private function fineEnd(Loan $loan): Carbon
+    {
+        $report = $loan->selfReturnReport;
+
+        return $report && $report->verificationStatus === 'Pending' ? Carbon::parse($report->reportedAt) : now();
+    }
+
     public function lateUnits(\DateTimeInterface $due, \DateTimeInterface $end, PenaltyRule $rule): int
     {
         $chargeFrom = Carbon::parse($due)->addDays((int) ($rule->gracePeriodDays ?? 0));

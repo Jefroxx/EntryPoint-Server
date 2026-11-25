@@ -30,6 +30,18 @@ class PortalController extends Controller
         return response()->json(['loans' => $this->portalService->loans($request->user()->student)]);
     }
 
+    /** How the student will settle a lost or damaged book: pay it, or replace it. */
+    public function choosePenalty(Request $request, \App\Models\Penalty $penalty, \App\Services\CopyPenaltyService $copyPenalties)
+    {
+        $data = $request->validate(['choice' => ['required', 'in:pay,replace']]);
+
+        $copyPenalties->chooseResolution($penalty, $request->user()->student->studentID, $data['choice']);
+
+        return response()->json(['message' => $data['choice'] === 'replace'
+            ? 'Noted. Bring a replacement copy to the library desk.'
+            : 'Noted. You can pay it at the library desk.']);
+    }
+
     public function penalties(Request $request)
     {
         return response()->json($this->portalService->penalties($request->user()->student));

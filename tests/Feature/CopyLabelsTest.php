@@ -43,51 +43,29 @@ class CopyLabelsTest extends TestCase
         $this->assertSame($a->barcodeValue, $labels[0]['barcodeValue']);   // accession order, not the order asked for
         $this->assertSame('Noli Me Tangere', $labels[0]['title']);
         $this->assertSame('899.211', $labels[0]['callNumber']);   // the call number is the Dewey number; the Cutter is its own field
-        $this->assertSame('Filipiniana', $labels[0]['area']);
+        $this->assertSame('FIL', $labels[0]['area']);   // the area's acronym, as the librarian set it
         // The lines of the printed label, top to bottom: area, call number (Dewey), author Cutter, year.
         $this->assertSame('899.211', $labels[0]['dewey']);
         $this->assertSame('R59n', $labels[0]['cutter']);
         $this->assertSame($book->publicationYear, $labels[0]['year']);
     }
 
-    public function test_a_guessed_call_number_is_left_off_the_label(): void
-    {
-        $book = Book::factory()->create(['deweyStatus' => 'needs_review', 'deweyNumber' => '254.52', 'cutter' => 'Z##']);
-        BookCopy::factory()->create(['bookID' => $book->bookID]);
-
-        $this->actingAs($this->librarian)
-            ->postJson('/api/librarian/copies/labels', ['book' => $book->uuid])
-            ->assertOk()
-            ->assertJsonPath('labels.0.callNumber', null)
-            ->assertJsonPath('labels.0.dewey', null)
-            ->assertJsonPath('labels.0.cutter', null);
-    }
-
-    public function test_the_librarian_can_choose_to_print_a_guessed_number_anyway(): void
+    public function test_a_guessed_call_number_prints_but_is_flagged_so_the_window_can_ask_first(): void
     {
         $guessed = Book::factory()->create(['deweyStatus' => 'needs_review', 'deweyNumber' => '254.52', 'cutter' => 'Z##', 'publicationYear' => 2011]);
         $checked = Book::factory()->create(['deweyStatus' => 'ok', 'deweyNumber' => '005.1', 'cutter' => 'C67']);
         BookCopy::factory()->create(['bookID' => $guessed->bookID]);
         BookCopy::factory()->create(['bookID' => $checked->bookID]);
 
-        // Off (the default): the guess stays off the label, and the label says so with `unconfirmed`.
+        // Every label carries its Dewey number and Cutter; the unconfirmed flag marks the guessed one for the print window's warning.
         $labels = $this->actingAs($this->librarian)->postJson('/api/librarian/copies/labels', [])->assertOk()->json('labels');
-        $this->assertNull($labels[0]['dewey']);
-        $this->assertNull($labels[0]['cutter']);
-        $this->assertTrue($labels[0]['unconfirmed']);
-        $this->assertSame(2011, $labels[0]['year']);                  // the rest of the label still prints
-        $this->assertSame('005.1', $labels[1]['dewey']);
-        $this->assertFalse($labels[1]['unconfirmed']);
-
-        // On: the guess is printed, still flagged; a confirmed number is unchanged.
-        $labels = $this->actingAs($this->librarian)->postJson('/api/librarian/copies/labels', ['includeUnconfirmed' => true])->assertOk()->json('labels');
         $this->assertSame('254.52', $labels[0]['dewey']);
         $this->assertSame('Z##', $labels[0]['cutter']);
         $this->assertSame('254.52', $labels[0]['callNumber']);
         $this->assertTrue($labels[0]['unconfirmed']);
+        $this->assertSame(2011, $labels[0]['year']);
         $this->assertSame('005.1', $labels[1]['dewey']);
-
-        $this->actingAs($this->librarian)->postJson('/api/librarian/copies/labels', ['includeUnconfirmed' => 'maybe'])->assertUnprocessable();
+        $this->assertFalse($labels[1]['unconfirmed']);
     }
 
     public function test_every_copy_of_a_book_and_nothing_removed(): void

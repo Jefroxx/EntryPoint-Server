@@ -11,9 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 class SettingsService
 {
-    // The only areas the client's Settings page edits — the other
-    // areaOfLibrary values (fiction, thesis, journal, dissertation) keep
-    // whatever loan_periods row the classification migration seeded.
+    // The areas the Settings page sets a fine rule for. How each area is lent out (and its loan period) is set with the
+    // area itself, in Library > Areas & Funds.
     private const COLLECTION_AREAS = ['circulation', 'reserved', 'filipiniana'];
 
     public function __construct(
@@ -25,15 +24,9 @@ class SettingsService
 
     public function overview(User $account): array
     {
-        $periods = $this->loanPeriods->all()->keyBy('area');
-
-        $loanPeriods = [];
         $fineRules = [];
 
         foreach (self::COLLECTION_AREAS as $area) {
-            $period = $periods->get($area);
-            $loanPeriods[$area] = $period?->periodValue ?? 0;
-
             $rule = $this->penalties->fineRuleForArea($area);
             $fineRules[] = [
                 'area'            => $area,
@@ -45,7 +38,9 @@ class SettingsService
         }
 
         return [
-            'loanPeriods' => $loanPeriods,
+            'reservationHoldHours' => AppSettings::holdHours(),
+            'maxBooks'            => AppSettings::maxBooks(),
+            'lowStockAt'          => AppSettings::lowStockAt(),
             'fineRules'   => $fineRules,
             'account'     => [
                 'firstName' => $account->firstName,
@@ -55,15 +50,16 @@ class SettingsService
         ];
     }
 
-    public function saveLoanPeriods(array $payload): void
+    /** How long an accepted reservation holds a copy, and the most books a student can have at a time. */
+    public function saveBorrowing(int $holdHours, int $maxBooks): void
     {
-        foreach ($payload as $area => $days) {
-            if (! in_array($area, self::COLLECTION_AREAS, true)) {
-                continue;
-            }
+        AppSettings::set(AppSettings::RESERVATION_HOLD_HOURS, $holdHours);
+        AppSettings::set(AppSettings::MAX_BOOKS, $maxBooks);
+    }
 
-            $this->loanPeriods->upsert($area, (int) $days, 'days');
-        }
+    public function saveRewards(int $lowStockAt): void
+    {
+        AppSettings::set(AppSettings::LOW_STOCK_AT, $lowStockAt);
     }
 
     public function saveFineRule(string $area, array $payload): array

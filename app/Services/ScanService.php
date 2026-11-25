@@ -155,7 +155,7 @@ class ScanService
             'resource' => $this->resourceSummary($log->resource),
             'student'  => [
                 'name'            => $student->user->fullName,
-                'program'         => $student->academicProgram,
+                'program'         => $student->academicProgram ?? $student->department,
                 'memberIDNumber' => $student->memberIDNumber,
             ],
         ];
@@ -174,7 +174,7 @@ class ScanService
             'log'             => $result['log'],
             'student'         => [
                 'name'            => $student->user->fullName,
-                'program'         => $student->academicProgram,
+                'program'         => $student->academicProgram ?? $student->department,
                 'memberIDNumber' => $student->memberIDNumber,
                 'visitStreak'     => $student->visitStreak,
             ],

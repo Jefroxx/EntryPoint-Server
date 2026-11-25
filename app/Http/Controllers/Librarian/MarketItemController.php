@@ -17,7 +17,8 @@ class MarketItemController extends Controller
 
     public function index()
     {
-        return response()->json(['items' => $this->marketplace->listItems()]);
+        // `lowStockAt`: a reward with this many left, or fewer, is running low (set in Settings).
+        return response()->json(['items' => $this->marketplace->listItems(), 'lowStockAt' => \App\Services\AppSettings::lowStockAt()]);
     }
 
     public function store(StoreMarketItemRequest $request)

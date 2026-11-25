@@ -11,7 +11,7 @@ interface LoanRepositoryInterface extends RepositoryInterface
 {
     public function loadForResponse(Loan $loan): Loan;
 
-    public function paginate(?string $search, ?string $status, int $perPage): LengthAwarePaginator;
+    public function paginate(?string $search, ?string $status, int $perPage, ?string $area = null, bool $hideReceived = false): LengthAwarePaginator;
 
     /**
      * @return array{active: int, dueSoon: int, overdue: int}

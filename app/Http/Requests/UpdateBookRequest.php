@@ -38,7 +38,7 @@ class UpdateBookRequest extends FormRequest
         return [
             'title'          => ['sometimes', 'string', 'max:255'],
             'deweyNumber'    => ['sometimes', 'nullable', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/'],
-            'areaOfLibrary' => ['sometimes', 'in:circulation,reserved,filipiniana,fiction,thesis,journal,dissertation'],
+            'areaOfLibrary' => ['sometimes', 'exists:loan_periods,area'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],
             // Marks the book as a new arrival (or takes the mark off): it then shows on the student Home.

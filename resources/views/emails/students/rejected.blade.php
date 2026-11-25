@@ -3,6 +3,11 @@
 
 A librarian reviewed your library registration and was unable to approve it at this time.
 
+@if ($reason !== '')
+**Reason:** {{ $reason }}
+
+@endif
+
 If you think this is a mistake, or you'd like to know what to fix, please visit the library or
 contact the librarian directly. They can help you get registered.
 

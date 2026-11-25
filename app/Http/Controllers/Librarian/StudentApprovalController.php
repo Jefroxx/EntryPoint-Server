@@ -21,6 +21,8 @@ class StudentApprovalController extends Controller
             $request->query('status'),
             (int) ($request->query('perPage') ?? 15),
             $this->memberType($request),
+            in_array($request->query('sort'), ['oldest', 'newest'], true) ? $request->query('sort') : null,
+            $request->boolean('inLibrary'),
         ));
     }
 
@@ -52,7 +54,10 @@ class StudentApprovalController extends Controller
 
     public function reject(Request $request, Student $student)
     {
-        $student = $this->studentApproval->reject($student, $request->user()->librarian->librarianID);
+        // The student is told why, so a reason is required.
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:500']]);
+
+        $student = $this->studentApproval->reject($student, $request->user()->librarian->librarianID, $data['reason']);
 
         return response()->json([
             'message' => 'Student rejected.',

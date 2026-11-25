@@ -25,6 +25,7 @@ class CopyPenaltyService
         private BookCopyRepositoryInterface $bookCopies,
         private CatalogService $catalog,
         private NotificationService $notifications,
+        private StockLogService $stockLog,
     ) {
     }
 
@@ -34,7 +35,7 @@ class CopyPenaltyService
      *
      * Give either `$loan` (its student and copy are used) or `$studentID` and `$copy` (no loan needed).
      */
-    public function issue(string $kind, float $amount, ?Loan $loan, ?int $studentID, ?BookCopy $copy): Penalty
+    public function issue(string $kind, float $amount, ?Loan $loan, ?int $studentID, ?BookCopy $copy, ?string $reason = null): Penalty
     {
         if (! in_array($kind, Penalty::COPY_KINDS, true)) {
             throw ValidationException::withMessages(['type' => ['A penalty is for a book that is lost or damaged.']]);
@@ -51,7 +52,9 @@ class CopyPenaltyService
             throw ValidationException::withMessages(['loan' => ['Choose a loan, or a student and a copy.']]);
         }
 
-        $penalty = DB::transaction(function () use ($kind, $amount, $loan, $studentID, $copy) {
+        $reason = $reason !== null && trim($reason) !== '' ? trim($reason) : null;
+
+        $penalty = DB::transaction(function () use ($kind, $amount, $loan, $studentID, $copy, $reason) {
             $copy = $this->bookCopies->lockForUpdateWithBook($copy->copyID);
 
             if ($copy->status === 'retired') {
@@ -80,7 +83,10 @@ class CopyPenaltyService
                 $this->closeLoan($holding);
             }
 
+            $before = $copy->status;
             $this->bookCopies->update($copy, ['status' => $kind]);
+            // The copy's record changed, so the stock log says so (with the reason, if one was given).
+            $this->stockLog->statusChanged($copy->book, $copy, $before, $kind, $reason);
 
             return $this->penalties->create([
                 'uuid'          => (string) Str::uuid(),
@@ -91,6 +97,7 @@ class CopyPenaltyService
                 'amount'        => round($amount, 2),
                 'computedAt'    => now(),
                 'paymentStatus' => 'Unpaid',
+                'reason'        => $reason,
             ]);
         });
 
@@ -99,13 +106,51 @@ class CopyPenaltyService
         $this->notifications->send(
             $studentID,
             sprintf(
-                'The book "%s" (accession no. %s) was marked %s. You can pay %s at the desk, or replace the book. Please see the librarian.',
-                $title, $penalty->copy->accessionNumber, $kind, '₱' . number_format($penalty->amount, 2)
+                'The book "%s" (accession no. %s) was marked %s%s. You can pay %s at the desk, or replace the book. Please see the librarian.',
+                $title, $penalty->copy->accessionNumber, $kind, $reason ? " ({$reason})" : '', '₱' . number_format($penalty->amount, 2)
             ),
             'copy_penalty_issued'
         );
 
         return $penalty->load(Penalty::listingRelations());
+    }
+
+    /**
+     * The student says how they will settle a lost or damaged book: pay the amount, or bring a replacement. It can
+     * be changed until the penalty is settled. The librarians are told, so the desk is ready; nothing is settled yet.
+     */
+    public function chooseResolution(Penalty $penalty, int $studentID, string $choice): Penalty
+    {
+        if ($penalty->studentID !== $studentID) {
+            throw ValidationException::withMessages(['penalty' => ['This penalty is not yours.']]);
+        }
+
+        $this->assertOpenCopyPenalty($penalty, 'settled');
+
+        if (! in_array($choice, ['pay', 'replace'], true)) {
+            throw ValidationException::withMessages(['choice' => ['Choose to pay or to replace the book.']]);
+        }
+
+        if ($penalty->studentChoice === $choice) {
+            return $penalty;
+        }
+
+        $this->penalties->update($penalty, ['studentChoice' => $choice]);
+
+        $penalty->loadMissing('student.user');
+        $book = $penalty->copy->book()->withTrashed()->first();
+        $this->notifications->notifyAllLibrarians(
+            sprintf(
+                '%s will %s for "%s" (accession no. %s).',
+                $penalty->student?->user?->fullName ?? 'A student',
+                $choice === 'replace' ? 'replace the book' : 'pay the penalty',
+                $book?->title ?? 'a book',
+                $penalty->copy->accessionNumber
+            ),
+            'copy_penalty_choice'
+        );
+
+        return $penalty->fresh();
     }
 
     /** The student brought a replacement: close the penalty without payment, add the new copy and retire the old one. */
@@ -151,7 +196,12 @@ class CopyPenaltyService
             $penalty->delete();
 
             if (in_array($copy->status, Penalty::COPY_KINDS, true)) {
+                $before = $copy->status;
                 $this->bookCopies->update($copy, ['status' => 'available']);
+                $book = $copy->book()->withTrashed()->first();
+                if ($book) {
+                    $this->stockLog->statusChanged($book, $copy, $before, 'available', 'Penalty cancelled: the book was found or repaired');
+                }
             }
         });
 

@@ -57,6 +57,7 @@ class CatalogService
         private ReservationRepositoryInterface $reservations,
         private PenaltyRepositoryInterface $penalties,
         private NotificationService $notifications,
+        private FundSourceService $fundSources,
     ) {
     }
 
@@ -80,10 +81,11 @@ class CatalogService
      * remapped to match the frontend's contract (`callNumber` instead of
      * worked out from `deweyNumber` + `cutter`), independent of the storage schema.
      */
-    public function catalogIndex(?string $search, ?int $subjectID, ?string $availability, int $perPage, ?string $dewey = null): LengthAwarePaginator
+    public function catalogIndex(?string $search, ?int $subjectID, ?string $availability, int $perPage, ?string $dewey = null, ?string $area = null): LengthAwarePaginator
     {
-        return $this->books->paginateCatalog($search, $subjectID, $availability, $perPage, $dewey)->through(fn (Book $book) => [
+        return $this->books->paginateCatalog($search, $subjectID, $availability, $perPage, $dewey, $area)->through(fn (Book $book) => [
             'bookID'        => $book->bookID,
+            'areaOfLibrary' => $book->areaOfLibrary,
             'uuid'          => $book->uuid,
             'title'         => $book->title,
             'isbn'          => $book->isbn,
@@ -171,9 +173,13 @@ class CatalogService
         }
 
         return DB::transaction(function () use ($copy, $status, $open) {
+            $before = $copy->status;
             $open?->delete();
 
-            return $this->bookCopies->update($copy, ['status' => $status]);
+            $updated = $this->bookCopies->update($copy, ['status' => $status]);
+            $this->stockLog->statusChanged($copy->book ?? $copy->load('book')->book, $updated, $before, $status);
+
+            return $updated;
         });
     }
 
@@ -196,16 +202,12 @@ class CatalogService
         $copies = $this->bookCopies->forLabels($selection, self::MAX_LABELS + 1);
         $total = $copies->count();
 
-        // Off unless the librarian asks for it in the print window: a number that is only a guess from the category is
-        // left off the label (so nobody shelves by it), and printing it is a choice, made knowing it may be wrong.
-        $includeUnconfirmed = (bool) ($selection['includeUnconfirmed'] ?? false);
-
-        $labels = $copies->take(self::MAX_LABELS)->map(function (BookCopy $copy) use ($includeUnconfirmed) {
+        // Every label prints its Dewey number and Cutter, verified or not. `unconfirmed` marks the books whose Dewey number is
+        // still only a guess from the category, so the print window can list those copies and ask before they are printed.
+        $labels = $copies->take(self::MAX_LABELS)->map(function (BookCopy $copy) {
             // The label's lines, top to bottom: area of the library, call number (the Dewey number), the author's
-            // Cutter, year of publication. While the Dewey number is only a guess, the call number and Cutter lines
-            // stay empty (`spineLabel` does that), unless the librarian chose to print the guess.
+            // Cutter, year of publication.
             $spine = $copy->book->spineLabel();
-            $printGuess = $spine['pending'] && $includeUnconfirmed;
 
             return [
                 'uuid'            => $copy->uuid,
@@ -214,12 +216,12 @@ class CatalogService
                 'title'           => $copy->book->title,
                 'authors'         => $copy->book->authors->pluck('name')->values(),
                 // The two parts of the shelf number, apart (the label prints them on their own lines) ...
-                'dewey'           => $printGuess ? ($copy->book->deweyNumber ?: null) : $spine['dewey'],
-                'cutter'          => $printGuess ? ($copy->book->cutter ?: null) : $spine['cutter'],
-                // ... and joined. `unconfirmed` says the number is a guess (or was left off for that reason), whichever way it prints.
-                'callNumber'      => $printGuess ? $copy->book->callNumber : $copy->book->publicCallNumber(),
+                'dewey'           => $copy->book->deweyNumber ?: null,
+                'cutter'          => $copy->book->cutter ?: null,
+                // ... and joined.
+                'callNumber'      => $copy->book->callNumber,
                 'unconfirmed'     => $spine['pending'],
-                'area'            => Str::headline((string) ($copy->book->areaOfLibrary ?: 'circulation')),
+                'area'            => $spine['area'],
                 'year'            => $copy->book->publicationYear,
             ];
         })->values()->all();
@@ -268,6 +270,15 @@ class CatalogService
                 'title'         => $copy->book->title,
                 'coverImageURL' => $copy->book->coverImageURL,
                 'authors'       => $copy->book->authors->pluck('name')->values(),
+                // What the librarian needs to be sure it is the right book in their hand.
+                'callNumber'      => $copy->book->callNumber,
+                'isbn'            => $copy->book->isbn,
+                'publisher'       => $copy->book->publisher,
+                'publicationYear' => $copy->book->publicationYear,
+                'edition'         => $copy->book->edition,
+                'volume'          => $copy->book->volume,
+                'areaOfLibrary'   => $copy->book->areaOfLibrary,
+                'shelfLocation'   => $copy->book->shelfLocation,
             ],
         ];
     }
@@ -287,7 +298,7 @@ class CatalogService
         }
 
         if (array_key_exists('sourceOfFund', $details)) {
-            $details['sourceOfFund'] = trim($details['sourceOfFund']);
+            $details['sourceOfFund'] = $this->fundSources->resolve($details['sourceOfFund']);
         }
         if (array_key_exists('remarks', $details)) {
             $details['remarks'] = trim((string) $details['remarks']) !== '' ? trim($details['remarks']) : null;
@@ -322,6 +333,48 @@ class CatalogService
 
             return $updated;
         });
+    }
+
+    /** The parts of a book's record the stock log keeps an eye on, in the words the librarian reads them. */
+    private function trackedBookFields(Book $book): array
+    {
+        $book->loadMissing(['subject', 'authors']);
+
+        return [
+            'Title'              => $book->title,
+            'Category'           => $book->subject?->name,
+            'Area of the library' => $book->libraryArea?->name ?? $book->areaOfLibrary,
+            'ISBN'               => $book->isbn,
+            'Authors'            => $book->authors->pluck('name')->sort()->join(', '),
+            'Publisher'          => $book->publisher,
+            'Year published'     => $book->publicationYear,
+            'Edition'            => $book->edition,
+            'Volume'             => $book->volume,
+            'Pages'              => $book->pageCount,
+            'Shelf location'     => $book->shelfLocation,
+            'Cost'               => $book->cost !== null ? $this->peso($book->cost) : null,
+            'Source of fund'     => $book->sourceOfFund,
+            'Remarks'            => $book->remarks,
+            'New arrival'        => $book->isNewArrival ? 'Yes' : 'No',
+            'Cover photo'        => $book->coverImageURL ? 'Set' : null,
+        ];
+    }
+
+    /** @return array<int, string> "Field: before → after" for each field that is different. */
+    private function describeBookChanges(array $before, array $after): array
+    {
+        $changes = [];
+        foreach ($after as $label => $now) {
+            $was = $before[$label] ?? null;
+            if ((string) $was === (string) $now) {
+                continue;
+            }
+            $changes[] = $label === 'Cover photo'
+                ? 'Cover photo '.($now ? 'changed' : 'removed')
+                : $label.': '.(($was === null || $was === '') ? '—' : $was).' → '.(($now === null || $now === '') ? '—' : $now);
+        }
+
+        return $changes;
     }
 
     private function peso(mixed $amount): string
@@ -437,10 +490,15 @@ class CatalogService
             ? $this->classification->lookupByIsbn($validated['isbn'])
             : null;
 
+        // What was typed in "Source of fund" is matched to the list first (Donation = Donated); a new one joins the list.
+        $validated['sourceOfFund'] = $this->fundSources->resolve($validated['sourceOfFund'] ?? null);
+
         $book = DB::transaction(function () use ($validated, $lookup) {
+            // Books are shelved by area of the library now. The category column stays (the student app and reports still
+            // read it), so a book added without one takes the default.
             $subject = ! empty($validated['subjectID'])
                 ? $this->subjects->findOrFail($validated['subjectID'])
-                : $this->subjects->firstOrCreateByName($validated['subjectName']);
+                : $this->subjects->firstOrCreateByName(trim((string) ($validated['subjectName'] ?? '')) ?: 'General');
 
             // Resolve authors first (existing IDs or find-or-create by name)
             // so the primary author's cutter number is known before the
@@ -470,21 +528,19 @@ class CatalogService
                 $this->cutterNumber($entry['model'], $index === 0 ? $verifiedCutter : null);
             }
 
-            // Prefer the live Dewey class for this specific edition; fall
-            // back to the subject's keyword-derived classification code.
-            // Order of trust: a number the librarian typed, then one found by ISBN, and only as a last resort
-            // the guess from the category name (which is flagged so someone checks it).
+            // Order of trust: a number the librarian typed, then one found by ISBN. If neither is there the book is
+            // saved with no Dewey number (never a guess from its category) and flagged, so someone finds or types one.
             if (! empty($validated['deweyNumber'])) {
                 [$deweyClass, $deweySource, $deweyStatus] = [$validated['deweyNumber'], 'manual', 'ok'];
             } elseif (! empty($lookup['deweyClass'])) {
                 [$deweyClass, $deweySource, $deweyStatus] = [$lookup['deweyClass'], $lookup['source'] ?? 'library_of_congress', 'ok'];
             } else {
-                [$deweyClass, $deweySource, $deweyStatus] = [$this->classificationCode($subject), 'guessed', 'needs_review'];
+                [$deweyClass, $deweySource, $deweyStatus] = [null, null, 'needs_review'];
             }
 
             // The call number is the Dewey class + the primary author's Cutter. Only the Cutter is stored (with a/b/c
             // on the end if another book already holds that exact pair); the call number is worked out from the two.
-            $cutter = $this->uniqueCutter($deweyClass, $primaryAuthor->cutterNumber);
+            $cutter = $deweyClass !== null ? $this->uniqueCutter($deweyClass, $primaryAuthor->cutterNumber) : $primaryAuthor->cutterNumber;
 
             $book = $this->books->create([
                 'uuid'            => Str::uuid(),
@@ -519,7 +575,12 @@ class CatalogService
             }
 
             for ($i = 0; $i < $validated['quantity']; $i++) {
-                $this->createCopy($book, 'New book');
+                // Each copy carries where it came from and what it cost, like a copy added later does.
+                $this->createCopy($book, 'New book', null, [
+                    'sourceOfFund' => $validated['sourceOfFund'] ?? null,
+                    'cost'         => $validated['cost'] ?? null,
+                    'remarks'      => $validated['remarks'] ?? null,
+                ]);
             }
 
             return $book;
@@ -547,7 +608,16 @@ class CatalogService
             $update['cutter'] = $this->uniqueCutter($dewey, $this->cutterNumber($primary), $book->bookID);
         }
 
+        $before = $book->deweyNumber;
+        $wasChecked = $book->deweyStatus === 'ok';
+
         $book->update($update);
+
+        if ($before !== $dewey) {
+            $this->stockLog->bookEdited($book, 'Dewey number: '.($before ?: '—').' → '.$dewey);
+        } elseif (! $wasChecked) {
+            $this->stockLog->bookEdited($book, 'Dewey number '.$dewey.' verified');
+        }
 
         return $book->fresh();
     }
@@ -619,6 +689,12 @@ class CatalogService
 
     public function updateBook(Book $book, array $validated): Book
     {
+        if (array_key_exists('sourceOfFund', $validated)) {
+            $validated['sourceOfFund'] = $this->fundSources->resolve($validated['sourceOfFund']);
+        }
+
+        $before = $this->trackedBookFields($book);
+
         $book = DB::transaction(function () use ($validated, $book) {
             if (! empty($validated['subjectID'])) {
                 $book->subjectID = $validated['subjectID'];
@@ -658,11 +734,21 @@ class CatalogService
             return $book;
         });
 
+        // Every field that changed goes in the stock log as one entry ("Title: A → B; Area: Circulation → Fiction").
+        $changes = $this->describeBookChanges($before, $this->trackedBookFields($book->fresh()));
+        if ($changes) {
+            $this->stockLog->bookEdited($book, implode('; ', $changes));
+        }
+
         // A Dewey number typed in the edit form is a person's say-so: it is marked checked and the call number follows it.
         if (! empty($validated['deweyNumber']) && $validated['deweyNumber'] !== $book->deweyNumber) {
             $book = $this->applyDewey($book->fresh(), $validated['deweyNumber'], 'manual');
         } elseif (! empty($validated['deweyNumber'])) {
+            $wasChecked = $book->deweyStatus === 'ok';
             $book->update(['deweyNumber' => $validated['deweyNumber'], 'deweySource' => 'manual', 'deweyStatus' => 'ok']);
+            if (! $wasChecked) {
+                $this->stockLog->bookEdited($book, 'Dewey number '.$validated['deweyNumber'].' verified');
+            }
         }
 
         return $this->books->loadCatalogRelations($book->fresh());
@@ -837,7 +923,7 @@ class CatalogService
             'bookID'          => $book->bookID,
             'barcodeValue'    => $this->bookCopies->generateUniqueBarcode(),
             'status'          => 'available',
-            'sourceOfFund'    => $acquisition['sourceOfFund'] ?? null,
+            'sourceOfFund'    => $this->fundSources->resolve($acquisition['sourceOfFund'] ?? null),
             'cost'            => $acquisition['cost'] ?? null,
             'remarks'         => $acquisition['remarks'] ?? null,
         ]);
@@ -863,45 +949,6 @@ class CatalogService
         }
 
         return $author->cutterNumber;
-    }
-
-    /**
-     * Returns the subject's Dewey classification code, generating and
-     * persisting one first if this is a legacy row created before that
-     * feature existed.
-     */
-    private function classificationCode(BookSubject $subject): string
-    {
-        if (empty($subject->classificationCode)) {
-            $this->subjects->update($subject, [
-                'classificationCode' => $this->classifyByName($subject->name),
-            ]);
-        }
-
-        return $subject->classificationCode;
-    }
-
-    /**
-     * Maps a subject name to a Dewey Decimal classification code using the
-     * table in config/classification.php. First keyword match wins; falls
-     * back to the configured default ("000") otherwise.
-     */
-    private function classifyByName(string $name): string
-    {
-        $needle = strtolower($name);
-        $code = config('classification.dewey.default', '000');
-
-        foreach (config('classification.dewey.map', []) as $keyword => $deweyCode) {
-            if (str_contains($needle, $keyword)) {
-                $code = $deweyCode;
-                break;
-            }
-        }
-
-        return $this->uniqueSuffixed(
-            $code,
-            fn (string $candidate) => $this->subjects->classificationCodeExists($candidate)
-        );
     }
 
     /**

@@ -292,7 +292,7 @@ class PaperTestCasesTest extends TestCase
 
         $this->caseOf('BTC1', $m, 'Add a book without a title', 'Refuse the book and ask for the title', $add(['title' => '']), 422, 'title');
         $this->caseOf('BTC2', $m, 'Add a book without an author', 'Refuse the book and ask for an author', $add(['authors' => []]), 422, 'author');
-        $this->caseOf('BTC3', $m, 'Add a book without a category', 'Refuse the book and ask for the category', $add(['subjectName' => '']), 422, 'subject');
+        $this->caseOf('BTC3', $m, 'Add a book in an area of the library that does not exist', 'Refuse the book: the area must be one on the Areas of the Library list', $add(['areaOfLibrary' => 'nowhere']), 422, 'area');
         $this->caseOf('BTC4', $m, 'Enter a quantity of zero copies', 'Refuse the book: at least one copy', $add(['quantity' => 0]), 422, 'quantity');
 
         $r = $add();
@@ -394,9 +394,8 @@ class PaperTestCasesTest extends TestCase
         $this->rec('CTC11', $m, 'Reserve the book in the cart', 'Create a Waiting reservation', $this->said($r) . '; reservation ' . ($res?->status ?? 'missing'), $r->isSuccessful() && $res?->status === 'Waiting');
 
         $this->signedOut();
-        $this->actingAs($ben->user)->postJson('/api/student/cart', ['bookID' => $b3->bookID]);
+        $this->caseOf('CTC12', $m, 'Reserve the same title again while the first reservation is active', 'Refuse: already have a reservation for it', $this->actingAs($ben->user)->postJson('/api/student/cart', ['bookID' => $b3->bookID]), 422, 'already');
         $this->signedOut();
-        $this->caseOf('CTC12', $m, 'Reserve the same title again while the first reservation is active', 'Refuse: already in the active reservations', $this->actingAs($ben->user)->postJson('/api/student/reservations'), 422, 'already');
 
         $this->signedOut();
         $r = $this->actingAs($this->librarian)->postJson("/api/librarian/reservations/{$res->uuid}/accept");

@@ -26,7 +26,7 @@ interface BookRepositoryInterface extends RepositoryInterface
      * 'unavailable' (none on the shelf); null means both. Retired copies are left off each book.
      * `$dewey` is 'verified' (Dewey number confirmed) or 'unverified' (still a guess); null means both.
      */
-    public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage, ?string $dewey = null): LengthAwarePaginator;
+    public function paginateCatalog(?string $search, ?int $subjectID, ?string $availability, int $perPage, ?string $dewey = null, ?string $area = null): LengthAwarePaginator;
 
     /**
      * Catalog for the student app: each book carries live `total_copies` and

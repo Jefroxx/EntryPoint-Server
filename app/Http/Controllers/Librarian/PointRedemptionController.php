@@ -34,9 +34,12 @@ class PointRedemptionController extends Controller
      * Cancel a pending redemption — refunds the points and restocks the
      * item, e.g. if the physical reward turned out to be unavailable.
      */
-    public function cancel(PointRedemption $redemption)
+    public function cancel(Request $request, PointRedemption $redemption)
     {
-        $redemption = $this->marketplace->cancelRedemption($redemption);
+        // The student is told why, so a reason is required.
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:500']]);
+
+        $redemption = $this->marketplace->cancelRedemption($redemption, $data['reason']);
 
         return response()->json([
             'message'    => 'Redemption cancelled and refunded.',

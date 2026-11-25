@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Librarian;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Requests\SaveFineRuleRequest;
-use App\Http\Requests\SaveLoanPeriodsRequest;
 use App\Http\Requests\UpdateAccountRequest;
 use App\Services\SettingsService;
 use Illuminate\Http\Request;
@@ -21,11 +20,26 @@ class SettingsController extends Controller
         return response()->json($this->settings->overview($request->user()));
     }
 
-    public function saveLoanPeriods(SaveLoanPeriodsRequest $request)
+    public function saveBorrowing(Request $request)
     {
-        $this->settings->saveLoanPeriods($request->validated());
+        $data = $request->validate([
+            // Up to 30 days, in hours.
+            'holdHours' => ['required', 'integer', 'min:1', 'max:720'],
+            'maxBooks'  => ['required', 'integer', 'min:1', 'max:20'],
+        ]);
 
-        return response()->json(['message' => 'Loan periods updated.']);
+        $this->settings->saveBorrowing((int) $data['holdHours'], (int) $data['maxBooks']);
+
+        return response()->json(['message' => 'Borrowing settings updated.']);
+    }
+
+    public function saveRewards(Request $request)
+    {
+        $data = $request->validate(['lowStockAt' => ['required', 'integer', 'min:0', 'max:100']]);
+
+        $this->settings->saveRewards((int) $data['lowStockAt']);
+
+        return response()->json(['message' => 'Rewards settings updated.']);
     }
 
     public function saveFineRule(SaveFineRuleRequest $request, string $area)

@@ -11,11 +11,16 @@ class UpdateMarketItemRequest extends FormRequest
         return true;
     }
 
+    public function messages(): array
+    {
+        return ['type.exists' => 'Choose one of the types on the list.'];
+    }
+
     public function rules(): array
     {
         return [
             'name'      => ['sometimes', 'string', 'max:150'],
-            'type'      => ['sometimes', 'nullable', 'string', 'max:100'],
+            'type'      => ['sometimes', 'nullable', 'string', 'max:100', \Illuminate\Validation\Rule::exists('market_item_types', 'name')],
             'pointCost' => ['sometimes', 'integer', 'min:0'],
             'stock'     => ['sometimes', 'integer', 'min:0'],
         ];

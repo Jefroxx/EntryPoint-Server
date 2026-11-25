@@ -11,11 +11,17 @@ class StoreMarketItemRequest extends FormRequest
         return true;
     }
 
+    public function messages(): array
+    {
+        return ['type.exists' => 'Choose one of the types on the list.'];
+    }
+
     public function rules(): array
     {
         return [
             'name'      => ['required', 'string', 'max:150'],
-            'type'      => ['nullable', 'string', 'max:100'],
+            // A type is picked from the list (Rewards Market > Types), not typed.
+            'type'      => ['nullable', 'string', 'max:100', \Illuminate\Validation\Rule::exists('market_item_types', 'name')],
             'pointCost' => ['required', 'integer', 'min:0'],
             'stock'     => ['required', 'integer', 'min:0'],
         ];

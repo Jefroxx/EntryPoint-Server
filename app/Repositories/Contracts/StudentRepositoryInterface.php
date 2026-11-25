@@ -8,7 +8,17 @@ use Illuminate\Database\Eloquent\Collection;
 
 interface StudentRepositoryInterface extends RepositoryInterface
 {
-    public function paginate(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null): LengthAwarePaginator;
+    /**
+     * $sort is 'oldest' or 'newest' (by registration). A student who has not confirmed their email is not in the pending list:
+     * they cannot be approved yet, and the librarians are told once they do confirm.
+     */
+    public function paginate(?string $search, ?string $program, ?string $status, int $perPage, ?string $memberType = null, ?string $sort = null, bool $inLibrary = false): LengthAwarePaginator;
+
+    /** Every program a student is in (or, for faculty and staff, every department), for the program filter. */
+    public function programs(?string $memberType = null): array;
+
+    /** How many faculty and how many staff members there are. @return array{faculty: int, staff: int} */
+    public function countsByMemberType(): array;
 
     /**
      * @return array{total: int, pending: int, approved: int, rejected: int}

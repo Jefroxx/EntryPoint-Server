@@ -14,7 +14,7 @@ class BookSuggestion extends Model
 
     protected $fillable = [
         'uuid', 'studentID', 'reviewedByLibrarianID', 'title', 'author',
-        'reason', 'status', 'progressStep', 'submittedAt',
+        'reason', 'status', 'progressStep', 'rejectionReason', 'submittedAt',
     ];
 
     protected $casts = ['submittedAt' => 'datetime'];

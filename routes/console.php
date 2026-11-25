@@ -16,6 +16,9 @@ Schedule::command('penalties:accrue-overdue')->hourly();
 // daily run could miss or badly delay their 24-hour due-soon window.
 Schedule::command('loans:notify-due-soon')->hourly();
 
+// Hourly: an accepted reservation that was not collected within the hold period (Settings) expires and frees its copy.
+Schedule::command('reservations:expire')->hourly();
+
 // Nightly: close visits a student never scanned out of, at closing time, so the next
 // day's first scan is a check-in and yesterday's stay stays believable.
 Schedule::command('attendance:close-stale')->dailyAt('00:10');

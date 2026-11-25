@@ -28,6 +28,7 @@ class Student extends Model
         'registrationStatus',
         'reviewedByLibrarianID',
         'reviewedAt',
+        'rejectionReason',
     ];
 
     protected $casts = [
