@@ -29,10 +29,11 @@ class EloquentWishlistRepository extends BaseRepository implements WishlistRepos
             ->get();
     }
 
-    public function lockCartForStudent(int $studentID): Collection
+    public function lockCartForStudent(int $studentID, ?array $wishlistIDs = null): Collection
     {
         return Wishlist::where('studentID', $studentID)
             ->where('inCart', true)
+            ->when($wishlistIDs !== null, fn ($q) => $q->whereIn('wishlistID', $wishlistIDs))
             ->lockForUpdate()
             ->get();
     }
@@ -61,10 +62,13 @@ class EloquentWishlistRepository extends BaseRepository implements WishlistRepos
     }
 
     /** Empties the cart after checkout. Hearted books stay on the wishlist; cart-only rows go. */
-    public function deleteCartForStudent(int $studentID): void
+    public function deleteCartForStudent(int $studentID, ?array $wishlistIDs = null): void
     {
-        Wishlist::where('studentID', $studentID)->where('inCart', true)->where('inWishlist', false)->delete();
-        Wishlist::where('studentID', $studentID)->where('inCart', true)->update(['inCart' => false]);
+        $cart = fn () => Wishlist::where('studentID', $studentID)->where('inCart', true)
+            ->when($wishlistIDs !== null, fn ($q) => $q->whereIn('wishlistID', $wishlistIDs));
+
+        $cart()->where('inWishlist', false)->delete();
+        $cart()->update(['inCart' => false]);
     }
 
     public function existsForStudentAndBook(int $studentID, int $bookID): bool

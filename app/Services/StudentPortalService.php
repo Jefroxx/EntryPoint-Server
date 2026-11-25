@@ -51,6 +51,10 @@ class StudentPortalService
         $fields = array_map(fn ($value) => is_string($value) && trim($value) === '' ? null : $value, $fields);
 
         $this->users->update($student->user, $fields);
+
+        if (isset($data['memberIDNumber'])) {
+            $student->update(['memberIDNumber' => trim($data['memberIDNumber'])]);
+        }
     }
 
     public function profile(Student $student): array

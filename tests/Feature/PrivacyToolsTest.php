@@ -172,7 +172,7 @@ class PrivacyToolsTest extends TestCase
         // The audit log no longer names them, and the anonymizing itself is logged by reference only.
         $approved = DB::table('audit_logs')->where('action', 'student.approved')->value('summary');
         $this->assertSame('Approved a student: a removed member (removed)', $approved);
-        $this->assertSame("Anonymized a member account (ref {$ref})", DB::table('audit_logs')->where('action', 'privacy.anonymized')->value('summary'));
+        $this->assertSame("Archived a member account (ref {$ref})", DB::table('audit_logs')->where('action', 'privacy.anonymized')->value('summary'));
         $this->assertStringNotContainsString('Cruz', DB::table('audit_logs')->pluck('summary')->implode(' '));
 
         // They can no longer sign in, and the screen says so.

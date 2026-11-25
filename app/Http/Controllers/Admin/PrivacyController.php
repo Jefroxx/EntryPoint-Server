@@ -28,6 +28,6 @@ class PrivacyController extends Controller
     {
         $this->privacy->anonymize($request->user(), $student);
 
-        return response()->json(['message' => 'The account has been anonymized.']);
+        return response()->json(['message' => 'The account has been archived.']);
     }
 }

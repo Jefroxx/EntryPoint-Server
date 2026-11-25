@@ -130,10 +130,10 @@ class ReservationService
         return $reservations;
     }
 
-    public function createFromCart(int $studentID, string $studentFullName): Collection
+    public function createFromCart(int $studentID, string $studentFullName, ?array $wishlistIDs = null): Collection
     {
-        $created = DB::transaction(function () use ($studentID) {
-            $cartItems = $this->wishlists->lockCartForStudent($studentID);
+        $created = DB::transaction(function () use ($studentID, $wishlistIDs) {
+            $cartItems = $this->wishlists->lockCartForStudent($studentID, $wishlistIDs);
 
             if ($cartItems->isEmpty()) {
                 throw ValidationException::withMessages([
@@ -194,7 +194,7 @@ class ReservationService
                 ]);
             }
 
-            $this->wishlists->deleteCartForStudent($studentID);
+            $this->wishlists->deleteCartForStudent($studentID, $wishlistIDs);
 
             return $created;
         });

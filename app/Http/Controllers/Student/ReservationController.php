@@ -26,7 +26,16 @@ class ReservationController extends Controller
     {
         $student = $request->user()->student;
 
-        $reservations = $this->reservationService->createFromCart($student->studentID, $student->user->fullName);
+        $data = $request->validate([
+            'wishlistIDs'   => ['sometimes', 'array', 'min:1'],
+            'wishlistIDs.*' => ['integer'],
+        ]);
+
+        $reservations = $this->reservationService->createFromCart(
+            $student->studentID,
+            $student->user->fullName,
+            $data['wishlistIDs'] ?? null,
+        );
 
         return response()->json([
             'message'      => 'Reservation(s) submitted.',
