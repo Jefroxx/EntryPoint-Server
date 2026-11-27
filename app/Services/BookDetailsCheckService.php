@@ -66,9 +66,13 @@ class BookDetailsCheckService
     /**
      * What the catalogues know that this book's record lacks. Saves nothing.
      *
+     * `$scanned` is an ISBN a librarian just scanned (or typed) from the book in hand: it is looked up instead of the
+     * one on record or a title search, because the book itself is the surest source. Only empty fields are offered,
+     * so a book that already has a different ISBN keeps it (and the answer says so).
+     *
      * @return array{bookUuid: string, found: bool, reason?: string, matchedBy?: string, matched?: array, yearAgrees?: ?bool, isbnTakenBy?: ?string, fills?: array<string, mixed>}
      */
-    public function check(Book $book): array
+    public function check(Book $book, ?string $scanned = null): array
     {
         $book->loadMissing('authors');
         $authors = $book->authors->pluck('name')->all();
@@ -77,7 +81,14 @@ class BookDetailsCheckService
         $match = null;
         $matchedBy = 'isbn';
 
-        if ($isbn === null) {
+        if ($scanned !== null) {
+            $scannedIsbn = BookMetadataService::normalizeIsbn($scanned);
+            if ($scannedIsbn === null) {
+                return ['bookUuid' => $book->uuid, 'found' => false, 'reason' => "That isn't a valid ISBN. Scan the barcode on the back cover (978 or 979), or check the digits."];
+            }
+            $isbn = $scannedIsbn;
+            $matchedBy = 'scan';
+        } elseif ($isbn === null) {
             $match = $this->searchByTitle($book->title, $authors[0] ?? null, $book->publicationYear);
             if ($match === null) {
                 return ['bookUuid' => $book->uuid, 'found' => false, 'reason' => 'No catalogue has a book with this title'.($authors ? ' and author.' : '.')];
@@ -87,7 +98,8 @@ class BookDetailsCheckService
         }
 
         $found = $this->metadata->lookup($isbn)['book'];
-        if ($found === null && $match === null) {
+        // A scanned ISBN is still worth keeping when no catalogue knows it: it comes from the book itself.
+        if ($found === null && $match === null && $matchedBy !== 'scan') {
             return ['bookUuid' => $book->uuid, 'found' => false, 'reason' => 'No catalogue knows this ISBN.'];
         }
 
@@ -140,8 +152,12 @@ class BookDetailsCheckService
             'yearAgrees'  => $book->publicationYear && $year ? (int) $book->publicationYear === (int) $year : null,
             // Does the catalogue's title agree with ours? A mistyped ISBN in the record can be another book's real one,
             // so even an ISBN match whose title disagrees is shown as doubtful and isn't ticked for the librarian.
-            'titleAgrees' => $foundTitle ? $this->titleScore($book->title, $foundTitle) > 0 : null,
+            'titleAgrees' => $foundTitle ? $this->titleScore($book->title, $foundTitle) > 0 || $this->sameMainTitle($book->title, $foundTitle) : null,
             'isbnTakenBy' => $takenBy,
+            // A scan of a book that already has another ISBN on record: the record's is kept, and the screen says so.
+            'recordIsbn'  => $matchedBy === 'scan' && $book->isbn && BookMetadataService::normalizeIsbn($book->isbn) !== $isbn ? $book->isbn : null,
+            // The scanned ISBN found nothing in the catalogues: only the ISBN itself can be saved.
+            'catalogueFound' => $found !== null || $match !== null,
             'fills'       => $fills,
         ];
     }
@@ -268,6 +284,19 @@ class BookDetailsCheckService
         $contains = $shorter >= 2 && $common === $shorter;
 
         return $jaccard >= 0.5 || $contains ? max($jaccard, $contains ? 0.5 : 0) : 0.0;
+    }
+
+    /**
+     * "Biology" and "Biology: Florida Advanced Placement edition" are the same book: the catalogue adds a subtitle the
+     * record leaves out. Only for deciding whether a found book agrees with the record, never for searching, where a
+     * one-word title must not match every title that holds the word.
+     */
+    private function sameMainTitle(string $a, string $b): bool
+    {
+        $main = fn (string $t) => trim(preg_replace('/[^\p{L}\p{N}]+/u', ' ', mb_strtolower(Str::ascii(preg_split('/[:;(]/', $t)[0]))));
+        $x = $main($a);
+
+        return $x !== '' && $x === $main($b);
     }
 
     /** @param array<int, string> $names */

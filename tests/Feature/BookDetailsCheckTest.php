@@ -156,6 +156,32 @@ class BookDetailsCheckTest extends TestCase
         $this->assertArrayNotHasKey('isbn', $result['fills']);
     }
 
+    public function test_a_scanned_isbn_is_looked_up_for_that_book_and_kept_even_when_no_catalogue_knows_it(): void
+    {
+        Http::fake([
+            // The catalogue adds a subtitle the record leaves out: still the same book.
+            'openlibrary.org/api/books*' => Http::response(['ISBN:9780073212043' => ['title' => 'Biology: Florida Advanced Placement edition', 'publishers' => [['name' => 'McGraw-Hill']], 'number_of_pages' => 1009]]),
+            '*' => Http::response('', 404),
+        ]);
+        $book = $this->imported('Biology', 'Mader, Sylvia S.', 2004);
+
+        $result = $this->actingAs($this->librarian)->postJson("/api/librarian/books/{$book->uuid}/details/check", ['isbn' => '978-0-07-321204-3'])->json();
+        $this->assertSame('scan', $result['matchedBy']);
+        $this->assertTrue($result['titleAgrees']);
+        $this->assertSame('9780073212043', $result['fills']['isbn']);
+        $this->assertSame('McGraw-Hill', $result['fills']['publisher']);
+
+        // No catalogue knows this one, but it came off the book: the ISBN itself is still offered.
+        $other = $this->imported('A Local Workbook', 'Santos, Ana', 2024);
+        $unknown = $this->postJson("/api/librarian/books/{$other->uuid}/details/check", ['isbn' => '9786214271450'])->json();
+        $this->assertTrue($unknown['found']);
+        $this->assertFalse($unknown['catalogueFound']);
+        $this->assertSame(['isbn' => '9786214271450'], $unknown['fills']);
+
+        // Not an ISBN at all.
+        $this->assertFalse($this->postJson("/api/librarian/books/{$other->uuid}/details/check", ['isbn' => '12345'])->json('found'));
+    }
+
     public function test_a_mistyped_isbn_that_is_another_book_s_is_shown_as_a_different_title(): void
     {
         Http::fake([
