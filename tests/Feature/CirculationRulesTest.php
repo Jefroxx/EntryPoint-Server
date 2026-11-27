@@ -210,6 +210,20 @@ class CirculationRulesTest extends TestCase
         $this->actingAs($this->librarian)->getJson('/api/librarian/reservations/lookup/'.$late->pickupCode)->assertUnprocessable();
     }
 
+    public function test_a_pickup_lookup_brings_the_student_the_book_and_the_copies_on_the_shelf(): void
+    {
+        $onShelf = $this->copy();
+        BookCopy::factory()->create(['bookID' => $this->book->bookID, 'status' => 'borrowed']);
+        $reservation = Reservation::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'bookID' => $this->book->bookID, 'status' => 'Accepted', 'reservedAt' => now(), 'acceptedAt' => now()]);
+
+        $response = $this->actingAs($this->librarian)->getJson('/api/librarian/reservations/lookup/'.$reservation->pickupCode)->assertOk();
+
+        $response->assertJsonPath('reservation.student.memberIDNumber', $this->student->memberIDNumber)
+            ->assertJsonPath('reservation.book.bookID', $this->book->bookID);
+        // Only the copy on the shelf is offered, not the one out on loan.
+        $this->assertSame([$onShelf->copyID], array_column($response->json('shelfCopies'), 'copyID'));
+    }
+
     // ---- the loan and penalty lists' filters ----
 
     public function test_searching_loans_still_respects_the_status_and_collection_filters(): void

@@ -35,7 +35,16 @@ class ReservationController extends Controller
     /** Looks up an accepted reservation from the code on the student's pickup slip. */
     public function lookup(string $code)
     {
-        return response()->json(['reservation' => $this->reservationService->findByPickupCode($code)]);
+        $reservation = $this->reservationService->findByPickupCode($code);
+
+        // Everything the pickup window needs in one answer: the student and book come loaded with the reservation, and
+        // the copies on the shelf are listed so a librarian whose scanner won't read a label can pick the number instead.
+        $shelfCopies = $reservation->book
+            ? $reservation->book->copies()->where('status', 'available')->orderBy('accessionNumber')
+                ->get(['copyID', 'accessionNumber'])
+            : collect();
+
+        return response()->json(['reservation' => $reservation, 'shelfCopies' => $shelfCopies]);
     }
 
     public function accept(Reservation $reservation)
