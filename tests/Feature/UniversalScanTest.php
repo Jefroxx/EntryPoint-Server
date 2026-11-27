@@ -162,6 +162,20 @@ class UniversalScanTest extends TestCase
     {
         $this->scan('L-999999')->assertStatus(422)->assertJsonPath('errors.barcodeValue.0', 'No loan matches that receipt.');
         $this->scan('F-999999')->assertStatus(422)->assertJsonPath('errors.barcodeValue.0', 'No facility matches that label.');
-        $this->scan('STI-NOSUCHCODE')->assertStatus(422)->assertJsonPath('errors.barcodeValue.0', 'Barcode not recognized.');
+        // The message says what was read, so a librarian can tell a wrong barcode from one that wasn't matched.
+        $this->scan('STI-NOSUCHCODE')->assertStatus(422)
+            ->assertJsonPath('errors.barcodeValue.0', fn (string $m) => str_starts_with($m, 'Barcode not recognized: read "STI-NOSUCHCODE"'));
+    }
+
+    public function test_a_slip_read_with_extra_characters_around_it_is_still_a_slip(): void
+    {
+        $reservation = Reservation::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'bookID' => $this->book->bookID, 'status' => 'Accepted']);
+
+        // A symbology prefix some scanners add, a stray space, lower case: all still this slip.
+        foreach ([']C0' . $reservation->pickupCode, ' ' . strtolower($reservation->pickupCode) . ' '] as $read) {
+            $this->scan($read)->assertOk()
+                ->assertJsonPath('type', 'reservation')
+                ->assertJsonPath('reservation.reservationID', $reservation->reservationID);
+        }
     }
 }
