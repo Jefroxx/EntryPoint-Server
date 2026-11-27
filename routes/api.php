@@ -209,6 +209,9 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         // Walk-in visitors without an account: typed name + purpose, checked out by hand.
         // End of day / ending the scan station: everyone still inside is logged out.
         Route::post('/attendance-logs/close-all', [AttendanceLogController::class, 'closeAll']);
+        // The library session: open from opening the scan station until its End session (close-all), tab open or not.
+        Route::get('/station', [AttendanceLogController::class, 'station']);
+        Route::post('/station/start', [AttendanceLogController::class, 'startStation']);
         Route::post('/attendance-logs/visitor', [AttendanceLogController::class, 'storeVisitor']);
         Route::post('/attendance-logs/{log}/visitor-checkout', [AttendanceLogController::class, 'checkOutVisitor']);
         // The universal scanner: the code says whether it's a student ID, a receipt, a slip or a facility.

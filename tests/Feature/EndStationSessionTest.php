@@ -88,5 +88,26 @@ class EndStationSessionTest extends TestCase
         $student = User::factory()->create(['userType' => 'student']);
 
         $this->actingAs($student)->postJson('/api/librarian/attendance-logs/close-all')->assertForbidden();
+        $this->actingAs($student)->postJson('/api/librarian/station/start')->assertForbidden();
+    }
+
+    public function test_the_library_session_stays_open_until_end_session(): void
+    {
+        $this->actingAs($this->librarian)->getJson('/api/librarian/station')->assertOk()->assertJsonPath('session', null);
+
+        // Opening the station opens the session, with who opened it.
+        $startedAt = $this->postJson('/api/librarian/station/start')->assertOk()
+            ->assertJsonPath('session.startedBy', $this->librarian->fullName)
+            ->json('session.startedAt');
+        $this->assertNotNull($startedAt);
+
+        // Opening it again later (another tab, a reload) keeps the time it first opened; nothing else closes it.
+        $this->travel(2)->hours();
+        $this->postJson('/api/librarian/station/start')->assertOk()->assertJsonPath('session.startedAt', $startedAt);
+        $this->getJson('/api/librarian/station')->assertJsonPath('session.startedAt', $startedAt);
+
+        // End session closes it.
+        $this->postJson('/api/librarian/attendance-logs/close-all')->assertOk();
+        $this->getJson('/api/librarian/station')->assertJsonPath('session', null);
     }
 }
