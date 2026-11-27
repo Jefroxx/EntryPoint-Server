@@ -279,7 +279,7 @@ class PaperTestCasesTest extends TestCase
     private function newBook(array $overrides = []): array
     {
         return array_merge([
-            'title' => 'The Origin of Species', 'authors' => [['name' => 'Charles Darwin', 'role' => 'Author']], 'subjectName' => 'Science',
+            'title' => 'The Origin of Species', 'deweyNumber' => '576.82', 'authors' => [['name' => 'Charles Darwin', 'role' => 'Author']], 'subjectName' => 'Science',
             'quantity' => 2, 'isbn' => '978-0-14-043205-3', 'publicationYear' => 1859, 'publisher' => 'John Murray', 'edition' => '1st ed.',
             'volume' => 'N/A', 'pageCount' => 502, 'sourceOfFund' => 'Library budget', 'cost' => 450,
         ], $overrides);

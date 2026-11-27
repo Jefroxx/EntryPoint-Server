@@ -18,6 +18,9 @@ interface LoanRepositoryInterface extends RepositoryInterface
      */
     public function stats(): array;
 
+    /** Active loans past their due date (the one number of stats() the dashboard needs). */
+    public function overdueCount(): int;
+
     public function overdueActive(): Collection;
 
     public function dueSoonNotUnnotified(int $windowHours): Collection;

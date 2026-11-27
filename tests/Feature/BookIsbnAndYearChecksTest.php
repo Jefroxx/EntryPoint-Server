@@ -29,6 +29,7 @@ class BookIsbnAndYearChecksTest extends TestCase
     {
         return array_merge([
             'title'           => 'Introduction to Algorithms',
+            'deweyNumber'     => '005.1',
             'authors'         => [['name' => 'Thomas Cormen', 'role' => 'Author']],
             'subjectName'     => 'Computer Science',
             'quantity'        => 1,

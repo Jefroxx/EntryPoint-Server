@@ -33,6 +33,7 @@ class CreateBookRequiredFieldsTest extends TestCase
     {
         return array_merge([
             'title'           => 'The Origin of Species',
+            'deweyNumber'     => '576.82',
             'authors'         => [['name' => 'Charles Darwin', 'role' => 'Author']],
             'subjectName'     => 'Science',
             'quantity'        => 1,

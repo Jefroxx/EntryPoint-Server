@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\BookCopy;
 use App\Models\Loan;
 use App\Models\Resource;
 use App\Repositories\Contracts\StudentRepositoryInterface;
@@ -10,8 +11,9 @@ use Illuminate\Validation\ValidationException;
 /**
  * The one scanner. Every barcode goes to the same place and the code itself says what to do:
  *
- *   L-000123  a borrowing receipt   -> the book is handed in; it is now in the librarian's hands
- *   R-000123  a reservation slip    -> open the checkout for that reservation
+ *   L-000123  a borrowing receipt   -> that loan, for the return (the station opens the Return window for it in
+ *   BK-XXXXX  a book copy's label      the librarian's main tab; nothing is changed until the librarian confirms there)
+ *   R-000123  a reservation slip    -> open the checkout for that reservation (also in the main tab)
  *   F-000012  a facility's label    -> start (or, if it's in use, end) a session on that computer / room
  *   anything else is a student's ID -> attendance, or, if a facility was scanned just before, that
  *                                      student starts using the facility
@@ -34,6 +36,7 @@ class ScanService
     {
         return match ($this->kindOf($code)) {
             'loan'        => $this->receipt($code),
+            'copy'        => $this->bookCopy($code),
             'reservation' => $this->reservation($code),
             'facility'    => $this->facility($code),
             default       => $armedResID ? $this->startFacilityFor($code, $armedResID, $librarianID) : $this->attendance($code),
@@ -46,6 +49,8 @@ class ScanService
             (bool) preg_match('/^L-\d+$/i', $code) => 'loan',
             (bool) preg_match('/^R-\d+$/i', $code) => 'reservation',
             (bool) preg_match('/^F-\d+$/i', $code) => 'facility',
+            // The barcode printed on a copy's label (BookCopy::barcodeValue, e.g. BK-0OUUNFKFPR).
+            (bool) preg_match('/^BK-[A-Z0-9]+$/i', $code) => 'copy',
             default                                => 'student',
         };
     }
@@ -58,24 +63,54 @@ class ScanService
             $this->fail('No loan matches that receipt.');
         }
 
-        $loan = $this->orFail(fn () => $this->circulation->receiveBook($loan));
+        if (! in_array($loan->status, ['Active', 'Received'], true)) {
+            $this->fail('This loan is already closed: the book was returned.');
+        }
+
+        return $this->forReturn($loan);
+    }
+
+    /** A book's own label: the loan it is out on, for the return. */
+    private function bookCopy(string $code): array
+    {
+        $copy = BookCopy::with('book')->where('barcodeValue', strtoupper($code))->first();
+
+        if (! $copy) {
+            $this->fail('No book matches that barcode.');
+        }
+
+        $loan = Loan::where('copyID', $copy->copyID)->whereIn('status', ['Active', 'Received'])->latest('checkoutDate')->first();
+
+        if (! $loan) {
+            $this->fail("\"{$copy->book?->title}\" (accession no. {$copy->accessionNumber}) isn't checked out, so there is nothing to return.");
+        }
+
+        return $this->forReturn($loan);
+    }
+
+    /**
+     * What the station needs to open the return in the librarian's main tab. Nothing is changed here: an Active loan
+     * gets the usual Return window (with its late fee), and one already handed in (Received) the check that finishes it.
+     */
+    private function forReturn(Loan $loan): array
+    {
         $loan->loadMissing(['student.user', 'copy.book']);
+        $received = $loan->status === 'Received';
 
         return [
-            'type'    => 'loan_received',
-            'message' => 'Book received. Check it for damage.',
+            'type'    => 'loan_return',
+            'message' => $received ? 'Handed in already. Check it for damage to finish the return.' : 'Open the return.',
             'loan'    => [
                 'loanID'          => $loan->loanID,
                 'uuid'            => $loan->uuid,
+                'status'          => $loan->status,
                 'receiptNumber'   => 'L-' . str_pad((string) $loan->loanID, 6, '0', STR_PAD_LEFT),
                 'bookTitle'       => $loan->copy->book->title,
                 'accessionNumber' => $loan->copy->accessionNumber,
                 'studentName'     => $loan->student->user->fullName,
-                'memberIDNumber' => $loan->student->memberIDNumber,
+                'memberIDNumber'  => $loan->student->memberIDNumber,
                 'dueDate'         => $loan->dueDate?->toIso8601String(),
-                'returnDate'      => $loan->returnDate?->toIso8601String(),
-                'wasLate'         => $loan->dueDate && $loan->returnDate && $loan->returnDate->greaterThan($loan->dueDate),
-                'fineAmount'      => (float) $loan->penalties()->sum('amount'),
+                'isOverdue'       => ! $received && $loan->dueDate && $loan->dueDate->isPast(),
             ],
         ];
     }

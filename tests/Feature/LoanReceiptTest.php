@@ -115,6 +115,12 @@ class LoanReceiptTest extends TestCase
             ->assertJsonPath('reservation.reservationID', $reservation->reservationID)
             ->assertJsonPath('reservation.student.studentID', $student->studentID);
 
+        // The only copy is held for this reservation: the lookup says so as the one reason, which lets this
+        // reservation's checkout window lend it (and only it: the checkout below names the reservation).
+        $this->getJson('/api/librarian/copies/lookup?code=' . $copy->accessionNumber)->assertOk()
+            ->assertJsonPath('copy.heldForReservation', true)
+            ->assertJsonPath('copy.lendable', 'Every available copy of this book is held for an accepted reservation.');
+
         $this->postJson('/api/librarian/loans', [
             'studentID' => $student->studentID, 'copyID' => $copy->copyID, 'reservationID' => $reservation->reservationID,
         ])->assertCreated();

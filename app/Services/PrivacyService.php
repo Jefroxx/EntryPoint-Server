@@ -158,7 +158,7 @@ class PrivacyService
         $reasons = [];
 
         if ($this->isAnonymized($student->user)) {
-            return ['This account has already been anonymized.'];
+            return ['This account has already been archived.'];
         }
 
         if (($n = DB::table('loans')->where('studentID', $id)->where('status', '!=', 'Returned')->count()) > 0) {
@@ -186,7 +186,7 @@ class PrivacyService
     {
         $reasons = $this->blockers($student);
         if ($reasons) {
-            throw ValidationException::withMessages(['account' => ["This account can't be anonymized yet. " . implode(' ', $reasons)]]);
+            throw ValidationException::withMessages(['account' => ["This account can't be archived yet. " . implode(' ', $reasons)]]);
         }
 
         $user = $student->user;
@@ -234,6 +234,6 @@ class PrivacyService
                 ]));
         });
 
-        $this->audit->record($actor, 'privacy.anonymized', "Anonymized a member account (ref {$ref})");
+        $this->audit->record($actor, 'privacy.anonymized', "Archived a member account (ref {$ref})");
     }
 }

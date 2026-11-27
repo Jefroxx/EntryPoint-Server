@@ -15,6 +15,9 @@ interface PenaltyRepositoryInterface extends RepositoryInterface
 
     public function unpaidCount(): int;
 
+    /** @return array{count: int, total: float} every unpaid penalty, counted and summed in one query */
+    public function unpaidSummary(): array;
+
     /** Unpaid lost/damaged penalties on any loan of these copies (each with its loan), at most one per copy. */
     public function openForCopies(array $copyIDs): Collection;
 

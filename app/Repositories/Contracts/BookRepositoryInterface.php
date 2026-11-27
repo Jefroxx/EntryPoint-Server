@@ -32,7 +32,7 @@ interface BookRepositoryInterface extends RepositoryInterface
      * Catalog for the student app: each book carries live `total_copies` and
      * `available_copies` counts.
      */
-    public function paginateForStudent(?string $search, ?int $subjectID, bool $availableOnly, int $perPage, bool $newOnly = false): LengthAwarePaginator;
+    public function paginateForStudent(?string $search, ?int $subjectID, bool $availableOnly, int $perPage, bool $newOnly = false, ?string $area = null): LengthAwarePaginator;
 
     public function loadForStudent(Book $book): Book;
 

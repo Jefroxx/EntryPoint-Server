@@ -71,7 +71,8 @@ return [
         'PATCH librarian/resources/{resource}'   => ['resource.edited', 'Edited a resource'],
         'DELETE librarian/resources/{resource}'  => ['resource.removed', 'Removed a resource'],
 
-        'PUT librarian/settings/loan-periods'          => ['settings.loan-periods', 'Changed the loan periods'],
+        'PUT librarian/settings/borrowing'             => ['settings.borrowing', 'Changed the borrowing settings'],
+        'PUT librarian/settings/rewards'               => ['settings.rewards', 'Changed the rewards settings'],
         'PUT librarian/settings/fine-rules/{area}'     => ['settings.fine-rule', 'Changed a fine rule'],
         'DELETE librarian/settings/fine-rules/{area}'  => ['settings.fine-rule-removed', 'Removed a fine rule'],
     ],

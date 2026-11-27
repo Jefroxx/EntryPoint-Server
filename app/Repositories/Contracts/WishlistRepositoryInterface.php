@@ -9,7 +9,7 @@ interface WishlistRepositoryInterface extends RepositoryInterface
 {
     public function cartForStudent(int $studentID): Collection;
 
-    public function lockCartForStudent(int $studentID): Collection;
+    public function lockCartForStudent(int $studentID, ?array $wishlistIDs = null): Collection;
 
     public function wishlistForStudent(int $studentID): Collection;
 
@@ -19,7 +19,7 @@ interface WishlistRepositoryInterface extends RepositoryInterface
 
     public function wishlistCountForStudent(int $studentID): int;
 
-    public function deleteCartForStudent(int $studentID): void;
+    public function deleteCartForStudent(int $studentID, ?array $wishlistIDs = null): void;
 
     public function existsForStudentAndBook(int $studentID, int $bookID): bool;
 }

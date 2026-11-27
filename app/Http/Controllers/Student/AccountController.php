@@ -31,7 +31,7 @@ class AccountController extends Controller
     public function changePassword(ChangePasswordRequest $request)
     {
         $validated = $request->validated();
-        $this->settings->changePassword($request->user(), $validated['currentPassword'], $validated['newPassword']);
+        $this->settings->changePassword($request->user(), $validated['currentPassword'], $validated['newPassword'], $request->user()->currentAccessToken()->id ?? null);
 
         return response()->json(['message' => 'Password changed.']);
     }

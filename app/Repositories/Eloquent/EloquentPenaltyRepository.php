@@ -45,6 +45,13 @@ class EloquentPenaltyRepository extends BaseRepository implements PenaltyReposit
         return PenaltyType::where('kind', 'overdue')->where('areaOfLibrary', $area)->first()?->rules()->first();
     }
 
+    public function unpaidSummary(): array
+    {
+        $row = Penalty::where('paymentStatus', 'Unpaid')->selectRaw('COUNT(*) AS c, COALESCE(SUM(amount), 0) AS t')->first();
+
+        return ['count' => (int) $row->c, 'total' => (float) $row->t];
+    }
+
     public function unpaidCount(): int
     {
         return Penalty::where('paymentStatus', 'Unpaid')->count();

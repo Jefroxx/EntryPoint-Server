@@ -130,10 +130,10 @@ class ReservationService
         return $reservations;
     }
 
-    public function createFromCart(int $studentID, string $studentFullName): Collection
+    public function createFromCart(int $studentID, string $studentFullName, ?array $wishlistIDs = null): Collection
     {
-        $created = DB::transaction(function () use ($studentID) {
-            $cartItems = $this->wishlists->lockCartForStudent($studentID);
+        $created = DB::transaction(function () use ($studentID, $wishlistIDs) {
+            $cartItems = $this->wishlists->lockCartForStudent($studentID, $wishlistIDs);
 
             if ($cartItems->isEmpty()) {
                 throw ValidationException::withMessages([
@@ -194,7 +194,7 @@ class ReservationService
                 ]);
             }
 
-            $this->wishlists->deleteCartForStudent($studentID);
+            $this->wishlists->deleteCartForStudent($studentID, $wishlistIDs);
 
             return $created;
         });
@@ -288,6 +288,65 @@ class ReservationService
             "You cancelled your reservation for \"{$title}\". Reserve it again anytime, but you'd join the back of the queue.",
             'reservation_cancelled'
         );
+    }
+
+    /**
+     * The borrowing limit was lowered. A student now over it (books on loan plus open reservations) loses their NEWEST
+     * reservations until they fit: with 3 reserved and room for 2, the third goes. Books already on loan are never
+     * touched, so a student with more loans than the new limit simply has no reservations left. The cancelled
+     * reservations are kept as Rejected, and the student is told why. With $apply false nothing changes: it only counts.
+     *
+     * @return array{students: int, reservations: int}
+     */
+    public function trimToLimit(int $max, bool $apply = true): array
+    {
+        $students = 0;
+        $cancelled = 0;
+
+        $ids = Reservation::whereIn('status', ['Waiting', 'Accepted'])->distinct()->pluck('studentID');
+
+        foreach ($ids as $studentID) {
+            DB::transaction(function () use ($studentID, $max, $apply, &$students, &$cancelled) {
+                $open = Reservation::with('book')
+                    ->where('studentID', $studentID)
+                    ->whereIn('status', ['Waiting', 'Accepted'])
+                    ->orderByDesc('reservedAt')->orderByDesc('reservationID')
+                    ->lockForUpdate()
+                    ->get();
+
+                $room = max($max - $this->loans->activeCountForStudent($studentID), 0);
+                $excess = $open->count() - $room;
+
+                if ($excess <= 0) {
+                    return;
+                }
+
+                $students++;
+                $cancelled += $excess;
+
+                if (! $apply) {
+                    return;
+                }
+
+                foreach ($open->take($excess) as $reservation) {
+                    $heldACopy = $reservation->status === 'Accepted';
+                    $this->reservations->update($reservation, ['status' => 'Rejected']);
+
+                    $this->notifications->send(
+                        $studentID,
+                        "Your reservation for \"{$reservation->book->title}\" was cancelled because the library now lets each student have {$max} " . ($max === 1 ? 'book' : 'books') . ' at a time. Reserve it again when you have room.',
+                        'reservation_cancelled'
+                    );
+
+                    // A held copy goes back on the shelf: tell whoever is next in line.
+                    if ($heldACopy) {
+                        $this->notifyNextInQueue($reservation->bookID);
+                    }
+                }
+            });
+        }
+
+        return ['students' => $students, 'reservations' => $cancelled];
     }
 
     /**

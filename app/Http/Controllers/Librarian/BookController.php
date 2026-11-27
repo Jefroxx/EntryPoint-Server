@@ -11,6 +11,8 @@ use App\Models\BookCopy;
 use App\Models\BookStockLog;
 use App\Services\StockLogService;
 use Illuminate\Validation\Rule;
+use App\Services\BookDetailsCheckService;
+use App\Services\BookImportService;
 use App\Services\BookMetadataService;
 use App\Services\CatalogService;
 use App\Services\CirculationService;
@@ -297,6 +299,64 @@ class BookController extends Controller
     public function libraryStats()
     {
         return response()->json($this->catalog->libraryStats());
+    }
+
+    /** Check Details: the books still to check (not checked yet, and lacking something a catalogue could give). */
+    public function detailsQueue(Request $request, BookDetailsCheckService $details)
+    {
+        $data = $request->validate([
+            'area'    => ['nullable', 'exists:loan_periods,area'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'page'    => ['nullable', 'integer', 'min:1'],
+        ]);
+        $area = $data['area'] ?? null;
+
+        return response()->json([
+            'remaining' => $details->queueQuery($area)->count(),
+            'books'     => $details->queue($area, (int) ($data['perPage'] ?? 100), (int) ($data['page'] ?? 1)),
+        ]);
+    }
+
+    /** What the online catalogues know that this book's record lacks. Saves nothing. */
+    public function checkDetails(Book $book, BookDetailsCheckService $details)
+    {
+        return response()->json($details->check($book));
+    }
+
+    /** Saves the details a librarian accepted (empty fields only) and marks the books checked. */
+    public function applyDetails(Request $request, BookDetailsCheckService $details)
+    {
+        $data = $request->validate([
+            'items'           => ['present', 'array', 'max:200'],
+            'items.*.book'    => ['required', 'string'],
+            'items.*.fills'   => ['present', 'array'],
+            'checked'         => ['present', 'array', 'max:1000'],
+            'checked.*'       => ['string'],
+        ]);
+
+        $result = $details->apply($data['items'], $data['checked']);
+
+        return response()->json(['message' => "{$result['updated']} books updated.", ...$result]);
+    }
+
+    /**
+     * Brings books in from the library's accession record (the browser reads the Excel file and sends its rows).
+     * With `dryRun` nothing is saved: the answer says what an import would add and skip, so the librarian can check
+     * first. The real import is sent a few hundred rows at a time; see BookImportService for what each row means.
+     */
+    public function import(Request $request, BookImportService $importer)
+    {
+        $data = $request->validate([
+            'rows'     => ['required', 'array', 'max:6000'],
+            'dryRun'   => ['required', 'boolean'],
+            'fileName' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        // Rows are checked field by field in the service (a rule per field on thousands of rows is slow and says less).
+        $rows = array_values(array_filter($data['rows'], 'is_array'));
+        $result = $importer->import($rows, (bool) $data['dryRun'], trim((string) ($data['fileName'] ?? '')) ?: 'the accession record');
+
+        return response()->json($result);
     }
 
     public function store(StoreBookRequest $request)

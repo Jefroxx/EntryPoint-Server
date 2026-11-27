@@ -39,22 +39,22 @@ class DashboardService
      */
     public function today(): array
     {
-        $loanStats = $this->loans->stats();
-        $fines = $this->penalties->stats();
+        // Only the numbers this card shows: the full stats() helpers ran 11 counts to use 3 of them.
+        $fines = $this->penalties->unpaidSummary();
 
         return [
             'inLibrary'   => $this->attendanceLogs->currentlyInLibraryCount(),
             'visitsToday' => $this->attendanceLogs->totalVisitsToday(),
             ...$this->loans->todayCounts(),
-            'overdue'     => $loanStats['overdue'],
+            'overdue'     => $this->loans->overdueCount(),
             'attention'   => [
                 'registrations' => $this->students->readyForReviewCount(),
                 'bookRequests'  => $this->suggestions->countWhere(['status' => 'Pending']),
                 'reservations'  => $this->reservations->countWhere(['status' => 'Waiting']),
                 'selfReturns'   => $this->selfReturns->countWhere(['verificationStatus' => 'Pending']),
                 'redemptions'   => $this->redemptions->countWhere(['fulfillmentStatus' => 'Pending']),
-                'unpaidFines'   => $fines['unpaidCount'],
-                'unpaidTotal'   => $fines['unpaidTotal'],
+                'unpaidFines'   => $fines['count'],
+                'unpaidTotal'   => $fines['total'],
             ],
         ];
     }

@@ -47,7 +47,10 @@ class EndIdleSessions
             throw new AuthenticationException('You were signed out because you were inactive for a while.');
         }
 
-        if ($last === null || ! $request->is('api/session')) {
+        // Written at most once a minute: the cache lives in the database, so writing on every request cost a DB write per
+        // API call (a page makes ten or more). A 4-hour idle limit doesn't need a finer clock than that.
+        $stale = $last === null || now()->timestamp - (int) $last >= 60;
+        if ($stale && ($last === null || ! $request->is('api/session'))) {
             Cache::put($key, now()->timestamp, now()->addDays(15));
         }
 

@@ -16,6 +16,8 @@ class StudentCatalogRequest extends FormRequest
         return [
             'search'        => ['nullable', 'string', 'max:255'],
             'subjectID'     => ['nullable', 'integer', 'exists:book_subjects,subjectID'],
+            // An area of the library (loan_periods.area): what Discover and Home filter by.
+            'area'          => ['nullable', 'string', 'exists:loan_periods,area'],
             'availableOnly' => ['nullable', 'boolean'],
             // Only the books the library marked as new arrivals, newest first.
             'newArrivalsOnly' => ['nullable', 'boolean'],

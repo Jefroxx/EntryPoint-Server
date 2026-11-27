@@ -24,8 +24,9 @@ class StoreBookRequest extends FormRequest
     {
         return [
             'title'          => ['required', 'string', 'max:255'],
-            // The Dewey number alone ("005.1"). Left out, it is looked up by ISBN.
-            'deweyNumber'    => ['nullable', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/'],
+            // The Dewey number alone ("005.1"). Required: a book isn't added without one. The form looks it up by ISBN on
+            // the shelving step, and the librarian types it when no catalogue has it.
+            'deweyNumber'    => ['required', 'string', 'regex:/^\d{3}(\.\d{1,10})?$/'],
             'areaOfLibrary' => ['nullable', 'exists:loan_periods,area'],
             'coverImageURL'  => ['nullable', 'url', 'max:255'],
             'shelfLocation'  => ['nullable', 'string', 'max:100'],

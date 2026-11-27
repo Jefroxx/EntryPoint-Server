@@ -11,10 +11,27 @@ use Illuminate\Support\Str;
 
 class NotificationService
 {
+    /**
+     * Which staff area (config/permissions.php) each desk notice belongs to. A notice only goes to staff whose role
+     * has that area, so a student assistant isn't told about book suggestions they can't open. A type missing here
+     * goes to every non-admin staff account.
+     */
+    private const AREA_FOR_TYPE = [
+        'student_checked_in'   => 'attendance',
+        'loan_checked_out'     => 'circulation',
+        'self_return_reported' => 'circulation',
+        'new_reservation'      => 'circulation',
+        'copy_penalty_choice'  => 'circulation',
+        'new_book_suggestion'  => 'library',
+        'new_registration'     => 'students',
+        'new_redemption'       => 'engagement',
+    ];
+
     public function __construct(
         private NotificationRepositoryInterface $notifications,
         private LibrarianRepositoryInterface $librarians,
         private StudentRepositoryInterface $students,
+        private StaffPermissionService $permissions,
     ) {
     }
 
@@ -31,9 +48,8 @@ class NotificationService
     }
 
     /**
-     * Broadcasts one notification per librarian. Replaces the
-     * `Librarian::all()->each(...)` pattern that was duplicated across
-     * five controllers.
+     * Broadcasts a desk notice to the staff who can act on it: never the administrator (the admin side has no desk
+     * pages, so its Review/Verify buttons led nowhere), and only roles that have the notice's area (AREA_FOR_TYPE).
      */
     public function notifyAllLibrarians(string $message, string $type, ?int $exceptLibrarianID = null): void
     {
@@ -41,8 +57,17 @@ class NotificationService
             ? $this->librarians->allExcept($exceptLibrarianID)
             : $this->librarians->all();
 
+        $area = self::AREA_FOR_TYPE[$type] ?? null;
+        $allowed = []; // role => may receive it, worked out once per role
+
         foreach ($librarians as $librarian) {
-            $this->send($librarian->librarianID, $message, $type);
+            $role = $librarian->role ?? 'librarian';
+            $allowed[$role] ??= $role !== StaffPermissionService::ADMIN
+                && ($area === null || in_array($area, $this->permissions->forRole($role), true));
+
+            if ($allowed[$role]) {
+                $this->send($librarian->librarianID, $message, $type);
+            }
         }
     }
 

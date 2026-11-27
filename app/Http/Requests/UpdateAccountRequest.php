@@ -19,6 +19,8 @@ class UpdateAccountRequest extends FormRequest
             'lastName'  => ['required', 'string', 'max:255'],
             // Left out by a student assistant, whose account has a username and no email.
             'email'     => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($this->user()->userID, 'userID')],
+            // Only needed when the email changes (checked in SettingsService::updateAccount).
+            'currentPassword' => ['nullable', 'string'],
         ];
     }
 }

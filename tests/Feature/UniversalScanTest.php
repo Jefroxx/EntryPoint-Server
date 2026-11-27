@@ -58,26 +58,55 @@ class UniversalScanTest extends TestCase
         $this->scan('STI-TESTCODE01')->assertOk()->assertJsonPath('type', 'attendance')->assertJsonPath('action', 'check_in');
     }
 
-    public function test_scanning_a_receipt_puts_the_book_in_the_librarians_hands_until_it_is_checked(): void
+    public function test_scanning_a_receipt_finds_the_loan_for_the_return_without_changing_it(): void
     {
         [$loanID, $code] = $this->checkout();
 
         $this->scan($code)->assertOk()
-            ->assertJsonPath('type', 'loan_received')
+            ->assertJsonPath('type', 'loan_return')
             ->assertJsonPath('loan.loanID', $loanID)
+            ->assertJsonPath('loan.status', 'Active')
             ->assertJsonPath('loan.bookTitle', $this->book->title);
 
-        // Received, not returned: the copy is still off the shelf until the librarian has checked it.
-        $this->assertSame('Received', \App\Models\Loan::find($loanID)->status);
+        // The station only finds it: the return happens in the Return window, so the loan is untouched.
+        $this->assertSame('Active', \App\Models\Loan::find($loanID)->status);
         $this->assertSame('borrowed', $this->copy->fresh()->status);
+    }
 
-        $this->scan($code)->assertStatus(422)->assertJsonPath('errors.barcodeValue.0', 'This book was already received. Check it for damage to finish the return.');
+    public function test_scanning_a_books_own_label_finds_its_loan(): void
+    {
+        [$loanID] = $this->checkout();
+
+        $this->scan(strtolower($this->copy->barcodeValue))->assertOk()
+            ->assertJsonPath('type', 'loan_return')
+            ->assertJsonPath('loan.loanID', $loanID);
+    }
+
+    public function test_a_book_that_is_not_out_or_a_closed_receipt_says_so(): void
+    {
+        $this->scan($this->copy->barcodeValue)->assertStatus(422)
+            ->assertJsonPath('errors.barcodeValue.0', "\"{$this->book->title}\" (accession no. {$this->copy->accessionNumber}) isn't checked out, so there is nothing to return.");
+        $this->scan('BK-NOSUCHCODE')->assertStatus(422)->assertJsonPath('errors.barcodeValue.0', 'No book matches that barcode.');
+
+        [$loanID, $code] = $this->checkout();
+        $loanUuid = \App\Models\Loan::find($loanID)->uuid;
+        $this->postJson("/api/librarian/loans/{$loanUuid}/return")->assertOk();
+        $this->scan($code)->assertStatus(422)->assertJsonPath('errors.barcodeValue.0', 'This loan is already closed: the book was returned.');
+    }
+
+    public function test_a_book_already_handed_in_is_found_for_its_check(): void
+    {
+        [$loanID, $code] = $this->checkout();
+        $loanUuid = \App\Models\Loan::find($loanID)->uuid;
+        $this->actingAs($this->librarian)->postJson("/api/librarian/loans/{$loanUuid}/receive")->assertOk();
+
+        $this->scan($code)->assertOk()->assertJsonPath('type', 'loan_return')->assertJsonPath('loan.status', 'Received');
     }
 
     public function test_finishing_a_received_book_puts_it_back_or_marks_it_damaged(): void
     {
         [$loanID, $code] = $this->checkout();
-        $this->scan($code)->assertOk();
+        $this->postJson('/api/librarian/loans/' . \App\Models\Loan::find($loanID)->uuid . '/receive')->assertOk();
 
         $loanUuid = \App\Models\Loan::find($loanID)->uuid;
         $this->postJson("/api/librarian/loans/{$loanUuid}/finish-return", ['condition' => 'damaged', 'note' => 'Torn cover'])->assertOk();
@@ -87,8 +116,8 @@ class UniversalScanTest extends TestCase
         // And the good-condition path on a second loan of another copy.
         $other = BookCopy::factory()->create(['bookID' => $this->book->bookID]);
         $second = $this->postJson('/api/librarian/loans', ['studentID' => $this->student->studentID, 'copyID' => $other->copyID])->json('loan.loanID');
-        $this->scan('L-' . str_pad((string) $second, 6, '0', STR_PAD_LEFT))->assertOk();
         $secondUuid = \App\Models\Loan::find($second)->uuid;
+        $this->postJson("/api/librarian/loans/{$secondUuid}/receive")->assertOk();
         $this->postJson("/api/librarian/loans/{$secondUuid}/finish-return", ['condition' => 'good'])->assertOk();
         $this->assertSame('available', $other->fresh()->status);
 
