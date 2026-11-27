@@ -44,14 +44,18 @@ class CirculationService
     public function index(?string $search, ?string $status, int $perPage, ?string $area = null, bool $hideReceived = false): LengthAwarePaginator
     {
         // An overdue loan says what it has cost so far (what returning it right now would charge).
-        return $this->loans->paginate($search, $status, $perPage, $area, $hideReceived)->through(function (Loan $loan) {
-            $loan->setAttribute('fineSoFar', $this->fineSoFar($loan));
+        // The fine rule is looked up once per area for the whole page, not once per loan (it was 25 of the list's 52 queries).
+        $rules = [];
+
+        return $this->loans->paginate($search, $status, $perPage, $area, $hideReceived)->through(function (Loan $loan) use (&$rules) {
+            $loan->setAttribute('fineSoFar', $this->fineSoFar($loan, $rules));
 
             return $loan;
         });
     }
 
-    private function fineSoFar(Loan $loan): ?float
+    /** @param array<string, ?PenaltyRule> $rules the rules already looked up during this request, by area */
+    private function fineSoFar(Loan $loan, array &$rules = []): ?float
     {
         $end = $this->fineEnd($loan);
 
@@ -59,7 +63,8 @@ class CirculationService
             return null;
         }
 
-        $rule = $this->penalties->ruleForArea($loan->copy?->book?->areaOfLibrary ?? $loan->loanType);
+        $areaKey = $loan->copy?->book?->areaOfLibrary ?? $loan->loanType;
+        $rule = array_key_exists($areaKey, $rules) ? $rules[$areaKey] : ($rules[$areaKey] = $this->penalties->ruleForArea($areaKey));
         $units = $rule ? $this->lateUnits($this->fineClock($loan), $end, $rule) : 0;
 
         return $units > 0 ? round($rule->rate * $units, 2) : null;

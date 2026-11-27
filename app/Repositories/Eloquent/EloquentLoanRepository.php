@@ -120,7 +120,8 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
 
     public function paginate(?string $search, ?string $status, int $perPage, ?string $area = null, bool $hideReceived = false): LengthAwarePaginator
     {
-        return Loan::with(['student.user', 'copy.book'])
+        // selfReturnReport: the fine-so-far reads it for every row, so load them all at once (it was one query per loan).
+        return Loan::with(['student.user', 'copy.book', 'selfReturnReport'])
             // Grouped, so the status and collection filters below apply to a match on the book AND on the student.
             ->when($search, fn ($query, $term) => $query->where(fn ($sq) => $sq->whereHas(
                 'copy.book',
@@ -145,6 +146,11 @@ class EloquentLoanRepository extends BaseRepository implements LoanRepositoryInt
             ->orderByRaw("CASE WHEN status = 'Active' AND dueDate < ? THEN dueDate END DESC", [now()])
             ->orderByDesc('checkoutDate')
             ->paginate($perPage);
+    }
+
+    public function overdueCount(): int
+    {
+        return Loan::where('status', 'Active')->where('dueDate', '<', now())->count();
     }
 
     public function stats(): array

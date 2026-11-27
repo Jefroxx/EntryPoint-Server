@@ -81,7 +81,10 @@ class AttendanceRecordedByTest extends TestCase
 
     public function test_ending_the_day_credits_todays_visits_to_the_person_but_old_ones_to_nobody(): void
     {
-        $today = AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'entryTime' => now()->subHour()]);
+        // Mid-afternoon, so "an hour ago" is still today (run just after midnight, it was yesterday and the test failed).
+        $this->travelTo(now()->setTime(14, 0));
+
+        $today =AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $this->student->studentID, 'entryTime' => now()->subHour()]);
         $other = Student::factory()->create(['registrationStatus' => 'approved']);
         $old = AttendanceLog::create(['uuid' => Str::uuid(), 'studentID' => $other->studentID, 'entryTime' => now()->subDays(2)->setTime(9, 0)]);
 

@@ -91,6 +91,8 @@ class CatalogService
             'isbn'          => $book->isbn,
             'callNumber'    => $book->callNumber,
             'deweyStatus'   => $book->deweyStatus,
+            // What Add Book would ask for that this record lacks (books from the old accession record): "Incomplete".
+            'missingDetails' => $book->missingDetails(),
             'coverImageURL' => $book->coverImageURL,
             'subject'       => $book->subject ? [
                 'subjectID' => $book->subject->subjectID,
@@ -126,6 +128,8 @@ class CatalogService
             'sourceOfFund'    => $copy->sourceOfFund,
             'cost'            => $copy->cost,
             'remarks'         => $copy->remarks,
+            // The day it reached the library, from the accession record (null when the record has no readable date).
+            'dateReceived'    => $copy->dateReceived?->toDateString(),
             'book'            => [
                 ...$copy->book->only([
                     'bookID', 'uuid', 'title', 'isbn', 'areaOfLibrary', 'publicationYear', 'volume', 'edition', 'pageCount',
@@ -252,9 +256,11 @@ class CatalogService
         };
 
         // A shelf copy may still be spoken for: every available copy of the title is held for accepted reservations.
+        $heldForReservation = false;
         if ($copy->status === 'available'
             && $this->bookCopies->availableCountForBook($copy->bookID) <= $this->reservations->acceptedCountForBook($copy->bookID)) {
             $lendable = 'Every available copy of this book is held for an accepted reservation.';
+            $heldForReservation = true;
         }
 
         return [
@@ -264,6 +270,9 @@ class CatalogService
             'barcodeValue'    => $copy->barcodeValue,
             'status'          => $copy->status,
             'lendable'        => $lendable,
+            // Only held for a reservation: the checkout of that reservation (its slip) may still lend it, and the
+            // server's checkout allows it (CirculationService::checkout with a reservationID).
+            'heldForReservation' => $heldForReservation,
             'book'            => [
                 'bookID'        => $copy->book->bookID,
                 'uuid'          => $copy->book->uuid,
@@ -595,6 +604,76 @@ class CatalogService
     }
 
     /**
+     * One title from the library's accession record (see BookImportService), saved with its copies. Unlike Add Book,
+     * details the record never had may be missing: the book is saved anyway and shows as incomplete until a librarian
+     * fills them in. The call number is the record's own (Dewey + Cutter), kept as checked because the library gave
+     * it; without one, the book waits for a Dewey number like any other. Nothing is looked up online here.
+     *
+     * @param  array{title: string, authors: string[], areaOfLibrary: string, deweyNumber: ?string, cutter: ?string,
+     *     isbn: ?string, publicationYear: ?int, edition: ?string, volume: ?string, pageCount: ?int, publisher: ?string,
+     *     sourceOfFund: ?string, cost: ?float, remarks: ?string}  $data
+     * @param  array<int, array{accessionNumber: ?int, dateReceived: ?string, sourceOfFund: ?string, cost: ?float, remarks: ?string, status: string}>  $copies
+     * @param  Book|null  $existing  the book already in the catalog that these copies belong to
+     */
+    public function importBook(array $data, array $copies, ?Book $existing = null, string $note = 'Imported from the accession record'): Book
+    {
+        return DB::transaction(function () use ($data, $copies, $existing, $note) {
+            $book = $existing;
+
+            if (! $book) {
+                $authors = array_map(fn (string $name) => $this->authors->firstOrCreateByName($name), $data['authors']);
+                foreach ($authors as $author) {
+                    try {
+                        $this->cutterNumber($author);
+                    } catch (\InvalidArgumentException) {
+                        // Something that isn't a name was typed as the author (the record has "aug 16. 2016" once):
+                        // no Cutter can be made from it, and the book comes in without one rather than stopping the import.
+                    }
+                }
+
+                $dewey = $data['deweyNumber'];
+                // The record's Cutter if it has one, otherwise the main author's; a/b/c is added if another book holds
+                // that exact call number (two titles may never share one).
+                $cutter = $data['cutter'] ?: ($authors[0]->cutterNumber ?? null);
+                if ($dewey !== null && $cutter !== null) {
+                    $cutter = $this->uniqueCutter($dewey, $cutter);
+                }
+
+                $book = $this->books->create([
+                    'uuid'            => Str::uuid(),
+                    'subjectID'       => $this->subjects->firstOrCreateByName('General')->subjectID,
+                    'areaOfLibrary'   => $data['areaOfLibrary'],
+                    'title'           => $data['title'],
+                    'deweyNumber'     => $dewey,
+                    'cutter'          => $cutter,
+                    'deweySource'     => $dewey !== null ? 'accession_record' : null,
+                    'deweyStatus'     => $dewey !== null ? 'ok' : 'needs_review',
+                    'isbn'            => $data['isbn'],
+                    'publicationYear' => $data['publicationYear'],
+                    'volume'          => $data['volume'],
+                    'edition'         => $data['edition'],
+                    'pageCount'       => $data['pageCount'],
+                    'publisher'       => $data['publisher'],
+                    'sourceOfFund'    => $this->fundSources->resolve($data['sourceOfFund']),
+                    'cost'            => $data['cost'],
+                    'remarks'         => $data['remarks'],
+                    'isNewArrival'    => false,
+                ]);
+
+                foreach ($authors as $author) {
+                    $book->authors()->attach($author->authorID, ['uuid' => Str::uuid(), 'role' => null]);
+                }
+            }
+
+            foreach ($copies as $copy) {
+                $this->createCopy($book, 'Imported', $note, $copy);
+            }
+
+            return $book;
+        });
+    }
+
+    /**
      * Sets a book's Dewey number and rebuilds its call number from it, keeping the author's Cutter. Marks the number
      * as checked (`ok`), because it came from a catalogue or from a person, never from the keyword guess.
      */
@@ -921,11 +1000,14 @@ class CatalogService
         $copy = $this->bookCopies->create([
             'uuid'            => Str::uuid(),
             'bookID'          => $book->bookID,
+            // An imported copy keeps the number stamped in it; any other takes the next one (see BookCopy::booted).
+            ...(isset($acquisition['accessionNumber']) ? ['accessionNumber' => $acquisition['accessionNumber']] : []),
             'barcodeValue'    => $this->bookCopies->generateUniqueBarcode(),
-            'status'          => 'available',
+            'status'          => $acquisition['status'] ?? 'available',
             'sourceOfFund'    => $this->fundSources->resolve($acquisition['sourceOfFund'] ?? null),
             'cost'            => $acquisition['cost'] ?? null,
             'remarks'         => $acquisition['remarks'] ?? null,
+            'dateReceived'    => $acquisition['dateReceived'] ?? null,
         ]);
 
         $this->stockLog->added($book, $copy, $reason, $note);

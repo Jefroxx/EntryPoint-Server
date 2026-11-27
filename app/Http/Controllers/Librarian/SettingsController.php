@@ -28,9 +28,24 @@ class SettingsController extends Controller
             'maxBooks'  => ['required', 'integer', 'min:1', 'max:20'],
         ]);
 
-        $this->settings->saveBorrowing((int) $data['holdHours'], (int) $data['maxBooks']);
+        $trimmed = $this->settings->saveBorrowing((int) $data['holdHours'], (int) $data['maxBooks']);
 
-        return response()->json(['message' => 'Borrowing settings updated.']);
+        return response()->json([
+            'message'   => 'Borrowing settings updated.' . ($trimmed['reservations'] > 0
+                ? " {$trimmed['reservations']} " . ($trimmed['reservations'] === 1 ? 'reservation was' : 'reservations were') . ' cancelled for students over the new limit.'
+                : ''),
+            // Reservations cancelled because the new limit is lower than what some students had.
+            'cancelled' => $trimmed['reservations'],
+            'students'  => $trimmed['students'],
+        ]);
+    }
+
+    /** What lowering the limit to `maxBooks` would cancel, so the page can ask before doing it. */
+    public function borrowingImpact(Request $request)
+    {
+        $data = $request->validate(['maxBooks' => ['required', 'integer', 'min:1', 'max:20']]);
+
+        return response()->json($this->settings->limitImpact((int) $data['maxBooks']));
     }
 
     public function saveRewards(Request $request)
@@ -56,6 +71,12 @@ class SettingsController extends Controller
         return response()->json(['message' => 'Fine rule removed.']);
     }
 
+    /** Just the signed-in account (the admin side's Account page; administrators can't open the rest of these settings). */
+    public function account(Request $request)
+    {
+        return response()->json(['account' => $this->settings->account($request->user())]);
+    }
+
     public function updateAccount(UpdateAccountRequest $request)
     {
         $account = $this->settings->updateAccount($request->user(), $request->validated());
@@ -70,7 +91,7 @@ class SettingsController extends Controller
     {
         $validated = $request->validated();
 
-        $this->settings->changePassword($request->user(), $validated['currentPassword'], $validated['newPassword']);
+        $this->settings->changePassword($request->user(), $validated['currentPassword'], $validated['newPassword'], $request->user()->currentAccessToken()->id ?? null);
 
         return response()->json(['message' => 'Password changed.']);
     }

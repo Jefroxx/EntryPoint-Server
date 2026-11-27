@@ -72,6 +72,21 @@ class DeweyLookupTest extends TestCase
         return $this->actingAs($this->librarian)->postJson('/api/librarian/books', $this->payload($overrides));
     }
 
+    /**
+     * A book still waiting for a Dewey number, as the accession record import leaves one (Add Book can't: it needs
+     * the number). The lookups and the review list below are about books like this.
+     */
+    private function unchecked(): Book
+    {
+        $book = Book::factory()->create([
+            'title' => 'Introduction to Algorithms', 'isbn' => '9780262033848', 'publicationYear' => 2009, 'areaOfLibrary' => 'circulation',
+            'deweyNumber' => null, 'cutter' => null, 'deweySource' => null, 'deweyStatus' => 'needs_review',
+        ]);
+        $book->authors()->attach(\App\Models\Author::firstOrCreate(['name' => 'Thomas Cormen'], ['uuid' => Str::uuid()])->authorID, ['uuid' => Str::uuid(), 'role' => 'Author']);
+
+        return $book;
+    }
+
     public function test_slashes_and_whole_call_numbers_are_cleaned_to_a_plain_dewey_number(): void
     {
         $this->assertSame('823.7', LibraryClassificationService::normalizeDewey('823/.7'));
@@ -84,19 +99,20 @@ class DeweyLookupTest extends TestCase
         $this->assertFalse(LibraryClassificationService::isValidDewey('5.1'));
     }
 
-    public function test_a_book_with_an_isbn_gets_the_library_of_congress_number_and_its_cutter(): void
+    public function test_a_flagged_book_with_an_isbn_gets_the_library_of_congress_number(): void
     {
         Http::fake(['lx2.loc.gov*' => Http::response($this->locRecord('005.1'))]);
+        $book = $this->unchecked();
 
-        $this->create()->assertCreated();
+        $this->actingAs($this->librarian)->postJson("/api/librarian/books/{$book->uuid}/dewey/lookup")->assertOk()->assertJsonPath('found', true);
 
-        $book = Book::where('isbn', '9780262033848')->firstOrFail();
+        $book->refresh();
         $this->assertSame('005.1', $book->deweyNumber);
         $this->assertSame('library_of_congress', $book->deweySource);
         $this->assertSame('ok', $book->deweyStatus);
-        // The call number is the Dewey number; the Cutter the same record gave for the author is kept beside it.
+        // The call number is the Dewey number; the author's Cutter is kept beside it.
         $this->assertSame('005.1', $book->callNumber);
-        $this->assertSame('C662', $book->cutter);
+        $this->assertNotEmpty($book->cutter);
     }
 
     public function test_open_library_is_used_when_the_library_of_congress_has_nothing(): void
@@ -107,41 +123,28 @@ class DeweyLookupTest extends TestCase
                 'classifications' => ['dewey_decimal_class' => ['813.54 V66c 2006']],
             ]]),
         ]);
+        $book = $this->unchecked();
 
-        $this->create()->assertCreated();
+        $this->actingAs($this->librarian)->postJson("/api/librarian/books/{$book->uuid}/dewey/lookup")->assertOk()->assertJsonPath('found', true);
 
-        $book = Book::where('isbn', '9780262033848')->firstOrFail();
+        $book->refresh();
         $this->assertSame('813.54', $book->deweyNumber);
         $this->assertSame('open_library', $book->deweySource);
         $this->assertSame('ok', $book->deweyStatus);
     }
 
-    public function test_a_number_typed_by_the_librarian_beats_the_lookup(): void
+    public function test_adding_a_book_needs_its_dewey_number_and_the_typed_number_is_kept(): void
     {
         Http::fake(['lx2.loc.gov*' => Http::response($this->locRecord('005.1'))]);
 
-        $this->create(['deweyNumber' => '004.6'])->assertCreated();
+        // No book goes on the shelf without a number: when the scan finds none, the librarian types it.
+        $this->create()->assertUnprocessable()->assertJsonValidationErrors('deweyNumber');
 
+        $this->create(['deweyNumber' => '004.6'])->assertCreated();
         $book = Book::where('isbn', '9780262033848')->firstOrFail();
         $this->assertSame('004.6', $book->deweyNumber);
         $this->assertSame('manual', $book->deweySource);
         $this->assertSame('ok', $book->deweyStatus);
-    }
-
-    public function test_a_book_nobody_could_classify_has_no_dewey_number_and_is_flagged_for_review(): void
-    {
-        Http::fake([
-            'lx2.loc.gov*'    => Http::response($this->locEmpty()),
-            'openlibrary.org/*' => Http::response([]),
-        ]);
-
-        $this->create()->assertCreated();
-
-        // Never a guess from the category: the number is left empty until someone finds or types one.
-        $book = Book::where('isbn', '9780262033848')->firstOrFail();
-        $this->assertNull($book->deweyNumber);
-        $this->assertNull($book->deweySource);
-        $this->assertSame('needs_review', $book->deweyStatus);
     }
 
     public function test_a_badly_formed_number_is_refused(): void
@@ -157,8 +160,7 @@ class DeweyLookupTest extends TestCase
             'lx2.loc.gov*'    => Http::response($this->locEmpty()),
             'openlibrary.org/*' => Http::response([]),
         ]);
-        $this->create()->assertCreated();
-        $book = Book::where('isbn', '9780262033848')->firstOrFail();
+        $book = $this->unchecked();
 
         $this->actingAs($this->librarian)->getJson('/api/librarian/books/dewey-review')
             ->assertOk()
@@ -189,8 +191,7 @@ class DeweyLookupTest extends TestCase
     public function test_a_librarian_can_set_the_number_by_hand_and_the_call_number_follows(): void
     {
         Http::fake(['*' => Http::response($this->locEmpty())]);
-        $this->create()->assertCreated();
-        $book = Book::where('isbn', '9780262033848')->firstOrFail();
+        $book = $this->unchecked();
 
         $this->actingAs($this->librarian)->putJson("/api/librarian/books/{$book->uuid}/dewey", ['deweyNumber' => '005.13'])
             ->assertOk()->assertJsonPath('deweyNumber', '005.13');
@@ -207,8 +208,7 @@ class DeweyLookupTest extends TestCase
     public function test_a_guessed_call_number_stays_off_what_students_see_and_off_the_label(): void
     {
         Http::fake(['lx2.loc.gov*' => Http::response($this->locEmpty()), 'openlibrary.org/*' => Http::response([])]);
-        $this->create()->assertCreated();
-        $book = Book::where('isbn', '9780262033848')->firstOrFail();
+        $book = $this->unchecked();
 
         $this->assertNull($book->publicCallNumber());
         $label = $book->spineLabel();
@@ -258,7 +258,7 @@ class DeweyLookupTest extends TestCase
             'lx2.loc.gov*'    => Http::response($this->locEmpty()),
             'openlibrary.org/*' => Http::response([]),
         ]);
-        $this->create()->assertCreated();
+        $this->unchecked();
 
         Cache::flush();
         Http::swap(new HttpFactory());

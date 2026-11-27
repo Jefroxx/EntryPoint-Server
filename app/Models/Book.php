@@ -37,11 +37,13 @@ class Book extends Model
         'cutter',
         'deweySource',
         'deweyStatus',
+        'detailsCheckedAt',
     ];
 
     protected $casts = [
         'isNewArrival' => 'boolean',
         'newArrivalAt' => 'datetime',
+        'detailsCheckedAt' => 'datetime',
     ];
 
     protected $appends = ['callNumber'];
@@ -56,6 +58,33 @@ class Book extends Model
         $call = trim((string) $this->deweyNumber);
 
         return $call === '' ? null : $call;
+    }
+
+    /**
+     * What the book's record still lacks of what Add Book asks for, by name ("ISBN", "Publisher"...). Empty for a
+     * complete record. Books brought in from the old accession record often lack some; the Library page tags them
+     * "Incomplete" until a librarian fills them in. Uses the loaded authors when they are loaded.
+     *
+     * @return array<int, string>
+     */
+    public function missingDetails(): array
+    {
+        $labels = [
+            'isbn' => 'ISBN', 'publicationYear' => 'Year', 'publisher' => 'Publisher', 'edition' => 'Edition',
+            'volume' => 'Volume', 'pageCount' => 'Pages', 'sourceOfFund' => 'Source of fund', 'cost' => 'Cost',
+        ];
+        $missing = [];
+        $hasAuthors = $this->relationLoaded('authors') ? $this->authors->isNotEmpty() : $this->authors()->exists();
+        if (! $hasAuthors) {
+            $missing[] = 'Author';
+        }
+        foreach ($labels as $field => $label) {
+            if ($this->{$field} === null || $this->{$field} === '') {
+                $missing[] = $label;
+            }
+        }
+
+        return $missing;
     }
 
     /**

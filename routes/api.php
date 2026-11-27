@@ -89,6 +89,8 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
     // Student-only actions
     Route::middleware('student')->prefix('student')->group(function () {
         Route::get('/profile', [PortalController::class, 'profile']);
+        // Everything the Home screen shows, in one request (see Student\HomeController).
+        Route::get('/home', \App\Http\Controllers\Student\HomeController::class);
         Route::get('/announcements', [\App\Http\Controllers\AnnouncementFeedController::class, 'student']);
         Route::patch('/profile', [StudentAccountController::class, 'updateContact']);
         // Throttled: a wrong current password is otherwise a free guess.
@@ -104,6 +106,7 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         // `subjects` must stay above `{book}` or it would be read as a book id.
         Route::get('/catalog', [PortalController::class, 'catalog']);
         Route::get('/catalog/subjects', [PortalController::class, 'subjects']);
+        Route::get('/catalog/areas', [PortalController::class, 'areas']);
         Route::get('/recommendations', [PortalController::class, 'recommendations']);
         Route::get('/catalog/{book}', [PortalController::class, 'catalogShow']);
 
@@ -189,6 +192,8 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::delete('/phone-pairing', [DeskPhoneScannerController::class, 'disconnect']);
         Route::get('/announcements', [\App\Http\Controllers\AnnouncementFeedController::class, 'staff']);
 
+        Route::get('/dashboard', [DashboardController::class, 'overview']);
+        Route::get('/dashboard/trends', [DashboardController::class, 'trends']);
         Route::get('/dashboard/today', [DashboardController::class, 'today']);
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('/dashboard/borrowing-overview', [DashboardController::class, 'borrowingOverview']);
@@ -226,8 +231,14 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::get('/stock-logs', [BookController::class, 'stockLogs']);
 
         Route::post('/books', [BookController::class, 'store']);
+        // Bring books in from the library's accession record (Excel), checked first with dryRun.
+        Route::post('/books/import', [BookController::class, 'import']);
         // Before /books/{book}, so "dewey-review" isn't taken for a book.
         Route::get('/books/dewey-review', [BookController::class, 'deweyReview']);
+        // Check Details: the books still to check, one book's check (saves nothing), and saving what was accepted.
+        Route::get('/books/details-check', [BookController::class, 'detailsQueue']);
+        Route::post('/books/details/apply', [BookController::class, 'applyDetails']);
+        Route::post('/books/{book}/details/check', [BookController::class, 'checkDetails'])->middleware('throttle:150,1');
         Route::post('/dewey/lookup', [BookController::class, 'lookupIsbnDewey'])->middleware('throttle:60,1');
         Route::post('/isbn/existing', [BookController::class, 'findByIsbn']);
         Route::post('/isbn/lookup', [BookController::class, 'lookupIsbnDetails'])->middleware('throttle:60,1');
@@ -254,12 +265,14 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::delete('/fund-sources/{fundSource}', [FundSourceController::class, 'destroy']);
 
         Route::get('/settings', [SettingsController::class, 'index']);
+        Route::get('/settings/borrowing/impact', [SettingsController::class, 'borrowingImpact']);
         Route::put('/settings/borrowing', [SettingsController::class, 'saveBorrowing']);
         Route::put('/settings/rewards', [SettingsController::class, 'saveRewards']);
         Route::put('/settings/fine-rules/{area}', [SettingsController::class, 'saveFineRule']);
         Route::delete('/settings/fine-rules/{area}', [SettingsController::class, 'deleteFineRule']);
+        Route::get('/settings/account', [SettingsController::class, 'account']);
         Route::patch('/settings/account', [SettingsController::class, 'updateAccount']);
-        Route::put('/settings/password', [SettingsController::class, 'changePassword']);
+        Route::put('/settings/password', [SettingsController::class, 'changePassword'])->middleware('throttle:6,1');
 
         Route::get('/loans', [LoanController::class, 'index']);
         Route::get('/loans/stats', [LoanController::class, 'stats']);

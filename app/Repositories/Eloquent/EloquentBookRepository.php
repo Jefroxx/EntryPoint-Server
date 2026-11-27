@@ -93,9 +93,9 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
             ->paginate($perPage);
     }
 
-    public function paginateForStudent(?string $search, ?int $subjectID, bool $availableOnly, int $perPage, bool $newOnly = false): LengthAwarePaginator
+    public function paginateForStudent(?string $search, ?int $subjectID, bool $availableOnly, int $perPage, bool $newOnly = false, ?string $area = null): LengthAwarePaginator
     {
-        return Book::with(['subject', 'authors'])
+        return Book::with(['subject', 'authors', 'libraryArea'])
             ->withCount($this->copyCounts())
             ->when($search, function ($query, $term) {
                 $query->where(function ($inner) use ($term) {
@@ -106,6 +106,8 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
                 });
             })
             ->when($subjectID, fn ($query, $id) => $query->where('subjectID', $id))
+            // An area of the library (Circulation, Reference, ...): what students browse by.
+            ->when($area, fn ($query, $key) => $query->where('areaOfLibrary', $key))
             ->when($availableOnly, fn ($query) => $query->whereRaw(
                 "(select count(*) from book_copies where book_copies.bookID = books.bookID and book_copies.status = 'available')
                 > (select count(*) from reservations where reservations.bookID = books.bookID and reservations.status = 'Accepted')"
@@ -118,7 +120,7 @@ class EloquentBookRepository extends BaseRepository implements BookRepositoryInt
 
     public function loadForStudent(Book $book): Book
     {
-        return $book->load(['subject', 'authors'])->loadCount($this->copyCounts());
+        return $book->load(['subject', 'authors', 'libraryArea'])->loadCount($this->copyCounts());
     }
 
     private function copyCounts(): array

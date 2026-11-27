@@ -68,7 +68,7 @@ class LibraryCleanupTest extends TestCase
         Http::fake(['*' => Http::response([])]);
 
         $this->actingAs($this->librarian)->postJson('/api/librarian/books', [
-            'title' => 'Fresh Book', 'authors' => [['name' => 'Ana Reyes', 'role' => 'Author']], 'subjectName' => 'Science', 'quantity' => 2,
+            'title' => 'Fresh Book', 'deweyNumber' => '500', 'authors' => [['name' => 'Ana Reyes', 'role' => 'Author']], 'subjectName' => 'Science', 'quantity' => 2,
             'isbn' => '9780262033848', 'publisher' => 'Acme Press', 'edition' => '1st ed.', 'volume' => 'N/A', 'pageCount' => 200,
             'sourceOfFund' => 'Student Council fund', 'cost' => 120, 'areaOfLibrary' => 'circulation', 'publicationYear' => 2020,
         ])->assertCreated();

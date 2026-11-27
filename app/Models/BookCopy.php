@@ -21,6 +21,7 @@ class BookCopy extends Model
         'sourceOfFund',
         'cost',
         'remarks',
+        'dateReceived',
     ];
 
     /**
@@ -41,6 +42,7 @@ class BookCopy extends Model
         return [
             'accessionNumber' => 'integer',
             'cost'            => 'decimal:2',
+            'dateReceived'    => 'date:Y-m-d',
         ];
     }
 

@@ -89,10 +89,10 @@ class AchievementService
     {
         // Achievements unlock at the moment something happens (a loan, a visit...). Check once more when the list is
         // opened, so a goal that is already met never shows a full bar next to "Locked".
-        $this->evaluateForStudent($student);
+        $measured = []; // each metric is counted once per request, however many achievements use it (the check included)
+        $this->evaluateForStudent($student, $measured);
 
         $unlocked = $this->achievements->unlockedByStudent($student)->keyBy('achievementID');
-        $measured = []; // each metric is counted once per request, however many achievements use it
 
         return $this->achievements->orderedByName()->map(function (Achievement $achievement) use ($unlocked, $student, &$measured) {
             $pivot = $unlocked->get($achievement->achievementID)?->pivot;
@@ -165,7 +165,11 @@ class AchievementService
      * call: meetsCriteria() is a ">=" check, so a smaller number can never
      * newly satisfy a threshold it didn't already satisfy.
      */
-    public function evaluateForStudent(Student $student): void
+    /**
+     * @param array<string, int> $measured metrics already counted for this student in this request, by name. Unlocking
+     *                                     doesn't change any metric, so one count serves every achievement that uses it.
+     */
+    public function evaluateForStudent(Student $student, array &$measured = []): void
     {
         // Achievements are for students; faculty and staff members never unlock them.
         if (! $student->takesPartInEngagement()) {
@@ -173,8 +177,8 @@ class AchievementService
         }
 
         $this->achievements->notYetUnlockedByStudent($student)
-            ->each(function (Achievement $achievement) use ($student) {
-                if ($this->meetsCriteria($achievement, $student)) {
+            ->each(function (Achievement $achievement) use ($student, &$measured) {
+                if ($this->meetsCriteria($achievement, $student, $measured)) {
                     $this->unlockFor($achievement, $student);
                 }
             });
@@ -211,7 +215,8 @@ class AchievementService
             });
     }
 
-    private function meetsCriteria(Achievement $achievement, Student $student): bool
+    /** @param array<string, int> $measured see evaluateForStudent() */
+    private function meetsCriteria(Achievement $achievement, Student $student, array &$measured = []): bool
     {
         $metric = $achievement->criteriaJSON['metric'] ?? null;
         $threshold = $achievement->criteriaJSON['threshold'] ?? null;
@@ -220,7 +225,7 @@ class AchievementService
             return false;
         }
 
-        return $this->metrics->value($metric, $student) >= $threshold;
+        return ($measured[$metric] ??= $this->metrics->value($metric, $student)) >= $threshold;
     }
 
     /**

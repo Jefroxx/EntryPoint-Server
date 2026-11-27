@@ -32,6 +32,7 @@ class NewArrivalTest extends TestCase
     {
         return $this->actingAs($this->librarian)->postJson('/api/librarian/books', array_merge([
             'title'           => 'Cosmos',
+            'deweyNumber'     => '520',
             'authors'         => [['name' => 'Carl Sagan', 'role' => 'Author']],
             'subjectName'     => 'Science',
             'quantity'        => 1,

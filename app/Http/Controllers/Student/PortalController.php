@@ -76,4 +76,10 @@ class PortalController extends Controller
     {
         return response()->json(['subjects' => $this->portalService->subjects()]);
     }
+
+    /** The areas of the library with books in them: what Discover and Home let students browse by. */
+    public function areas()
+    {
+        return response()->json(['areas' => $this->portalService->areas()]);
+    }
 }

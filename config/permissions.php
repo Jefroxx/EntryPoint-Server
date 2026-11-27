@@ -12,7 +12,7 @@
 | list (role_permissions). `routes` maps the first path segment after /api/librarian/ to the permission it needs:
 | `write` for changing things, and `read` (when it differs) for looking things up. A request may pass with ANY of the
 | listed permissions. A key is the first path segment after /api/librarian/, or the first two when only part of an area is restricted
-| (settings/loan-periods). Anything not listed (the dashboard, /me, a staff member's own account) is open to every
+| (settings/borrowing). Anything not listed (the dashboard, /me, a staff member's own account) is open to every
 | staff account.
 |
 */
@@ -26,7 +26,7 @@ return [
         'resources'   => 'Resources: computers, rooms and the usage log',
         'engagement'  => 'Engagement: achievements, points shop and redemptions',
         'reports'     => 'Reports',
-        'settings'    => 'Settings: loan periods and fines',
+        'settings'    => 'Settings: borrowing limits, fines and rewards',
     ],
 
     'defaults' => [
@@ -63,8 +63,10 @@ return [
 
         'reports' => ['write' => ['reports']],
 
-        // Everyone may read the settings page and change their own account; only loan periods and fines need 'settings'.
-        'settings/loan-periods' => ['write' => ['settings']],
-        'settings/fine-rules'   => ['write' => ['settings']],
+        // Everyone may read the settings page and change their own account; the library-wide rules need 'settings'.
+        // (Every route under settings/ that changes a rule must be listed here, or any staff account could use it.)
+        'settings/borrowing'  => ['write' => ['settings']],
+        'settings/rewards'    => ['write' => ['settings']],
+        'settings/fine-rules' => ['write' => ['settings']],
     ],
 ];
