@@ -34,6 +34,8 @@ class ScanService
      */
     public function handle(string $code, ?int $armedResID, int $librarianID): array
     {
+        $code = $this->normalise($code);
+
         return match ($this->kindOf($code)) {
             'loan'        => $this->receipt($code),
             'copy'        => $this->bookCopy($code),
@@ -41,6 +43,25 @@ class ScanService
             'facility'    => $this->facility($code),
             default       => $armedResID ? $this->startFacilityFor($code, $armedResID, $librarianID) : $this->attendance($code),
         };
+    }
+
+    /**
+     * What a reader hands over isn't always only the code: some scanners and decoders add a symbology prefix ("]C0"),
+     * an invisible separator or a space. A receipt, slip, facility or book label code is taken from inside the read
+     * when it stands on its own, so a real slip isn't turned away as "not a slip". Anything else (a student's ID) is
+     * used as read, minus invisible characters.
+     */
+    public function normalise(string $code): string
+    {
+        $clean = trim(preg_replace('/[\x00-\x1F\x7F]+/', ' ', $code));
+        // A symbology identifier ("]C0" = Code 128) that some scanners put in front of every code.
+        $clean = preg_replace('/^\][A-Za-z][0-9A-Za-z]/', '', $clean);
+
+        if (preg_match('/(?:^|[^A-Z0-9])([LRF]-\d{1,9}|BK-[A-Z0-9]+)(?![A-Z0-9])/i', $clean, $m)) {
+            return strtoupper($m[1]);
+        }
+
+        return $clean;
     }
 
     private function kindOf(string $code): string
@@ -175,7 +196,7 @@ class ScanService
         $student = $this->students->findForScan($code);
 
         if (! $student) {
-            $this->fail('Barcode not recognized.');
+            $this->fail('Barcode not recognized: read "' . AttendanceService::shownRead($code) . '".');
         }
 
         if (! $student->isApproved()) {

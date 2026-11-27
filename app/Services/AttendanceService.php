@@ -71,6 +71,12 @@ class AttendanceService
      *
      * @return array{action: string, log: AttendanceLog, student: Student, durationMinutes: ?int, autoClosed: array}
      */
+    /** A read as a librarian can see it in a message: invisible characters as "·", kept short. */
+    public static function shownRead(string $code): string
+    {
+        return mb_strimwidth(trim(preg_replace('/[\x00-\x1F\x7F]/', '·', $code)), 0, 40, '…');
+    }
+
     public function scan(string $code): array
     {
         $result = DB::transaction(function () use ($code) {
@@ -78,8 +84,9 @@ class AttendanceService
             $student = $this->students->findForScan($code, lock: true);
 
             if (! $student) {
+                // Say what was read: a code that won't match can then be told apart from a different barcode being picked up.
                 throw ValidationException::withMessages([
-                    'barcodeValue' => ['Barcode not recognized.'],
+                    'barcodeValue' => ['Barcode not recognized: read "' . self::shownRead($code) . '". It isn\'t a student ID, a receipt, a slip, a book label or a facility label.'],
                 ]);
             }
 
