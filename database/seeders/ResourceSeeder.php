@@ -14,7 +14,7 @@ class ResourceSeeder extends Seeder
 {
     public function run(): void
     {
-        $resources = Resource::factory()->count(10)->create();
+        $resources = Resource::factory()->count(8)->create();
         $students = Student::where('registrationStatus', 'approved')->get();
         $librarianID = Librarian::first()?->librarianID;
 
@@ -38,11 +38,12 @@ class ResourceSeeder extends Seeder
                 ]);
             }
 
+            // One computer in use right now, by a member who is in the library (Gab: see AttendanceLogSeeder).
             if ($index === 0) {
                 ResourceUsageLog::create([
                     'uuid'             => Str::uuid(),
                     'resID'            => $resource->resID,
-                    'studentID'        => $students->random()->studentID,
+                    'studentID'        => StudentSeeder::find('gab')->studentID,
                     'staffLibrarianID' => $librarianID,
                     'startTime'        => Carbon::now()->subMinutes(20),
                     'endTime'          => null,

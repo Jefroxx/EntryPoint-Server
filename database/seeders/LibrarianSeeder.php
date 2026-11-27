@@ -15,9 +15,15 @@ class LibrarianSeeder extends Seeder
         $this->createLibrarian('Juan', 'D', 'Dela Cruz', 'librarian@stidavao.edu.ph', '09123456789', 'Davao City');
         $this->createLibrarian('Maria', 'S', 'Santos', 'maria.santos@stidavao.edu.ph', '09187654321', 'Davao City');
 
-        // The administrator (the admin side), and a student assistant at the desk (circulation and attendance only).
-        $this->createLibrarian('Ana', 'R', 'Reyes', 'admin@stidavao.edu.ph', '09171234567', 'Davao City', 'admin');
+        // A student assistant at the desk (circulation and attendance only).
         $this->createLibrarian('Paolo', 'M', 'Lim', 'assistant@stidavao.edu.ph', '09181234567', 'Davao City', 'assistant');
+
+        // The administrator is never a demo account on a hosted copy: there it comes from ADMIN_EMAIL / ADMIN_PASSWORD
+        // (see SetupHosting) and must change its password at the first sign-in, because the demo password is known.
+        // On a developer's own computer one is made here, so the admin side can be tried.
+        if (app()->environment('local', 'testing')) {
+            $this->createLibrarian('Ana', 'R', 'Reyes', 'admin@stidavao.edu.ph', '09171234567', 'Davao City', 'admin');
+        }
     }
 
     private function createLibrarian(string $first, string $middle, string $last, string $email, string $phone, string $address, string $role = 'librarian'): void

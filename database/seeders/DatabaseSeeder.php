@@ -14,9 +14,8 @@ class DatabaseSeeder extends Seeder
             MemberSeeder::class,
             CatalogSeeder::class,
             PenaltySeeder::class,
+            // Loans, fines, reservations and self-return reports, each state once (LoanSeeder explains who has what).
             LoanSeeder::class,
-            ReservationSeeder::class,
-            SelfReturnReportSeeder::class,
             ResourceSeeder::class,
             AttendanceLogSeeder::class,
             MarketSeeder::class,
@@ -24,6 +23,7 @@ class DatabaseSeeder extends Seeder
             // After loans, visits, suggestions and redemptions exist: achievements are measured from them.
             AchievementSeeder::class,
             NotificationSeeder::class,
+            AnnouncementSeeder::class,
         ]);
     }
 }
