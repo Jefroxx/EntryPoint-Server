@@ -3,7 +3,7 @@ ENTRYPOINT API - ENDPOINT TESTING GUIDE
 ================================================================================
 Base URL: http://127.0.0.1:8000/api
 Tool: Hoppscotch (or any HTTP client)
-Seeded account: librarian@stidavao.edu.ph / password123
+Seeded account: librarian@davao.sti.edu.ph / password123
 
 Before testing, make sure:
   1. MySQL is running and the "entrypoint" database exists
@@ -33,7 +33,7 @@ and paste into a later request.
 
 [1.1] POST /login                                                  [Public]
 Input:
-  { "email": "librarian@stidavao.edu.ph", "password": "password123" }
+  { "email": "librarian@davao.sti.edu.ph", "password": "password123" }
 Expect: 200, returns { user, access_token, token_type }
 -> Save access_token as <libToken>
 
@@ -486,7 +486,7 @@ NOTES ON RE-RUNNING THIS GUIDE
   be accepted once, a Pending report only verified once, etc). To repeat a
   full pass, reset the database first:
       php artisan migrate:fresh --seed
-  This restores just the seeded librarian (librarian@stidavao.edu.ph /
+  This restores just the seeded librarian (librarian@davao.sti.edu.ph /
   password123) with a clean slate.
 - IDs (<studentID>, <bookID>, <loanID>, etc.) are different every time you
   reset the database - always re-capture them from each response rather

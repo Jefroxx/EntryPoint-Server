@@ -38,7 +38,7 @@ class AdminAccountsTest extends TestCase
 
     private function newStaff(array $overrides = []): array
     {
-        return $overrides + ['firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@stidavao.edu.ph', 'role' => 'assistant'];
+        return $overrides + ['firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@davao.sti.edu.ph', 'role' => 'assistant'];
     }
 
     private function newMember(array $overrides = []): array
@@ -108,19 +108,19 @@ class AdminAccountsTest extends TestCase
 
         $password = $response->json('temporaryPassword');
         $this->assertSame(10, strlen($password));
-        Mail::assertSent(VerifyStudentEmail::class, fn ($mail) => $mail->hasTo('paolo@stidavao.edu.ph') && $mail->madeByAdmin);
+        Mail::assertSent(VerifyStudentEmail::class, fn ($mail) => $mail->hasTo('paolo@davao.sti.edu.ph') && $mail->madeByAdmin);
 
         // Until the link is opened the account can't sign in.
         $this->app['auth']->forgetGuards();
-        $this->postJson('/api/librarian/login', ['email' => 'paolo@stidavao.edu.ph', 'password' => $password])
+        $this->postJson('/api/librarian/login', ['email' => 'paolo@davao.sti.edu.ph', 'password' => $password])
             ->assertStatus(422)->assertJsonValidationErrors(['email', 'verification']);
 
         // Opening it lands on the librarian sign-in, and nobody has to approve anything after that.
         $this->openMailedLink();
-        $this->assertNotNull(User::where('email', 'paolo@stidavao.edu.ph')->first()->emailVerifiedAt);
+        $this->assertNotNull(User::where('email', 'paolo@davao.sti.edu.ph')->first()->emailVerifiedAt);
 
         $this->app['auth']->forgetGuards();
-        $this->postJson('/api/librarian/login', ['email' => 'paolo@stidavao.edu.ph', 'password' => $password])
+        $this->postJson('/api/librarian/login', ['email' => 'paolo@davao.sti.edu.ph', 'password' => $password])
             ->assertOk()
             ->assertJsonPath('staff.role', 'librarian');
 
@@ -129,9 +129,9 @@ class AdminAccountsTest extends TestCase
 
     public function test_a_staff_account_needs_a_unique_email_and_a_real_role(): void
     {
-        User::factory()->create(['email' => 'taken@stidavao.edu.ph']);
+        User::factory()->create(['email' => 'taken@davao.sti.edu.ph']);
 
-        $this->actingAs($this->admin)->postJson('/api/admin/staff', $this->newStaff(['email' => 'taken@stidavao.edu.ph']))->assertJsonValidationErrors('email');
+        $this->actingAs($this->admin)->postJson('/api/admin/staff', $this->newStaff(['email' => 'taken@davao.sti.edu.ph']))->assertJsonValidationErrors('email');
         $this->actingAs($this->admin)->postJson('/api/admin/staff', $this->newStaff(['role' => 'superuser']))->assertJsonValidationErrors('role');
         $this->actingAs($this->admin)->postJson('/api/admin/staff', [])->assertJsonValidationErrors(['firstName', 'lastName', 'email', 'role']);
     }
@@ -165,7 +165,7 @@ class AdminAccountsTest extends TestCase
 
     public function test_disabling_an_account_blocks_sign_in_revokes_tokens_and_can_be_undone(): void
     {
-        $assistant = $this->staff('assistant', ['email' => 'asst@stidavao.edu.ph']);
+        $assistant = $this->staff('assistant', ['email' => 'asst@davao.sti.edu.ph']);
         $assistant->createToken('auth_token');
         $uuid = $assistant->librarian->uuid;
 
@@ -173,16 +173,16 @@ class AdminAccountsTest extends TestCase
 
         $this->assertNotNull($assistant->fresh()->disabledAt);
         $this->assertSame(0, DB::table('personal_access_tokens')->where('tokenable_id', $assistant->userID)->count());
-        $this->postJson('/api/librarian/login', ['email' => 'asst@stidavao.edu.ph', 'password' => 'password'])->assertStatus(422);
+        $this->postJson('/api/librarian/login', ['email' => 'asst@davao.sti.edu.ph', 'password' => 'password'])->assertStatus(422);
 
         $this->actingAs($this->admin)->postJson("/api/admin/staff/{$uuid}/enable")->assertOk();
         $this->assertNull($assistant->fresh()->disabledAt);
-        $this->postJson('/api/librarian/login', ['email' => 'asst@stidavao.edu.ph', 'password' => 'password'])->assertOk();
+        $this->postJson('/api/librarian/login', ['email' => 'asst@davao.sti.edu.ph', 'password' => 'password'])->assertOk();
     }
 
     public function test_a_reset_password_replaces_the_old_one_and_ends_sessions(): void
     {
-        $assistant = $this->staff('assistant', ['email' => 'asst@stidavao.edu.ph']);
+        $assistant = $this->staff('assistant', ['email' => 'asst@davao.sti.edu.ph']);
         $assistant->createToken('auth_token');
 
         $new = $this->actingAs($this->admin)->postJson("/api/admin/staff/{$assistant->librarian->uuid}/reset-password")
@@ -190,8 +190,8 @@ class AdminAccountsTest extends TestCase
 
         $this->assertSame(0, DB::table('personal_access_tokens')->where('tokenable_id', $assistant->userID)->count());
         $this->app['auth']->forgetGuards();
-        $this->postJson('/api/librarian/login', ['email' => 'asst@stidavao.edu.ph', 'password' => 'password'])->assertStatus(422);
-        $this->postJson('/api/librarian/login', ['email' => 'asst@stidavao.edu.ph', 'password' => $new])->assertOk();
+        $this->postJson('/api/librarian/login', ['email' => 'asst@davao.sti.edu.ph', 'password' => 'password'])->assertStatus(422);
+        $this->postJson('/api/librarian/login', ['email' => 'asst@davao.sti.edu.ph', 'password' => $new])->assertOk();
     }
 
     // ---------------------------------------------------------------- faculty and staff members

@@ -16,7 +16,7 @@
       },
       "body": {
         "contentType": "application/json",
-        "body": "{\"email\":\"librarian@stidavao.edu.ph\",\"password\":\"password123\"}"
+        "body": "{\"email\":\"librarian@davao.sti.edu.ph\",\"password\":\"password123\"}"
       },
       "preRequestScript": "",
       "testScript": "\npw.test(\"Login succeeds (200)\", () => pw.expect(pw.response.status).toBe(200));\npw.env.set(\"libToken\", pw.response.body.access_token);\n",

@@ -46,13 +46,13 @@ class ForcedPasswordChangeTest extends TestCase
     public function test_a_new_staff_account_must_set_its_own_password_before_doing_anything_else(): void
     {
         $created = $this->actingAs($this->admin)->postJson('/api/admin/staff', [
-            'firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@stidavao.edu.ph', 'role' => 'assistant',
+            'firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@davao.sti.edu.ph', 'role' => 'assistant',
         ])->assertCreated();
         $temporary = $created->json('temporaryPassword');
         // (Confirming the mailed link is covered in AdminAccountsTest; here the email is simply marked confirmed.)
-        User::where('email', 'paolo@stidavao.edu.ph')->update(['emailVerifiedAt' => now()]);
+        User::where('email', 'paolo@davao.sti.edu.ph')->update(['emailVerifiedAt' => now()]);
 
-        [$token, $user] = $this->signIn('/api/librarian/login', 'paolo@stidavao.edu.ph', $temporary);
+        [$token, $user] = $this->signIn('/api/librarian/login', 'paolo@davao.sti.edu.ph', $temporary);
         $this->assertTrue($user['mustChangePassword']);
 
         // Everything but changing the password (and asking who they are) is refused, with a code the screens act on.
@@ -70,9 +70,9 @@ class ForcedPasswordChangeTest extends TestCase
         ])->assertOk();
 
         $this->as($token)->getJson('/api/librarian/loans')->assertOk();
-        $this->assertFalse(User::where('email', 'paolo@stidavao.edu.ph')->first()->mustChangePassword);
+        $this->assertFalse(User::where('email', 'paolo@davao.sti.edu.ph')->first()->mustChangePassword);
 
-        [, $after] = $this->signIn('/api/librarian/login', 'paolo@stidavao.edu.ph', 'MyOwnPassword9');
+        [, $after] = $this->signIn('/api/librarian/login', 'paolo@davao.sti.edu.ph', 'MyOwnPassword9');
         $this->assertFalse($after['mustChangePassword']);
     }
 
@@ -100,14 +100,14 @@ class ForcedPasswordChangeTest extends TestCase
 
     public function test_a_password_reset_by_the_admin_asks_for_a_new_one_again(): void
     {
-        $librarian = User::factory()->create(['userType' => 'librarian', 'email' => 'lib@stidavao.edu.ph']);
+        $librarian = User::factory()->create(['userType' => 'librarian', 'email' => 'lib@davao.sti.edu.ph']);
         Librarian::create(['librarianID' => $librarian->userID, 'uuid' => Str::uuid(), 'role' => 'librarian']);
         $this->assertFalse($librarian->fresh()->mustChangePassword);
 
         $temporary = $this->actingAs($this->admin)->postJson("/api/admin/staff/{$librarian->librarian->uuid}/reset-password")->assertOk()->json('temporaryPassword');
 
         $this->assertTrue($librarian->fresh()->mustChangePassword);
-        [, $user] = $this->signIn('/api/librarian/login', 'lib@stidavao.edu.ph', $temporary);
+        [, $user] = $this->signIn('/api/librarian/login', 'lib@davao.sti.edu.ph', $temporary);
         $this->assertTrue($user['mustChangePassword']);
     }
 
