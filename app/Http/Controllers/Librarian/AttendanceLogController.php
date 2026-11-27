@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAttendanceScanRequest;
 use App\Http\Requests\StoreVisitorLogRequest;
 use App\Models\AttendanceLog;
+use App\Services\AppSettings;
 use App\Services\AttendanceService;
 use Illuminate\Http\Request;
 
@@ -28,10 +29,23 @@ class AttendanceLogController extends Controller
         ));
     }
 
-    /** Ending the scan station: logs everyone still in the library out. */
+    /** Whether the library session is open: from opening the scan station until its End session. */
+    public function station()
+    {
+        return response()->json(['session' => AppSettings::stationSession()]);
+    }
+
+    /** Opening the scan station opens the library session (or keeps the one already open). */
+    public function startStation(Request $request)
+    {
+        return response()->json(['session' => AppSettings::startStationSession($request->user()->fullName)]);
+    }
+
+    /** Ending the scan station: logs everyone still in the library out, and closes the library session. */
     public function closeAll()
     {
         $result = $this->attendanceService->closeAllOpenVisits();
+        AppSettings::endStationSession();
 
         $people = $result['students'] + $result['visitors'];
 
