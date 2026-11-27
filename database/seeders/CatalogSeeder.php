@@ -2,56 +2,68 @@
 
 namespace Database\Seeders;
 
-use App\Models\Author;
 use App\Models\Book;
 use App\Models\BookCopy;
-use App\Models\BookSubject;
+use App\Services\BookDetailsCheckService;
+use App\Services\BookImportService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
 
+/**
+ * The demo catalog: a cross-section of the library's real accession record (data/accession-record-sample.json), brought
+ * in through the same import as the Import button, so the books look exactly as an import leaves them. It shows every
+ * case the import handles: each area of the library, titles with several copies, new books with ISBNs and dates
+ * received, fiction shelved by author mark, a class that can't be read, books with no class, a discarded copy, and a
+ * title with no author.
+ *
+ * About a dozen titles then get the details Check Details found for them (stored in the file, so seeding never goes
+ * online), with the library's fund and cost: those are complete. The rest stay "Incomplete", so Check Details has
+ * books to work on in a demo.
+ */
 class CatalogSeeder extends Seeder
 {
     public function run(): void
     {
-        $subjects = BookSubject::factory()->count(18)->create();
-        $authors = Author::factory()->count(60)->create();
+        $file = json_decode(file_get_contents(__DIR__.'/data/accession-record-sample.json'), true);
 
-        // A lot of books, as requested — each with 1-4 copies in varied
-        // states so the dashboard/catalog stats have something to show.
-        Book::factory()
-            ->count(150)
-            ->create(['subjectID' => fn () => $subjects->random()->subjectID])
-            ->each(function (Book $book) use ($authors) {
-                $authorCount = random_int(1, 2);
-                $picked = $authors->random($authorCount);
+        app(BookImportService::class)->import($file['rows'], false, '2026 Accession Record.xlsx');
 
-                foreach ($picked as $index => $author) {
-                    $book->authors()->attach($author->authorID, [
-                        'uuid' => Str::uuid(),
-                        'role' => $index === 0 ? null : 'Co-Author',
-                    ]);
-                }
+        $details = app(BookDetailsCheckService::class);
+        foreach ($file['details'] ?? [] as $accession => $fills) {
+            $book = BookCopy::where('accessionNumber', (int) $accession)->first()?->book;
+            if (! $book) {
+                continue;
+            }
 
-                $copyCount = random_int(1, 4);
-                $statusRoll = random_int(1, 100);
+            // What the online catalogues found (only empty fields are filled, as in the app)...
+            $details->apply([['book' => $book->uuid, 'fills' => $fills['catalogue'] ?? []]], [$book->uuid]);
 
-                for ($i = 0; $i < $copyCount; $i++) {
-                    $status = match (true) {
-                        $statusRoll <= 70 => 'available',
-                        $statusRoll <= 85 => 'borrowed',
-                        $statusRoll <= 93 => 'retired',
-                        $statusRoll <= 97 => 'damaged',
-                        default            => 'lost',
-                    };
+            // ...and what only the library knows: where the copies came from and what they cost.
+            $book = Book::find($book->bookID);
+            $book->fill(array_filter([
+                'sourceOfFund' => $book->sourceOfFund ?: ($fills['sourceOfFund'] ?? null),
+                'cost'         => $book->cost ?? ($fills['cost'] ?? null),
+                'edition'      => $book->edition ?: ($fills['edition'] ?? null),
+                'volume'       => $book->volume ?: ($fills['volume'] ?? null),
+            ], fn ($v) => $v !== null && $v !== ''))->save();
+            $book->copies()->whereNull('sourceOfFund')->update(['sourceOfFund' => $book->sourceOfFund]);
+            $book->copies()->whereNull('cost')->update(['cost' => $book->cost]);
+        }
 
-                    BookCopy::factory()->create([
-                        'bookID' => $book->bookID,
-                        'status' => $i === 0 ? $status : 'available',
-                        // Every copy records where it came from; these copies take their book's.
-                        'sourceOfFund' => $book->sourceOfFund,
-                        'cost'         => $book->cost,
-                    ]);
-                }
-            });
+        // Two books catalogued as Add Book does it, every detail filled in and the Dewey number confirmed. They just
+        // arrived, so they also fill the New arrivals shelf on student Home.
+        foreach ($file['addedBooks'] ?? [] as $added) {
+            $copies = array_fill(0, $added['copies'], [
+                'accessionNumber' => null, 'dateReceived' => now()->subDays(3)->toDateString(),
+                'sourceOfFund' => $added['sourceOfFund'], 'cost' => $added['cost'], 'remarks' => null, 'status' => 'available',
+            ]);
+            $book = app(\App\Services\CatalogService::class)->importBook([
+                'title' => $added['title'], 'authors' => $added['authors'], 'areaOfLibrary' => $added['areaOfLibrary'],
+                'deweyNumber' => $added['deweyNumber'], 'cutter' => null, 'isbn' => $added['isbn'],
+                'publicationYear' => $added['publicationYear'], 'edition' => $added['edition'], 'volume' => $added['volume'],
+                'pageCount' => $added['pageCount'], 'publisher' => $added['publisher'], 'sourceOfFund' => $added['sourceOfFund'],
+                'cost' => $added['cost'], 'remarks' => null,
+            ], $copies, null, 'New book');
+            $book->update(['deweySource' => 'manual', 'detailsCheckedAt' => now(), 'isNewArrival' => $added['newArrival'], 'newArrivalAt' => $added['newArrival'] ? now()->subDays(3) : null]);
+        }
     }
 }

@@ -509,18 +509,18 @@ class PaperTestCasesTest extends TestCase
         $this->caseOf('ACT5', $m, 'A member opens an administrator page', 'Refuse', $this->actingAs($this->member()->user)->getJson('/api/admin/staff'), [401, 403]);
 
         $this->signedOut();
-        $r = $this->actingAs($this->admin)->postJson('/api/admin/staff', ['firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@stidavao.edu.ph', 'role' => 'assistant']);
-        $this->rec('ACT6', $m, 'An administrator creates a student-assistant account', 'The account is created and must change its temporary password at first sign-in', $this->said($r) . '; must change password: ' . (User::where('email', 'paolo@stidavao.edu.ph')->value('mustChangePassword') ? 'yes' : 'no'), $r->isSuccessful() && (bool) User::where('email', 'paolo@stidavao.edu.ph')->value('mustChangePassword'));
+        $r = $this->actingAs($this->admin)->postJson('/api/admin/staff', ['firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@davao.sti.edu.ph', 'role' => 'assistant']);
+        $this->rec('ACT6', $m, 'An administrator creates a student-assistant account', 'The account is created and must change its temporary password at first sign-in', $this->said($r) . '; must change password: ' . (User::where('email', 'paolo@davao.sti.edu.ph')->value('mustChangePassword') ? 'yes' : 'no'), $r->isSuccessful() && (bool) User::where('email', 'paolo@davao.sti.edu.ph')->value('mustChangePassword'));
 
         $this->signedOut();
-        $this->caseOf('ACT7', $m, 'An administrator creates another account with the same email', 'Refuse: email already taken', $this->actingAs($this->admin)->postJson('/api/admin/staff', ['firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@stidavao.edu.ph', 'role' => 'assistant']), 422, 'taken');
+        $this->caseOf('ACT7', $m, 'An administrator creates another account with the same email', 'Refuse: email already taken', $this->actingAs($this->admin)->postJson('/api/admin/staff', ['firstName' => 'Paolo', 'lastName' => 'Lim', 'email' => 'paolo@davao.sti.edu.ph', 'role' => 'assistant']), 422, 'taken');
 
         $this->signedOut();
-        $paolo = User::where('email', 'paolo@stidavao.edu.ph')->first()->librarian;
+        $paolo = User::where('email', 'paolo@davao.sti.edu.ph')->first()->librarian;
         $this->actingAs($this->admin)->postJson("/api/admin/staff/{$paolo->uuid}/disable")->assertSuccessful();
         $this->signedOut();
-        User::where('email', 'paolo@stidavao.edu.ph')->update(['password' => bcrypt('password123')]);
-        $this->caseOf('ACT8', $m, 'A disabled staff account tries to sign in with its correct password', 'Refuse: the account has been disabled', $this->postJson('/api/librarian/login', ['email' => 'paolo@stidavao.edu.ph', 'password' => 'password123']), 422, 'disabled');
+        User::where('email', 'paolo@davao.sti.edu.ph')->update(['password' => bcrypt('password123')]);
+        $this->caseOf('ACT8', $m, 'A disabled staff account tries to sign in with its correct password', 'Refuse: the account has been disabled', $this->postJson('/api/librarian/login', ['email' => 'paolo@davao.sti.edu.ph', 'password' => 'password123']), 422, 'disabled');
 
         $this->signedOut();
         $r = $this->actingAs($this->admin)->getJson('/api/admin/audit-logs');

@@ -317,10 +317,15 @@ class BookController extends Controller
         ]);
     }
 
-    /** What the online catalogues know that this book's record lacks. Saves nothing. */
-    public function checkDetails(Book $book, BookDetailsCheckService $details)
+    /**
+     * What the online catalogues know that this book's record lacks. Saves nothing. With `isbn` (scanned from the book
+     * in hand, from the Accession Record's "Scan ISBN"), that ISBN is looked up instead.
+     */
+    public function checkDetails(Request $request, Book $book, BookDetailsCheckService $details)
     {
-        return response()->json($details->check($book));
+        $data = $request->validate(['isbn' => ['nullable', 'string', 'max:20']]);
+
+        return response()->json($details->check($book, isset($data['isbn']) && trim($data['isbn']) !== '' ? trim($data['isbn']) : null));
     }
 
     /** Saves the details a librarian accepted (empty fields only) and marks the books checked. */

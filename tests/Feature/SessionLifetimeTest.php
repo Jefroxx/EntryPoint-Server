@@ -19,7 +19,7 @@ class SessionLifetimeTest extends TestCase
     private function staff(string $role): User
     {
         $user = User::factory()->create([
-            'userType' => 'librarian', 'email' => "{$role}@stidavao.edu.ph",
+            'userType' => 'librarian', 'email' => "{$role}@davao.sti.edu.ph",
             'password' => Hash::make('correct-horse-9'), 'emailVerifiedAt' => now(),
         ]);
         Librarian::create(['librarianID' => $user->userID, 'uuid' => Str::uuid(), 'role' => $role]);
@@ -33,7 +33,7 @@ class SessionLifetimeTest extends TestCase
 
         foreach (['librarian' => 60 * 24 * 3, 'admin' => 60 * 12] as $role => $minutes) {
             $this->staff($role);
-            $this->postJson('/api/librarian/login', ['email' => "{$role}@stidavao.edu.ph", 'password' => 'correct-horse-9'])->assertOk();
+            $this->postJson('/api/librarian/login', ['email' => "{$role}@davao.sti.edu.ph", 'password' => 'correct-horse-9'])->assertOk();
 
             $token = PersonalAccessToken::latest('id')->first();
             $this->assertNotNull($token->expires_at, "{$role} token has no expiry");
