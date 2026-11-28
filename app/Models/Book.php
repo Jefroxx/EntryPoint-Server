@@ -122,6 +122,12 @@ class Book extends Model
         return $this->belongsTo(LoanPeriod::class, 'areaOfLibrary', 'area');
     }
 
+    /** Whether this book's area of the library lets it be borrowed. An area that can't be found counts as library use only. */
+    public function isBorrowable(): bool
+    {
+        return (bool) $this->libraryArea?->loanable;
+    }
+
     public function subject()
     {
         return $this->belongsTo(BookSubject::class, 'subjectID', 'subjectID');

@@ -307,6 +307,7 @@ Route::middleware(['auth:sanctum', 'full.token', 'idle.timeout'])->group(functio
         Route::get('/reservations/lookup/{code}', [LibrarianReservationController::class, 'lookup']);
         Route::post('/reservations/{reservation}/accept', [LibrarianReservationController::class, 'accept']);
         Route::post('/reservations/{reservation}/reject', [LibrarianReservationController::class, 'reject']);
+        Route::post('/reservations/{reservation}/cancel', [LibrarianReservationController::class, 'cancel']);
 
         Route::get('/resources', [LibrarianResourceController::class, 'index']);
         Route::post('/resources', [LibrarianResourceController::class, 'store']);

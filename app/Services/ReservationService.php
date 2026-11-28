@@ -172,6 +172,17 @@ class ReservationService
                 ]);
             }
 
+            // A book in a library-use-only area can't be borrowed, so it can't be reserved (it may have been carted before the area changed).
+            $notBorrowable = Book::with('libraryArea')->whereIn('bookID', $bookIDs)->get()
+                ->reject(fn (Book $book) => $book->isBorrowable())
+                ->pluck('title');
+
+            if ($notBorrowable->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'cart' => ['For library use only, so it can\'t be reserved: ' . $notBorrowable->map(fn ($t) => "\"{$t}\"")->join(', ') . '. Remove them from your cart.'],
+                ]);
+            }
+
             // A book whose every copy is retired can never be lent, so it can't be queued for either.
             $noCopies = Book::whereIn('bookID', $bookIDs)
                 ->whereDoesntHave('copies', fn ($copies) => $copies->where('status', '!=', 'retired'))
@@ -262,6 +273,33 @@ class ReservationService
             "Your reservation for \"{$reservation->book->title}\" was declined.",
             'reservation_rejected'
         );
+
+        return $reservation->fresh()->load(['student.user', 'book']);
+    }
+
+    /**
+     * A librarian cancels a reservation that was already accepted (the student can only cancel one still Waiting,
+     * so after acceptance they go through the librarian). The held copy goes back on the shelf and the next in
+     * line is told. Kept as Rejected, like the reservations trimmed when the borrowing limit drops.
+     */
+    public function cancelAccepted(Reservation $reservation): Reservation
+    {
+        if ($reservation->status !== 'Accepted') {
+            throw ValidationException::withMessages([
+                'reservation' => ["Only an 'Accepted' reservation can be cancelled here. Reject a Waiting one instead."],
+            ]);
+        }
+
+        $this->reservations->update($reservation, ['status' => 'Rejected']);
+        $reservation->load('book');
+
+        $this->notifications->send(
+            $reservation->studentID,
+            "Your reservation for \"{$reservation->book->title}\" was cancelled by the library. The copy held for you has been released.",
+            'reservation_cancelled'
+        );
+
+        $this->notifyNextInQueue($reservation->bookID);
 
         return $reservation->fresh()->load(['student.user', 'book']);
     }

@@ -30,6 +30,15 @@ class WishlistService
 
     public function addToCart(int $studentID, int $bookID): Wishlist
     {
+        // Library-use-only areas (reference, thesis...) can't be borrowed, so they can't be carted or reserved.
+        $book = \App\Models\Book::with('libraryArea')->find($bookID);
+
+        if ($book && ! $book->isBorrowable()) {
+            throw ValidationException::withMessages([
+                'bookID' => ["\"{$book->title}\" is for library use only and can't be borrowed or reserved."],
+            ]);
+        }
+
         $item = DB::transaction(function () use ($studentID, $bookID) {
             $currentCartCount = $this->wishlists->cartCountForStudent($studentID, lock: true);
             $existing = $this->wishlists->findByStudentAndBook($studentID, $bookID);
