@@ -277,6 +277,33 @@ class ReservationService
         return $reservation->fresh()->load(['student.user', 'book']);
     }
 
+    /**
+     * A librarian cancels a reservation that was already accepted (the student can only cancel one still Waiting,
+     * so after acceptance they go through the librarian). The held copy goes back on the shelf and the next in
+     * line is told. Kept as Rejected, like the reservations trimmed when the borrowing limit drops.
+     */
+    public function cancelAccepted(Reservation $reservation): Reservation
+    {
+        if ($reservation->status !== 'Accepted') {
+            throw ValidationException::withMessages([
+                'reservation' => ["Only an 'Accepted' reservation can be cancelled here. Reject a Waiting one instead."],
+            ]);
+        }
+
+        $this->reservations->update($reservation, ['status' => 'Rejected']);
+        $reservation->load('book');
+
+        $this->notifications->send(
+            $reservation->studentID,
+            "Your reservation for \"{$reservation->book->title}\" was cancelled by the library. The copy held for you has been released.",
+            'reservation_cancelled'
+        );
+
+        $this->notifyNextInQueue($reservation->bookID);
+
+        return $reservation->fresh()->load(['student.user', 'book']);
+    }
+
     public function cancel(Reservation $reservation, int $studentID): void
     {
         if ($reservation->studentID !== $studentID) {

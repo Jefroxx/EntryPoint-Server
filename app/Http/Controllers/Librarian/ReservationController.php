@@ -57,6 +57,16 @@ class ReservationController extends Controller
         ]);
     }
 
+    public function cancel(Reservation $reservation)
+    {
+        $reservation = $this->reservationService->cancelAccepted($reservation);
+
+        return response()->json([
+            'message'     => 'Reservation cancelled. The held copy is back on the shelf.',
+            'reservation' => $reservation,
+        ]);
+    }
+
     public function reject(Reservation $reservation)
     {
         $reservation = $this->reservationService->reject($reservation);
