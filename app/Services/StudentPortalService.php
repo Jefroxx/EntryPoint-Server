@@ -366,6 +366,8 @@ class StudentPortalService
             'circulationType' => $book->areaOfLibrary,
             // Where it is in the library: what students browse by (Discover and Home filter on it).
             'area'            => ['key' => $book->areaOfLibrary, 'name' => $book->libraryArea?->name ?? \Illuminate\Support\Str::headline((string) $book->areaOfLibrary)],
+            // False for a library-use-only area: the app hides "Add to cart" and the server refuses it anyway.
+            'borrowable'      => $book->isBorrowable(),
             'totalCopies'     => (int) ($book->total_copies ?? 0),
             // Copies held for an accepted reservation aren't up for grabs.
             'availableCopies' => max(0, (int) ($book->available_copies ?? 0) - (int) ($book->held_copies ?? 0)),

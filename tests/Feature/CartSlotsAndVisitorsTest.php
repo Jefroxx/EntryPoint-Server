@@ -31,7 +31,8 @@ class CartSlotsAndVisitorsTest extends TestCase
     {
         BookSubject::factory()->create(['name' => 'Filipino Literature']);
         $student = Student::factory()->create(['registrationStatus' => 'approved']);
-        $books = Book::factory()->count(3)->create();
+        \App\Models\LoanPeriod::updateOrCreate(['area' => 'circulation'], ['loanable' => true, 'periodValue' => 3, 'periodUnit' => 'days']);
+        $books = Book::factory()->count(3)->create(['areaOfLibrary' => 'circulation']);
 
         // One slot is already used by a loan, so only 2 are free.
         \DB::table('loans')->insert($this->loanRow($student));

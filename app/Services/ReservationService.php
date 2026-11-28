@@ -172,6 +172,17 @@ class ReservationService
                 ]);
             }
 
+            // A book in a library-use-only area can't be borrowed, so it can't be reserved (it may have been carted before the area changed).
+            $notBorrowable = Book::with('libraryArea')->whereIn('bookID', $bookIDs)->get()
+                ->reject(fn (Book $book) => $book->isBorrowable())
+                ->pluck('title');
+
+            if ($notBorrowable->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'cart' => ['For library use only, so it can\'t be reserved: ' . $notBorrowable->map(fn ($t) => "\"{$t}\"")->join(', ') . '. Remove them from your cart.'],
+                ]);
+            }
+
             // A book whose every copy is retired can never be lent, so it can't be queued for either.
             $noCopies = Book::whereIn('bookID', $bookIDs)
                 ->whereDoesntHave('copies', fn ($copies) => $copies->where('status', '!=', 'retired'))
